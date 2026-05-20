@@ -1,0 +1,31 @@
+{
+  "session_id": "DYNAMIC_TEST_001",
+  "shelf_id": "A-12",
+  "scan_time": "2026-05-21 14:00:00",
+  "vision_items": [
+    {
+      "vision_id": "V_001",
+      "book_id": "B001",
+      "sequence_order": 1,
+      "confidence_score": 0.99,
+      "spine_img_path": "/images/spine_001.jpg",
+      "visual_status": "NORMAL"
+    },
+    {
+      "vision_id": "V_002",
+      "book_id": "B003",
+      "sequence_order": 2,
+      "confidence_score": 0.95,
+      "spine_img_path": "/images/spine_003.jpg",
+      "visual_status": "NORMAL"
+    },
+    {
+      "vision_id": "V_003",
+      "book_id": "B004",
+      "sequence_order": 3,
+      "confidence_score": 0.96,
+      "spine_img_path": "/images/spine_004.jpg",
+      "visual_status": "NORMAL"
+    }
+  ]
+}

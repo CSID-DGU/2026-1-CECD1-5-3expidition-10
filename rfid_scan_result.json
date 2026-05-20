@@ -1,0 +1,21 @@
+{
+  "session_id": "DYNAMIC_TEST_001",
+  "shelf_id": "A-12",
+  "rfid_items": [
+    {
+      "tag_id": "RFID_TAG_001",
+      "book_id": "B001",
+      "rssi": -42.5
+    },
+    {
+      "tag_id": "RFID_TAG_003",
+      "book_id": "B003",
+      "rssi": -39.1
+    },
+    {
+      "tag_id": "RFID_TAG_004",
+      "book_id": "B004",
+      "rssi": -45.0
+    }
+  ]
+}
