@@ -32,11 +32,12 @@ CREATE TABLE VISION_DATA (
 
 -- 5. 자식 테이블 2: RFID 스캔 데이터 (RFID_DATA)
 CREATE TABLE RFID_DATA (
-    rfid_uid VARCHAR(50) PRIMARY KEY COMMENT 'RFID 태그 고유 식별자',
+    rfid_uid VARCHAR(50),
     session_id VARCHAR(50) NOT NULL COMMENT '참조 세션 ID',
     book_id VARCHAR(50) COMMENT '메인 DB에서 조회된 도서 ID',
     title VARCHAR(255) COMMENT '조회된 도서명',
     rssi FLOAT COMMENT '수신 신호 강도',
+    PRIMARY KEY (rfid_uid, session_id) COMMENT 'RFID 태그 고유 식별자',
     FOREIGN KEY (session_id) REFERENCES SHELF_SESSION(session_id) ON DELETE CASCADE
 );
 
