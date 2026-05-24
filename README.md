@@ -32,8 +32,8 @@
 
 ### 1. 저장소 클론 (Clone Repository)
 ```bash
-git clone https://github.com/Acodhw/CD12VisionAILibrary.git
-cd CD12VisionAILibrary
+git clone https://github.com/CSID-DGU/2026-1-CECD1-5-3expidition-10.git
+cd 2026-1-CSCD1-5-3expidition-10
 ```
 
 ### 2. 패키지 설치 (Install Requirements)
