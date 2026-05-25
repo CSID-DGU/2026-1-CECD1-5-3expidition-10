@@ -1,6 +1,4 @@
 {
-  "session_id": "DYNAMIC_TEST_001",
-  "shelf_id": "A-12",
   "rfid_items": [
     {
       "tag_id": "RFID_TAG_001",
