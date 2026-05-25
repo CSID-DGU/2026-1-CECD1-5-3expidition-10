@@ -48,7 +48,21 @@ docker-compose up -d
 ```
 *로봇 탑재 및 실전 배포 시에는 `main.py`와 `analyzer.py` 내부의 `DB_CONFIG` 호스트 주소를 로컬호스트(`127.0.0.1`)에서 도서관 메인 시스템의 고정 외부 IP 주소로 수정해 주십시오.*
 
-### 4. 엣지 백엔드 서버 구동 (Run Server)
+## 🗄️ 4. 데이터베이스 접속 툴 세팅 (DBeaver 설치 및 연결)
+도커로 생성된 DB를 시각적으로 확인하고 관리하기 위해 무료 DB 툴인 DBeaver를 세팅합니다.
+
+1. **다운로드 및 설치:** [DBeaver 공식 사이트](https://dbeaver.io/download/)에서 Community 버전을 다운로드하고 설치합니다.
+2. **새 연결 만들기:** DBeaver를 실행하고 왼쪽 상단의 플러그 모양(새 연결) 아이콘을 눌러 **MySQL**을 선택합니다.
+3. **연결 정보 입력:**
+   * **Server Host:** `localhost` (또는 `127.0.0.1`)
+   * **Port:** `3306`
+   * **Database:** `library_ai_db`
+   * **Username:** `root`
+   * **Password:** `1234`
+4. **드라이버 설치 및 테스트:** 화면 하단의 `Test Connection(테스트 연결)`을 누릅니다. 만약 드라이버 설치 팝업이 뜬다면 `Download`를 눌러 설치합니다. `Connected` 팝업이 뜨면 완료(Finish)를 누릅니다.
+5. **테이블 확인:** 생성된 연결을 열어 `SHELF_SESSION`, `VISION_DATA`, `RFID_DATA`, `ANALYSIS_RESULT` 4개의 테이블이 정상적으로 생성되었는지 확인합니다.
+
+### 5. 엣지 백엔드 서버 구동 (Run Server)
 로봇 내부에서 화면 출력 성능 저하를 방지하고 야간 블랙박스 디버깅용 로그 파일을 확보하기 위해 실전 구동 시에는 모든 출력을 텍스트 파일로 리다이렉트하여 실행하는 것을 권장합니다.
 ```bash
 # 개발 및 디버깅 모드 (화면에 로그 출력)
