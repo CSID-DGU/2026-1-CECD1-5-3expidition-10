@@ -8,7 +8,7 @@ from app.config import DEVICE
 # [1] 책 탐지용 YOLOv8 모델 (사물 80종이 이미 학습된 일반 모델 사용, 'book' 포함됨)
 def load_yolo_model():
     # yolov8n(nano)은 속도가 매우 빠르고 가벼워 서버 환경에 적합합니다.
-    model = YOLO("yolov8n.pt") 
+    model = YOLO("model/model_v2.pt")
     return model
 
 # [2] 특징 추출용 ResNet18 모델
