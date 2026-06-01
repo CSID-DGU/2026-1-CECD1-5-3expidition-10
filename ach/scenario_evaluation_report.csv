@@ -1,0 +1,11 @@
+﻿폴더(실제 상태),파일명,예측된 상태,일치 여부,책별 분석 상세
+abnormal_paper,20260522_210223.jpg,abnormal_upside,❌ 불일치,Book 0(normal) | Book 1(normal) | Book 2(normal) | Book 3(normal) | Book 4(normal) | Book 5(normal) | Book 6(normal) | Book 7(abnormal_upside) | Book 8(normal) | Book 9(normal) | Book 10(abnormal_upside) | Book 11(abnormal_upside) | Book 12(abnormal_upside) | Book 13(abnormal_upside)
+normal,20260522_203503.jpg,abnormal_upside,❌ 불일치,Book 0(normal) | Book 1(normal) | Book 2(normal) | Book 3(normal) | Book 4(normal) | Book 5(abnormal_upside) | Book 6(normal) | Book 7(normal) | Book 8(normal) | Book 9(normal) | Book 10(normal) | Book 11(normal) | Book 12(abnormal_upside)
+---,---,---,---,---
+[통계 요약],,,,
+abnormal_paper 정확도:,0.0%,(0/1),,
+abnormal_stack 정확도:,0.0%,(0/0),,
+abnormal_tilted 정확도:,0.0%,(0/0),,
+abnormal_upside 정확도:,0.0%,(0/0),,
+normal 정확도:,0.0%,(0/1),,
+✨ 총 전체 정확도:,0.0%,(0/2),,

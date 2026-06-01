@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLM 도서관 서고 모니터링 대시보드</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .tab-btn.active { border-bottom: 2px solid #3B82F6; color: #3B82F6; font-weight: bold; }
+        .status-normal { background-color: #DEF7EC; color: #03543F; }
+        .status-error { background-color: #FDE8E8; color: #9B1C1C; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <nav class="bg-white shadow-md p-4 flex justify-between items-center">
+        <div class="text-xl font-bold text-blue-600">
+            <i class="fa-solid fa-robot mr-2"></i> 지능형 서고 관리 시스템 (VLM)
+        </div>
+        <div class="text-sm text-gray-500">
+            <i class="fa-solid fa-circle text-green-500 text-xs mr-1"></i> 서버 연결됨
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-6">
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+                <h3 class="text-gray-500 text-sm font-semibold mb-1">총 스캔 세션</h3>
+                <p class="text-3xl font-bold" id="stat-sessions">0</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
+                <h3 class="text-gray-500 text-sm font-semibold mb-1">점검 완료 도서</h3>
+                <p class="text-3xl font-bold" id="stat-books">0</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+                <h3 class="text-gray-500 text-sm font-semibold mb-1">발견된 문제 도서 (오배열/누음 등)</h3>
+                <p class="text-3xl font-bold text-red-600" id="stat-issues">0</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-t-lg shadow border-b border-gray-200 px-6 pt-4">
+            <div class="flex space-x-6">
+                <button onclick="changeTab('results')" id="tab-results" class="tab-btn active pb-3 px-1 text-gray-600 hover:text-blue-600">🎯 최종 분석 결과</button>
+                <button onclick="changeTab('sessions')" id="tab-sessions" class="tab-btn pb-3 px-1 text-gray-600 hover:text-blue-600">📂 세션 현황</button>
+                <button onclick="changeTab('vision')" id="tab-vision" class="tab-btn pb-3 px-1 text-gray-600 hover:text-blue-600">👁️ Vision 원본 데이터</button>
+                <button onclick="changeTab('rfid')" id="tab-rfid" class="tab-btn pb-3 px-1 text-gray-600 hover:text-blue-600">📡 RFID 원본 데이터</button>
+                <button onclick="fetchData()" class="ml-auto pb-3 px-1 text-blue-500 hover:text-blue-700 font-bold"><i class="fa-solid fa-rotate-right"></i> 새로고침</button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-b-lg shadow overflow-x-auto">
+            <table class="min-w-full text-sm text-left">
+                <thead class="bg-gray-100 text-gray-600 font-medium border-b" id="table-head">
+                    </thead>
+                <tbody class="divide-y divide-gray-200" id="table-body">
+                    </tbody>
+            </table>
+            <div id="loading" class="text-center py-10 text-gray-500 hidden">
+                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>데이터를 불러오는 중입니다...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "http://127.0.0.1:8000/api/dashboard";
+        let currentTab = 'results';
+        let dbData = { sessions: [], results: [], vision: [], rfid: [] };
+
+        // 페이지 로드 시 데이터 가져오기
+        window.onload = fetchData;
+
+        async function fetchData() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('table-body').innerHTML = '';
+            
+            try {
+                const [resSess, resRes, resVis, resRfid] = await Promise.all([
+                    fetch(`${API_BASE}/sessions`).then(r => r.json()),
+                    fetch(`${API_BASE}/results`).then(r => r.json()),
+                    fetch(`${API_BASE}/vision`).then(r => r.json()),
+                    fetch(`${API_BASE}/rfid`).then(r => r.json())
+                ]);
+
+                dbData.sessions = resSess; dbData.results = resRes; 
+                dbData.vision = resVis; dbData.rfid = resRfid;
+
+                updateStats();
+                renderTable();
+            } catch (error) {
+                console.error("데이터 로드 실패:", error);
+                alert("백엔드 서버(FastAPI)가 실행 중인지 확인해주세요!");
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('stat-sessions').innerText = dbData.sessions.length;
+            document.getElementById('stat-books').innerText = dbData.results.length;
+            const issues = dbData.results.filter(r => r.final_status !== '정상' && r.final_status !== '대출 중 (정상)');
+            document.getElementById('stat-issues').innerText = issues.length;
+        }
+
+        function changeTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            currentTab = tabName;
+            renderTable();
+        }
+
+        function renderTable() {
+            const head = document.getElementById('table-head');
+            const body = document.getElementById('table-body');
+            head.innerHTML = ''; body.innerHTML = '';
+
+            const data = dbData[currentTab];
+            if (!data || data.length === 0) {
+                body.innerHTML = '<tr><td colspan="10" class="px-6 py-8 text-center text-gray-500">데이터가 없습니다.</td></tr>';
+                return;
+            }
+
+            // 테이블 헤더 동적 생성
+            const keys = Object.keys(data[0]);
+            let trHead = '<tr>';
+            keys.forEach(k => { trHead += `<th class="px-6 py-3">${k.toUpperCase()}</th>`; });
+            trHead += '</tr>';
+            head.innerHTML = trHead;
+
+            // 테이블 본문 생성
+            data.forEach(row => {
+                let trBody = '<tr class="hover:bg-gray-50">';
+                keys.forEach(k => {
+                    let val = row[k];
+                    // 상태 값에 따른 색상 라벨링
+                    if (k === 'final_status' || k === 'visual_status' || k === 'sync_status') {
+                        const isNormal = val === '정상' || val === 'normal' || val === 'SUCCESS';
+                        const badgeClass = isNormal ? 'status-normal' : 'status-error';
+                        val = `<span class="px-2 py-1 rounded text-xs font-semibold ${badgeClass}">${val}</span>`;
+                    }
+                    trBody += `<td class="px-6 py-4 whitespace-nowrap">${val ?? '-'}</td>`;
+                });
+                trBody += '</tr>';
+                body.innerHTML += trBody;
+            });
+        }
+    </script>
+</body>
+</html>
