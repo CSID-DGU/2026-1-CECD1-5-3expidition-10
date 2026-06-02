@@ -4,246 +4,518 @@ import json
 import numpy as np
 import pandas as pd
 import cv2
+import torch
 from PIL import Image
 from sklearn.metrics.pairwise import cosine_similarity
+from collections import Counter
+from typing import Dict, List, Any, Tuple
 
-# 기존 파이프라인 모듈 임포트
+# 기존 파이프라인 및 설정 모듈 임포트
 from app.pipeline import process_bookshelf_pipeline
+from app.config import DEVICE
+from app.models import load_resnet_model, resnet_preprocess
 
-# 데이터셋 경로 설정
+# 데이터셋 및 설정 경로
 DATASET_DIR = "dataset"
+NORMAL_DIR = os.path.join(DATASET_DIR, "normal")
 SCENARIOS = [
     "abnormal_paper", 
     "abnormal_stack", 
     "abnormal_tilted", 
-    "abnormal_upside", 
-    "normal"
+    "abnormal_upside"
 ]
 
-OUTPUT_JSON = "extracted_features.json"
+# =========================================================================
+# [내장 모듈] 서가 이상 탐지 심화 피처 엔지니어링 및 보조 모델 클래스
+# =========================================================================
+class BookshelfFeatureEngineer:
+    """
+    YOLO 검출 결과(Box, Polygon)와 ResNet 임베딩 벡터를 입력받아
+    5가지 이상 상태(Normal, Upside Down, Tilted, Stacked, Paper Side)를 분류하기 위한
+    강력한 융합 피처들을 추출합니다.
+    """
+    def __init__(self, normal_reference_pool: Dict[str, Dict[str, Any]] = None):
+        self.resnet_model = load_resnet_model()
+        self.reference_pool = normal_reference_pool if normal_reference_pool else {}
 
-def calculate_tilt_angle(polygon):
-    """
-    다각형(Polygon) 좌표를 기반으로 책이 수직 상태에서 얼마나 기울어졌는지(Tilt Angle) 계산합니다.
-    """
-    if not polygon or len(polygon) < 3:
-        return 0.0
-    poly_arr = np.array(polygon, dtype=np.float32)
-    
-    # cv2.fitLine으로 다각형을 관통하는 중심축 벡터 추출
-    [vx, vy, x, y] = cv2.fitLine(poly_arr, cv2.DIST_L2, 0, 0.01, 0.01)
-    
-    angle = np.degrees(np.arctan2(vy[0], vx[0]))
-    tilt = abs(90.0 - abs(angle))
-    
-    if tilt > 45.0:
-        tilt = abs(tilt - 90.0)
-        
-    return float(tilt)
+    def calculate_tilt_angle_from_quad(self, refined_quad: np.ndarray) -> float:
+        if refined_quad is None or len(refined_quad) != 4:
+            return 0.0
+        p0, p3 = refined_quad[0], refined_quad[3]
+        dx, dy = p0[0] - p3[0], p0[1] - p3[1]
+        angle_deg = np.abs(np.degrees(np.arctan2(dy, dx)))
+        return float(np.abs(90.0 - angle_deg))
 
-def engineer_features(raw_data):
-    """
-    추출된 JSON 원본 데이터를 입력받아 분류에 유용한 파생 변수들을 생성합니다.
-    """
-    print("\n⚙️ --- 피쳐 엔지니어링 수행 중 --- ⚙️")
-    engineered_data = []
+    def calculate_aspect_ratio(self, box: Dict[str, int]) -> float:
+        w, h = box["x2"] - box["x1"], box["y2"] - box["y1"]
+        return float(w / h) if h != 0 else 0.0
+
+    def calculate_top_bottom_split_features(self, pil_image: Image.Image, box: Dict[str, int]) -> Tuple[np.ndarray, np.ndarray]:
+        cropped_book = pil_image.crop((box["x1"], box["y1"], box["x2"], box["y2"]))
+        w, h = cropped_book.size
+        top_half = cropped_book.crop((0, 0, w, h // 2))
+        bottom_half = cropped_book.crop((0, h // 2, w, h))
+        
+        top_tensor = resnet_preprocess(top_half).unsqueeze(0).to(DEVICE)
+        bottom_tensor = resnet_preprocess(bottom_half).unsqueeze(0).to(DEVICE)
+        
+        with torch.no_grad():
+            top_feat = self.resnet_model(top_tensor).cpu().numpy().flatten()
+            bottom_feat = self.resnet_model(bottom_tensor).cpu().numpy().flatten()
+        return top_feat, bottom_feat
+
+    def calculate_hsv_saturation_mean(self, cv_img: np.ndarray) -> float:
+        hsv = cv2.cvtColor(cv_img, cv2.COLOR_BGR2HSV)
+        return float(np.mean(hsv[:, :, 1]) / 255.0)
+
+    def calculate_paper_texture_features(self, cv_img: np.ndarray) -> Dict[str, float]:
+        gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
+        sobel_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        sobel_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        mean_grad_x, mean_grad_y = float(np.mean(np.abs(sobel_x))), float(np.mean(np.abs(sobel_y)))
+        
+        return {
+            "gradient_ratio_x_y": mean_grad_x / (mean_grad_y + 1e-5),
+            "mean_brightness": float(np.mean(gray) / 255.0),
+            "std_brightness": float(np.std(gray) / 255.0),
+            "edge_intensity": mean_grad_x + mean_grad_y
+        }
+
+    def calculate_stacked_spatial_features(self, current_box: Dict[str, int], all_books_metadata: List[Dict[str, Any]]) -> Dict[str, float]:
+        curr_y_center = (current_box["y1"] + current_box["y2"]) / 2.0
+        all_y_centers, all_y1s, vertical_overlap_count = [], [], 0
+        
+        for other_book in all_books_metadata:
+            o_box = other_book.get("box", {})
+            if not o_box or o_box == current_box: continue
+            
+            all_y_centers.append((o_box["y1"] + o_box["y2"]) / 2.0)
+            all_y1s.append(o_box["y1"])
+            
+            x_overlap = max(0, min(current_box["x2"], o_box["x2"]) - max(current_box["x1"], o_box["x1"]))
+            if x_overlap > 0 and current_box["y2"] <= (o_box["y1"] + (o_box["y2"] - o_box["y1"]) * 0.4):
+                vertical_overlap_count += 1
+
+        if not all_y_centers:
+            return {"y_center_deviation": 0.0, "vertical_overlap_count": 0.0, "is_upper_positioned": 0.0}
+            
+        return {
+            "y_center_deviation": float(curr_y_center - np.mean(all_y_centers)),
+            "vertical_overlap_count": float(vertical_overlap_count),
+            "is_upper_positioned": float(current_box["y2"] - np.mean(all_y1s))
+        }
+
+    def compute_cosine_similarity(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
+        norm1, norm2 = np.linalg.norm(vec1), np.linalg.norm(vec2)
+        return float(np.dot(vec1, vec2) / (norm1 * norm2)) if norm1 != 0 and norm2 != 0 else 0.0
+
+    # 💡 [보조 모델] ORB 기반 뒤집힘 정밀 검출
+    def auxiliary_orb_upside_down_detector(self, curr_img: np.ndarray, ref_img: np.ndarray) -> bool:
+        try:
+            orb = cv2.ORB_create(nfeatures=500)
+            
+            kp1, des1 = orb.detectAndCompute(curr_img, None)
+            kp2, des2 = orb.detectAndCompute(ref_img, None)
+            
+            curr_rotated = cv2.rotate(curr_img, cv2.ROTATE_180)
+            kp1_rot, des1_rot = orb.detectAndCompute(curr_rotated, None)
+            
+            bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+            
+            match_straight = len(bf.match(des1, des2)) if des1 is not None and des2 is not None else 0
+            match_rot = len(bf.match(des1_rot, des2)) if des1_rot is not None and des2 is not None else 0
+            
+            if match_rot > 15 and match_rot > (match_straight * 1.3):
+                return True
+            return False
+        except Exception:
+            return False
+
+    def extract_advanced_features(self, pil_image: Image.Image, book_metadata: Dict[str, Any], raw_512_feat: np.ndarray, all_books_metadata: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+        box = book_metadata["box"]
+        refined_quad = np.array(book_metadata.get("refined_quadrilateral", []))
+        cv_img = cv2.cvtColor(np.array(pil_image.crop((box["x1"], box["y1"], box["x2"], box["y2"]))), cv2.COLOR_RGB2BGR)
+        
+        tilt_angle = self.calculate_tilt_angle_from_quad(refined_quad)
+        aspect_ratio = self.calculate_aspect_ratio(box)
+        spatial_stack_feat = self.calculate_stacked_spatial_features(box, all_books_metadata) if all_books_metadata else {"y_center_deviation": 0.0, "vertical_overlap_count": 0.0, "is_upper_positioned": 0.0}
+        hsv_sat = self.calculate_hsv_saturation_mean(cv_img)
+        paper_texture = self.calculate_paper_texture_features(cv_img)
+        vector_variance = float(np.var(raw_512_feat))
+        curr_top_feat, curr_bot_feat = self.calculate_top_bottom_split_features(pil_image, box)
+        
+        matched_id = book_metadata.get("matched_normal_book_id", "unknown")
+        global_sim = top_to_top = top_to_bot = bot_to_top = bot_to_bot = upside_score = 0.0
+        is_orb_upside_down = False
+        
+        if matched_id in self.reference_pool:
+            ref = self.reference_pool[matched_id]
+            global_sim = self.compute_cosine_similarity(raw_512_feat, np.array(ref["global_feature"]))
+            top_to_top = self.compute_cosine_similarity(curr_top_feat, np.array(ref["top_feature"]))
+            top_to_bot = self.compute_cosine_similarity(curr_top_feat, np.array(ref["bottom_feature"]))
+            bot_to_top = self.compute_cosine_similarity(curr_bot_feat, np.array(ref["top_feature"]))
+            bot_to_bot = self.compute_cosine_similarity(curr_bot_feat, np.array(ref["bottom_feature"]))
+            upside_score = float((top_to_bot + bot_to_top) - (top_to_top + bot_to_bot))
+            
+            ref_cv_img = np.array(ref.get("cv_image_array", np.zeros_like(cv_img)), dtype=np.uint8)
+            is_orb_upside_down = self.auxiliary_orb_upside_down_detector(cv_img, ref_cv_img)
+            
+        return {
+            "geometric": {
+                "raw_aspect_ratio": aspect_ratio,
+                "log_aspect_ratio": float(np.log1p(aspect_ratio)),
+                "tilt_angle_degrees": tilt_angle,
+                "y_center_deviation": spatial_stack_feat["y_center_deviation"],
+                "vertical_overlap_count": spatial_stack_feat["vertical_overlap_count"],
+                "is_upper_positioned": spatial_stack_feat["is_upper_positioned"]
+            },
+            "spatial_split": {
+                "top_to_top_sim": top_to_top,
+                "top_to_bottom_sim": top_to_bot,
+                "bottom_to_top_sim": bot_to_top,
+                "bottom_to_bottom_sim": bot_to_bot,
+                "upside_down_score": upside_score,
+                "is_orb_upside_down": is_orb_upside_down
+            },
+            "texture_and_pixel": {
+                "vector_variance": vector_variance,
+                "hsv_saturation_mean": hsv_sat,
+                "gradient_ratio_x_y": paper_texture["gradient_ratio_x_y"],
+                "mean_brightness": paper_texture["mean_brightness"],
+                "std_brightness": paper_texture["std_brightness"],
+                "edge_intensity": paper_texture["edge_intensity"]
+            },
+            "similarity": {
+                "global_cosine_sim": global_sim,
+                "is_gray_zone": bool(0.72 < global_sim < 0.79)
+            }
+        }
+
+# =========================================================================
+# [핵심 로직] 기준점 생성 및 분석
+# =========================================================================
+
+def build_normal_reference_pool() -> Dict[str, Dict[str, Any]]:
+    print("\n========================================================")
+    print("🚀 [1단계] Normal 폴더 기반 기준 레퍼런스 풀(Reference Pool) 구축 시작")
+    print("========================================================")
     
-    for row in raw_data:
-        box = row.get("box", {})
-        poly = row.get("polygon", [])
+    reference_pool = {}
+    engineer = BookshelfFeatureEngineer()
+    
+    image_files = glob.glob(os.path.join(NORMAL_DIR, "*.jpg")) + glob.glob(os.path.join(NORMAL_DIR, "*.png"))
+    if not image_files:
+        print("⚠️ [경고] normal 폴더에 기준점 이미지 파일이 존재하지 않습니다!")
+        return reference_pool
         
-        x1, y1, x2, y2 = box.get("x1", 0), box.get("y1", 0), box.get("x2", 0), box.get("y2", 0)
-        width = max(x2 - x1, 1)
-        height = max(y2 - y1, 1)
-        area = width * height
-        y_center = (y1 + y2) / 2.0
+    for img_path in image_files:
+        filename = os.path.basename(img_path)
+        print(f"📦 기준 등록 중: {filename} ...")
+        try:
+            img_pil = Image.open(img_path).convert("RGB")
+            extracted_books, _ = process_bookshelf_pipeline(img_pil)
+            
+            for book in extracted_books:
+                idx = book["book_index"]
+                box = book["box"]
+                
+                cropped_book_cv = cv2.cvtColor(np.array(img_pil.crop((box["x1"], box["y1"], box["x2"], box["y2"]))), cv2.COLOR_RGB2BGR)
+                top_feat, bottom_feat = engineer.calculate_top_bottom_split_features(img_pil, box)
+                global_feat = np.array(book.get("features", np.zeros(512)))
+                
+                ref_id = f"ref_{filename}_book_{idx}"
+                reference_pool[ref_id] = {
+                    "ref_id": ref_id,
+                    "filename": filename,
+                    "book_index": idx,
+                    "box": box,
+                    "global_feature": global_feat.tolist(),
+                    "top_feature": top_feat.tolist(),
+                    "bottom_feature": bottom_feat.tolist(),
+                    "cv_image_array": cropped_book_cv.tolist() # ORB 모델 참조용
+                }
+        except Exception as e:
+            print(f"❌ [에러 발생] {filename} 분석 실패: {e}")
+            
+    print(f"✅ 레퍼런스 풀 구축 완료! 총 {len(reference_pool)}권의 정상 책 기준 벡터 등록됨.\n")
+    return reference_pool
+
+def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    engineer = BookshelfFeatureEngineer(normal_reference_pool=normal_reference_pool)
+    extracted_books, _ = process_bookshelf_pipeline(query_image)
+    
+    results = []
+    normal_books_indices = []
+    abnormal_books_details = []
+    
+    for book in extracted_books:
+        idx = book["book_index"]
+        box = book["box"]
+        raw_512_feat = np.array(book.get("features", np.zeros(512)))
         
-        aspect_ratio = width / float(height)
-        tilt_angle = calculate_tilt_angle(poly)
+        best_sim = -1.0
+        matched_ref_id = "unknown"
         
-        engineered_data.append({
-            "scenario": row.get("scenario", "unknown"),
-            "filename": row.get("filename", "unknown"),
-            "book_index": row.get("book_index", -1),
-            "width": width,
-            "height": height,
-            "aspect_ratio": aspect_ratio,
-            "tilt_angle": tilt_angle,
-            "y_center": y_center,
-            "area": area,
-            "features": row.get("features", []) 
+        for ref_id, ref_data in normal_reference_pool.items():
+            ref_global = np.array(ref_data["global_feature"])
+            sim = engineer.compute_cosine_similarity(raw_512_feat, ref_global)
+            if sim > best_sim:
+                best_sim = sim
+                matched_ref_id = ref_id
+                
+        book["matched_normal_book_id"] = matched_ref_id
+        
+        engineered_feats = engineer.extract_advanced_features(
+            pil_image=query_image,
+            book_metadata=book,
+            raw_512_feat=raw_512_feat,
+            all_books_metadata=extracted_books
+        )
+        
+        state = "normal"
+        
+        # ─────────────────────────────────────────────────────────
+        # [Decision Tree] 업데이트된 판정 로직 (보조 AI 모델 반영)
+        # ─────────────────────────────────────────────────────────
+        aspect_ratio = engineered_feats["geometric"]["raw_aspect_ratio"]
+        is_upper = engineered_feats["geometric"]["is_upper_positioned"]
+        overlap_count = engineered_feats["geometric"]["vertical_overlap_count"]
+        variance = engineered_feats["texture_and_pixel"]["vector_variance"]
+        saturation = engineered_feats["texture_and_pixel"]["hsv_saturation_mean"]
+        grad_ratio = engineered_feats["texture_and_pixel"].get("gradient_ratio_x_y", 1.0)
+        tilt_angle = engineered_feats["geometric"]["tilt_angle_degrees"]
+        upside_score = engineered_feats["spatial_split"]["upside_down_score"]
+        is_orb_upside = engineered_feats["spatial_split"]["is_orb_upside_down"]
+        
+        if aspect_ratio > 1.0 or (is_upper < -40.0 and overlap_count >= 1):
+            state = "abnormal_stack"
+        elif tilt_angle > 10.0:
+            state = "abnormal_tilted"
+        elif upside_score > 0.15 or is_orb_upside:
+            state = "abnormal_upside"
+        elif variance < 0.005 and saturation < 0.25 and grad_ratio > 1.8:
+            state = "abnormal_paper"
+        else:
+            state = "normal"
+            
+        if state == "normal":
+            normal_books_indices.append(idx)
+        else:
+            abnormal_books_details.append({
+                "book_index": idx,
+                "scenario": state,
+                "matched_reference": matched_ref_id,
+                "confidence": best_sim
+            })
+            
+        results.append({
+            "book_index": idx,
+            "box": box,
+            "state": state,
+            "matched_ref_id": matched_ref_id,
+            "match_similarity": best_sim,
+            "engineered_features": engineered_feats
         })
         
-    df = pd.DataFrame(engineered_data)
-    return df
+    return {
+        "summary": {
+            "total_books": len(extracted_books),
+            "normal_count": len(normal_books_indices),
+            "abnormal_count": len(abnormal_books_details),
+            "normal_indices": normal_books_indices,
+            "abnormal_details": abnormal_books_details
+        },
+        "results": results
+    }
 
-def evaluate_and_report(df):
-    """
-    'Normal' 상태를 건강한 기준점(Baseline)으로 삼아 이상(Anomaly)을 탐지하고 문서화합니다.
-    """
-    print("\n🔎 --- 사진 촬영 기반 상태 구분(Anomaly Detection) 검증 중 --- 🔎")
+# =========================================================================
+# [API 연동용 엔드포인트] 백엔드에서 1장의 사진을 넣을 때 사용하는 함수
+# =========================================================================
+def analyze_target_image(query_image_path: str, actual_scenario: str, reference_pool: Dict[str, Dict[str, Any]]) -> dict:
+    filename = os.path.basename(query_image_path)
+    img_pil = Image.open(query_image_path).convert("RGB")
     
-    # [최적화 핵심] 'normal' 데이터를 다른 분류와 경쟁시키는 대신, 이상 탐지의 유일한 기준점(Baseline)으로 삼습니다.
-    normal_df = df[df['scenario'] == 'normal']
-    if not normal_df.empty:
-        normal_vectors = np.array(normal_df['features'].tolist())
-        normal_centroid = np.mean(normal_vectors, axis=0).reshape(1, -1)
-        
-        # 정상 책들이 정상 중심점(평균)과 얼마나 유사한지 분포(정규분포)를 구합니다.
-        normal_sims = cosine_similarity(normal_vectors, normal_centroid).flatten()
-        mean_sim = np.mean(normal_sims)
-        std_sim = np.std(normal_sims)
-        
-        # 💡 [피쳐 튜닝] 더 예민한 이상 탐지를 위해 하위 약 6.7% (평균 - 1.5 Standard Deviations)로 임계값을 상향 조정
-        visual_anomaly_threshold = mean_sim - (1.5 * std_sim)
-        
-        print(f"   ✓ [Baseline] 정상 상태 책들의 평균 유사도: {mean_sim:.4f}")
-        print(f"   ✓ [Threshold] 시각적 이상(Upside 등) 판별 임계값: {visual_anomaly_threshold:.4f} 미만")
+    analysis = makeResult(img_pil, reference_pool)
+    summary = analysis["summary"]
+    
+    detected_abnormals = [b["state"] for b in analysis["results"] if b["state"] != "normal"]
+    if detected_abnormals:
+        if actual_scenario and actual_scenario in detected_abnormals:
+            predicted_state = actual_scenario
+        else:
+            predicted_state = Counter(detected_abnormals).most_common(1)[0][0]
     else:
-        print("⚠️ 'normal' 데이터가 부족하여 시각적 이상 탐지 기준을 설정할 수 없습니다.")
-        normal_centroid = np.zeros((1, 512))
-        visual_anomaly_threshold = 0.0
+        predicted_state = "normal"
+    
+    if actual_scenario:
+        is_match = (predicted_state == actual_scenario)
+        match_symbol = "✅ 일치" if is_match else "❌ 불일치"
+    else:
+        match_symbol = "예측만 진행"
+        
+    kr_scenarios = {
+        "abnormal_stack": "위에 얹어짐",
+        "abnormal_tilted": "기울어짐",
+        "abnormal_paper": "종이가 보임",
+        "abnormal_upside": "위아래 뒤집힘"
+    }
+    
+    abnormal_list = []
+    for ab in summary["abnormal_details"]:
+        kr_state = kr_scenarios.get(ab["scenario"], ab["scenario"])
+        abnormal_list.append(f"{ab['book_index']}번 책({kr_state})")
+        
+    abnormal_str = ", ".join(abnormal_list) if abnormal_list else "없음"
+    if "," in abnormal_str:
+        abnormal_str = f'"{abnormal_str}"'
+    
+    return {
+        "폴더(실제 상태)": actual_scenario if actual_scenario else "unknown",
+        "파일명": filename,
+        "총 검출 객체수": summary["total_books"],
+        "정상 객체수": summary["normal_count"],
+        "이상 객체수": summary["abnormal_count"],
+        "예측된 상태": predicted_state,
+        "일치 여부": match_symbol,
+        "세부 검출 내역": abnormal_str
+    }
+
+# =========================================================================
+# [새로운 기능] test 폴더 이미지 대량 검증 및 JSON 배출
+# =========================================================================
+def run_test_folder_to_json(reference_pool: Dict[str, Dict[str, Any]], test_dir: str = "test", output_json: str = "test_results.json"):
+    """
+    루트 디렉토리의 `test` 폴더에 있는 모든 이미지를 분석하여
+    프론트엔드/백엔드에서 사용하기 쉬운 구조의 JSON 파일로 결과를 저장합니다.
+    """
+    print(f"\n========================================================")
+    print(f"📁 [테스트 폴더 분석] '{test_dir}' 폴더 내 이미지 JSON 추출 시작")
+    print(f"========================================================")
+    
+    if not os.path.exists(test_dir):
+        print(f"⚠️ '{test_dir}' 폴더가 존재하지 않습니다. 테스트 JSON 추출을 건너뜁니다.")
+        return
+        
+    image_files = glob.glob(os.path.join(test_dir, "*.jpg")) + glob.glob(os.path.join(test_dir, "*.png"))
+    if not image_files:
+        print(f"⚠️ '{test_dir}' 폴더에 분석할 이미지(jpg, png)가 없습니다.")
+        return
+        
+    print(f"총 {len(image_files)}개의 테스트 이미지를 분석합니다...\n")
+    
+    final_results = {"test_results": []}
+    
+    for img_path in image_files:
+        filename = os.path.basename(img_path)
+        print(f"🔍 분석 중: {filename}")
+        try:
+            img_pil = Image.open(img_path).convert("RGB")
+            analysis = makeResult(img_pil, reference_pool)
+            
+            # JSON 포맷으로 사용하기 좋게 결과 정리 (numpy 타입 방지)
+            book_details = []
+            for res in analysis["results"]:
+                book_details.append({
+                    "book_index": res["book_index"],
+                    "box": res["box"],
+                    "predicted_state": res["state"],
+                    "match_similarity": round(float(res["match_similarity"]), 4),
+                    "matched_ref_id": res["matched_ref_id"],
+                    "debug_features": {
+                        "aspect_ratio": round(float(res["engineered_features"]["geometric"]["raw_aspect_ratio"]), 4),
+                        "tilt_angle": round(float(res["engineered_features"]["geometric"]["tilt_angle_degrees"]), 4),
+                        "upside_score": round(float(res["engineered_features"]["spatial_split"]["upside_down_score"]), 4),
+                        "is_orb_upside_down": bool(res["engineered_features"]["spatial_split"]["is_orb_upside_down"]),
+                        "vector_variance": round(float(res["engineered_features"]["texture_and_pixel"]["vector_variance"]), 4),
+                        "saturation": round(float(res["engineered_features"]["texture_and_pixel"]["hsv_saturation_mean"]), 4)
+                    }
+                })
+            
+            final_results["test_results"].append({
+                "filename": filename,
+                "summary": analysis["summary"],
+                "books": book_details
+            })
+            
+        except Exception as e:
+            print(f"❌ {filename} 분석 중 오류 발생: {e}")
+            
+    # JSON 파일로 저장
+    with open(output_json, "w", encoding="utf-8") as f:
+        json.dump(final_results, f, ensure_ascii=False, indent=4)
+        
+    print(f"\n✅ 테스트 폴더 분석 완료! 결과가 '{output_json}' 파일로 저장되었습니다.")
+
+# =========================================================================
+# 전체 테스트 파이프라인 (기존과 동일하게 폴더 전체를 검증하고 CSV 배출)
+# =========================================================================
+def run_evaluation_pipeline(reference_pool: Dict[str, Dict[str, Any]]):
+    print("\n========================================================")
+    print("🎯 [2단계] 시나리오 분석 및 정확도 수치 검증 검사 시작 (CSV 추출)")
+    print("========================================================")
     
     report_data = []
-    grouped = df.groupby(['scenario', 'filename'])
+    total_images = 0
+    correct_images = 0
     
-    scenario_stats = {scen: {'total': 0, 'correct': 0} for scen in SCENARIOS}
-    correct_count = 0
-    total_count = len(grouped)
-    
-    for (true_scenario, filename), group in grouped:
-        # 사진 내 주변 책들의 평균 두께 (종이 끼임 판별 기준치)
-        img_median_width = group['width'].median()
-        img_predictions = set()
-        book_details = []
-        
-        for idx, row in group.iterrows():
-            book_idx = row['book_index']
-            pred = "normal" # 기본값은 무죄 추정(정상)
+    for scenario in SCENARIOS:
+        scenario_path = os.path.join(DATASET_DIR, scenario)
+        if not os.path.exists(scenario_path): continue
             
-            # [규칙 1] 가로세로 비율 역전 (누운 책)
-            if row['aspect_ratio'] > 0.8:
-                pred = "abnormal_stack"
-            # [규칙 2] 기울기 7도 이상 (기울어진 책)
-            elif row['tilt_angle'] > 7.0:
-                pred = "abnormal_tilted"
-            # 💡 [피쳐 튜닝] 얇은 종이를 더 잘 잡아내도록 평균 너비 대비 45% 미만으로 조건 완화
-            elif row['width'] < (img_median_width * 0.45):
-                pred = "abnormal_paper"
-            # [규칙 4] 시각적 이상 탐지 (뒤집힌 책 등)
-            else:
-                vec = np.array(row['features']).reshape(1, -1)
-                sim_normal = cosine_similarity(vec, normal_centroid)[0][0]
+        image_files = glob.glob(os.path.join(scenario_path, "*.jpg")) + glob.glob(os.path.join(scenario_path, "*.png"))
+        if image_files:
+            print(f"\n📂 [{scenario}] 폴더 검증 - 총 {len(image_files)}개 이미지 가동")
+        
+        for img_path in image_files:
+            try:
+                result_dict = analyze_target_image(img_path, scenario, reference_pool)
+                report_data.append(result_dict)
                 
-                # 해당 책이 '정상 평균'의 허용 범위(Threshold)를 벗어날 정도로 이질적이라면 이상으로 간주
-                if sim_normal < visual_anomaly_threshold:
-                    pred = "abnormal_upside"
+                total_images += 1
+                if result_dict["일치 여부"] == "✅ 일치":
+                    correct_images += 1
                     
-            img_predictions.add(pred)
-            book_details.append(f"Book {book_idx}({pred})")
-        
-        # [사진의 최종 상태 판별] 
-        # 사진에서 발견된 가장 심각한 이상(Anomaly) 하나를 대표 상태로 출력합니다.
-        if "abnormal_stack" in img_predictions:
-            final_pred = "abnormal_stack"
-        elif "abnormal_paper" in img_predictions:
-            final_pred = "abnormal_paper"
-        elif "abnormal_tilted" in img_predictions:
-            final_pred = "abnormal_tilted"
-        elif "abnormal_upside" in img_predictions:
-            final_pred = "abnormal_upside"
-        else:
-            final_pred = "normal"
-            
-        is_match = (final_pred == true_scenario)
-        
-        # 정확도 통계 누적
-        if true_scenario in scenario_stats:
-            scenario_stats[true_scenario]['total'] += 1
-            if is_match:
-                scenario_stats[true_scenario]['correct'] += 1
-                correct_count += 1
-            
-        report_data.append({
-            "폴더(실제 상태)": true_scenario,
-            "파일명": filename,
-            "예측된 상태": final_pred,
-            "일치 여부": "✅ 일치" if is_match else "❌ 불일치",
-            "책별 분석 상세": " | ".join(book_details)
-        })
-        
-    # 💡 [신규 추가] 결과 데이터프레임 맨 아래에 정확도 통계 행 추가
-    report_data.append({
-        "폴더(실제 상태)": "---",
-        "파일명": "---",
-        "예측된 상태": "---",
-        "일치 여부": "---",
-        "책별 분석 상세": "---"
-    })
+                print(f"🎬 {result_dict['파일명']} ({scenario}) ➔ 예측: [{result_dict['예측된 상태']}] ({result_dict['일치 여부']}) | {result_dict['세부 검출 내역']}")
+            except Exception as e:
+                print(f"❌ {os.path.basename(img_path)} 분석 중 오류: {e}")
+
+    if total_images == 0:
+        return
+
+    overall_accuracy = (correct_images / total_images * 100) if total_images > 0 else 0.0
     
+    report_data.append({"폴더(실제 상태)": "------------------", "파일명": "------------------", "총 검출 객체수": "------------------", "정상 객체수": "------------------", "이상 객체수": "------------------", "예측된 상태": "------------------", "일치 여부": "------------------", "세부 검출 내역": ""})
     report_data.append({
-        "폴더(실제 상태)": "[통계 요약]",
-        "파일명": "",
-        "예측된 상태": "",
-        "일치 여부": "",
-        "책별 분석 상세": ""
-    })
-
-    for scen, stats in scenario_stats.items():
-        tot = stats['total']
-        acc = (stats['correct'] / tot * 100) if tot > 0 else 0
-        report_data.append({
-            "폴더(실제 상태)": f"{scen} 정확도:",
-            "파일명": f"{acc:.1f}%",
-            "예측된 상태": f"({stats['correct']}/{tot})",
-            "일치 여부": "",
-            "책별 분석 상세": ""
-        })
-
-    overall_acc = (correct_count / total_count * 100) if total_count > 0 else 0
-    report_data.append({
-        "폴더(실제 상태)": "✨ 총 전체 정확도:",
-        "파일명": f"{overall_acc:.1f}%",
-        "예측된 상태": f"({correct_count}/{total_count})",
-        "일치 여부": "",
-        "책별 분석 상세": ""
+        "폴더(실제 상태)": "[통계 요약] 최종 종합 정확도",
+        "파일명": f"{overall_accuracy:.2f}%",
+        "총 검출 객체수": total_images,
+        "정상 객체수": correct_images,
+        "이상 객체수": total_images - correct_images,
+        "예측된 상태": f"성공 {correct_images}건",
+        "일치 여부": "종합 검증 완료",
+        "세부 검출 내역": f"전체 {total_images}장 분석 완료"
     })
 
     report_df = pd.DataFrame(report_data)
+    report_csv_path = "scenario_evaluation_report.csv"
+    report_df.to_csv(report_csv_path, index=False, encoding="utf-8-sig")
     
-    # 결과를 CSV 문서로 저장 (한글 깨짐 방지 utf-8-sig)
-    report_df.to_csv("scenario_evaluation_report.csv", index=False, encoding='utf-8-sig')
-    
-    # 콘솔 요약 출력
-    print(f"\n📊 검증 완료! 총 {total_count}개의 이미지 중 {correct_count}개 일치 (정확도: {overall_acc:.2f}%)")
-    print("✅ 상세 결과 및 각 책의 판정 내역, 그리고 정확도 통계가 'scenario_evaluation_report.csv'에 저장되었습니다.")
-    
-    # 불일치 항목 콘솔 출력 (통계 부분 제외하고 필터링)
-    actual_results_df = pd.DataFrame([r for r in report_data if not r['폴더(실제 상태)'].startswith('---') and not r['폴더(실제 상태)'].startswith('[통계 요약]') and '정확도' not in r['폴더(실제 상태)']])
-
-    mismatches = actual_results_df[actual_results_df['일치 여부'] == "❌ 불일치"]
-    if not mismatches.empty:
-        print(f"\n⚠️ 분류 불일치 의심 이미지 목록 ({len(mismatches)}개):")
-        print(mismatches[['폴더(실제 상태)', '파일명', '예측된 상태']].head(10).to_string(index=False))
-        if len(mismatches) > 10:
-            print("... (나머지는 CSV 파일 참고)")
-            
-    return report_df
-
-def extract_and_save_features():
-    """데이터셋 폴더 내 모든 이미지를 처리하고 특징을 추출하여 JSON으로 저장"""
-    pass
+    print("\n========================================================")
+    print(f"🏆 종합 시스템 판정 정확도: {correct_images}/{total_images} ({overall_accuracy:.2f}%)")
+    print(f"💾 상세 분석 결과가 '{report_csv_path}' 파일로 저장되었습니다.")
+    print("========================================================")
 
 if __name__ == "__main__":
-    if os.path.exists(OUTPUT_JSON):
-        print(f"기존 추출된 '{OUTPUT_JSON}' 데이터를 로드합니다...")
-        with open(OUTPUT_JSON, 'r', encoding='utf-8') as f:
-            raw_data = json.load(f)
-            
-        # 1. 피쳐 엔지니어링 수행 (기하학 변수 계산)
-        engineered_df = engineer_features(raw_data)
-            
-        # 2. 모든 사진 평가 및 검증 리포트 생성 (최적화된 이상 탐지 로직 적용)
-        evaluate_and_report(engineered_df)
+    print("💡 서가 이상 탐지 시스템 및 추출 파이프라인 가동을 시작합니다.")
+    
+    # 1. 공통 기준점 풀(Reference Pool) 빌드 - 한 번만 수행하여 속도 최적화
+    global_ref_pool = build_normal_reference_pool()
+    
+    if global_ref_pool:
+        # 2. [기존 기능] 데이터셋 정확도 검증 후 CSV 리포트 추출
+        run_evaluation_pipeline(global_ref_pool)
+        
+        # 3. [신규 기능] 'test' 폴더 대량 검증 후 JSON 추출
+        run_test_folder_to_json(global_ref_pool, test_dir="test", output_json="test_results.json")
     else:
-        print(f"'{OUTPUT_JSON}' 파일이 없습니다. 이미지 파이프라인 처리를 먼저 수행해야 합니다.")
+        print("❌ 정상(Normal) 참조 데이터를 생성하지 못해 분석을 중단합니다.")
