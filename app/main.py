@@ -22,7 +22,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 💡 원래 쓰시던 프로젝트 내부 상대 경로로 복구
 OUTPUT_DIR = "./pipeline_outputs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
