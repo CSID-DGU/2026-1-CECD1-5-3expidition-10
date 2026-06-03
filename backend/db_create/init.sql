@@ -47,6 +47,6 @@ CREATE TABLE ANALYSIS_RESULT (
     session_id VARCHAR(50) NOT NULL COMMENT '참조 세션 ID',
     book_id VARCHAR(50) NOT NULL COMMENT '최종 확정된 도서 ID',
     current_order INT NOT NULL COMMENT '최종 판별된 서가 내 순서',
-    final_status VARCHAR(20) NOT NULL COMMENT '최종 상태 (정상/오배열/오배가/누락)',
+    final_status VARCHAR(100) NOT NULL COMMENT '최종 상태 (정상/오배열/오배가/누락)',
     FOREIGN KEY (session_id) REFERENCES SHELF_SESSION(session_id) ON DELETE CASCADE
 );

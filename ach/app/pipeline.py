@@ -1,4 +1,5 @@
 import io
+import os
 import colorsys
 import torch
 import numpy as np
@@ -6,9 +7,7 @@ import cv2
 from PIL import Image, ImageDraw
 from app.config import DEVICE
 from app.models import load_yolo_model, load_resnet_model, resnet_preprocess
-from app.preprocessing import preprocessor
 
-# 모델 로드
 yolo_model = load_yolo_model()
 resnet_model = load_resnet_model()
 
@@ -20,230 +19,142 @@ def get_unique_colors(n):
         colors.append(tuple(int(c * 255) for c in rgb))
     return colors
 
+def get_line_intersection(line1, line2):
+    """직선의 일반형 Ax + By = C 형태로 변환하여 안정적으로 교차점을 계산"""
+    vx1, vy1, x1, y1 = line1.flatten()
+    vx2, vy2, x2, y2 = line2.flatten()
+    
+    A1, B1, C1 = -vy1, vx1, vx1 * y1 - vy1 * x1
+    A2, B2, C2 = -vy2, vx2, vx2 * y2 - vy2 * x2
+    
+    det = A1 * B2 - A2 * B1
+    if abs(det) < 1e-5:
+        return None
+        
+    x = (C1 * B2 - C2 * B1) / det
+    y = (A1 * C2 - A2 * C1) / det
+    return int(round(x)), int(round(y))
+
+def order_points(pts):
+    """
+    ✨ [추가] 4개의 임의 꼭짓점을 무조건 [좌상, 우상, 우하, 좌하] 순서로 정렬하는 유틸리티
+    """
+    pts = pts.reshape(4, 2).astype(np.float32)
+    rect = np.zeros((4, 2), dtype=np.float32)
+    
+    # 좌상(tl)은 x + y 최소, 우하(br)는 x + y 최대
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+    
+    # 우상(tr)은 y - x 최소, 좌하(bl)는 y - x 최대
+    diff = np.diff(pts, axis=1).flatten()
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+    
+    return rect.astype(np.int32)
+
+def get_robust_average_quadrilateral(pts):
+    """
+    어떤 극한의 왜곡 상황에서도 항상 올바른 정렬을 가진 (4, 2) 크기의 단일 넘파이 배열을 반환합니다.
+    """
+    points = pts.reshape(-1, 2).astype(np.float32)
+    
+    # 가이드라인 사각형 및 중심점 계산
+    rect = cv2.minAreaRect(points.astype(np.int32))
+    box = cv2.boxPoints(rect)
+    (cx, cy), (rw, rh), angle = rect
+    
+    # 💥 [안전장치 1] 평행선 교차로 인한 좌표 대폭발 방지용 허용 거리 정의
+    max_allowed_dist = max(rw, rh) * 3.0
+    
+    indices = []
+    for corner in box:
+        dists = np.linalg.norm(points - corner, axis=1)
+        indices.append(np.argmin(dists))
+        
+    unique_indices = sorted(list(set(indices)))
+    
+    # 구획 점이 부족하면 즉시 정렬된 기본 박스 반환
+    if len(unique_indices) < 4:
+        return order_points(box)
+    
+    group1 = points[unique_indices[0]:unique_indices[1]+1]
+    group2 = points[unique_indices[1]:unique_indices[2]+1]
+    group3 = points[unique_indices[2]:unique_indices[3]+1]
+    group4 = np.vstack([points[unique_indices[3]:], points[:unique_indices[0]+1]])
+    
+    if min(len(group1), len(group2), len(group3), len(group4)) < 2:
+        return order_points(box)
+
+    try:
+        line1 = cv2.fitLine(np.array(group1, dtype=np.float32), cv2.DIST_HUBER, 0, 0.01, 0.01)
+        line2 = cv2.fitLine(np.array(group2, dtype=np.float32), cv2.DIST_HUBER, 0, 0.01, 0.01)
+        line3 = cv2.fitLine(np.array(group3, dtype=np.float32), cv2.DIST_HUBER, 0, 0.01, 0.01)
+        line4 = cv2.fitLine(np.array(group4, dtype=np.float32), cv2.DIST_HUBER, 0, 0.01, 0.01)
+
+        pt1 = get_line_intersection(line1, line2)
+        pt2 = get_line_intersection(line2, line3)
+        pt3 = get_line_intersection(line3, line4)
+        pt4 = get_line_intersection(line4, line1)
+        
+        quad_points = [pt1, pt2, pt3, pt4]
+        
+        if None in quad_points:
+            return order_points(box)
+            
+        # 💥 [안전장치 2] 계산된 교차점이 사각형 중심에서 비정상적으로 멀리 튀었는지(좌표 폭발) 검증
+        for pt in quad_points:
+            if np.linalg.norm(np.array(pt) - np.array([cx, cy])) > max_allowed_dist:
+                return order_points(box)
+                
+    except Exception:
+        return order_points(box)
+        
+    return order_points(np.array(quad_points))
+
 def process_bookshelf_pipeline(image: Image.Image):
-    """
-    서가 사진을 받아 [책등 분할 -> 수직/수평 분리 그룹화 -> 특징 추출]을 수행합니다.
-    가로로 누운 책과 세로로 꽂힌 책을 분리하여 엉뚱한 병합(거대 다각형)을 원천 차단합니다.
-    """
-    orig_width, orig_height = image.size
+    results = yolo_model(image, conf=0.30, iou=0.3, agnostic_nms=True, verbose=False)[0]
     
-    # 강력한 전처리 거침
-    enhanced_image = preprocessor.enhance_for_detection(image)
-    
-    # conf를 0.25로 유지하여 인식률을 높이고, iou는 0.65로 설정하여 과적합 마스크만 NMS 억제
-    results_normal = yolo_model(enhanced_image, conf=0.25, iou=0.65, agnostic_nms=True, retina_masks=True, verbose=False)[0]
-    img_rot90 = preprocessor.get_rotated_variants(enhanced_image)
-    results_rot90 = yolo_model(img_rot90, conf=0.25, iou=0.65, agnostic_nms=True, retina_masks=True, verbose=False)[0]
-
-    SPINE_CLASS_ID = 0
-    
-    # 💡 [핵심 해결] 세로 책과 가로 책의 데이터 버킷을 완벽히 분리합니다.
-    vertical_spines = []
-    horizontal_spines = []
-
-    # [정방향 결과 취합 - 수직 및 기울어진 책]
-    if results_normal.masks is not None:
-        for i, cls in enumerate(results_normal.boxes.cls):
-            if int(cls.item()) == SPINE_CLASS_ID:
-                poly = results_normal.masks.xy[i]
-                if len(poly) < 3: continue
-                x1, y1, x2, y2 = map(int, results_normal.boxes[i].xyxy[0].tolist())
-                w = x2 - x1
-                h = y2 - y1
-                
-                # 가로로 심하게 누운(1.5배) 것만 정방향에서 제외
-                if w > h * 1.5: 
-                    continue
-                    
-                vertical_spines.append({
-                    "polygon": poly.astype(np.float32),
-                    "box": [x1, y1, x2, y2],
-                    "x_center": (x1 + x2) / 2,
-                    "width": w
-                })
-
-    # [회전방향 결과 취합 - 가로로 누운 책]
-    if results_rot90.masks is not None:
-        for i, cls in enumerate(results_rot90.boxes.cls):
-            if int(cls.item()) == SPINE_CLASS_ID:
-                poly = results_rot90.masks.xy[i]
-                if len(poly) < 3: continue
-                
-                bx1, by1, bx2, by2 = map(int, results_rot90.boxes[i].xyxy[0].tolist())
-                bw = bx2 - bx1
-                bh = by2 - by1
-                
-                if bw > bh * 1.5:
-                    continue
-                
-                restored_boxes = preprocessor.transform_boxes_back([[bx1, by1, bx2, by2]], orig_width)
-                rx1, ry1, rx2, ry2 = restored_boxes[0]
-                x1, x2 = min(rx1, rx2), max(rx1, rx2)
-                y1, y2 = min(ry1, ry2), max(ry1, ry2)
-
-                restored_polys = preprocessor.transform_polygons_back([poly], orig_width)
-                restored_poly = restored_polys[0]
-
-                # 가로 책 버킷에 따로 저장
-                horizontal_spines.append({
-                    "polygon": restored_poly,
-                    "box": [x1, y1, x2, y2],
-                    "x_center": (x1 + x2) / 2,
-                    "width": x2 - x1
-                })
-
-    if not vertical_spines and not horizontal_spines:
+    if results.masks is None or len(results.masks) == 0:
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format="JPEG")
         return [], img_byte_arr.getvalue()
 
-    # -------------------------------------------------------------
-    # 교차 노이즈 필터링
-    # -------------------------------------------------------------
-    # 가로 책("3D 게임 프로그래밍") 영역 내부에 잘못 잡힌 세로 조각(텍스트 노이즈) 제거
-    filtered_vertical = []
-    for v in vertical_spines:
-        vx1, vy1, vx2, vy2 = v["box"]
-        v_area = max(0, vx2 - vx1) * max(0, vy2 - vy1)
-        is_noise = False
-        for h in horizontal_spines:
-            hx1, hy1, hx2, hy2 = h["box"]
-            ix1, iy1 = max(vx1, hx1), max(vy1, hy1)
-            ix2, iy2 = min(vx2, hx2), min(vy2, hy2)
-            if ix1 < ix2 and iy1 < iy2:
-                if (ix2 - ix1) * (iy2 - iy1) > v_area * 0.3:
-                    is_noise = True
-                    break
-        if not is_noise:
-            filtered_vertical.append(v)
-    vertical_spines = filtered_vertical
+    segments_poly = results.masks.xy
+    confs = results.boxes.conf.cpu().numpy()
+    cls_ids = results.boxes.cls.cpu().numpy()
 
-    # -------------------------------------------------------------
-    # 1단계: 수직 인접 조각들 간의 그룹화 (세로 책 전용)
-    # -------------------------------------------------------------
-    spine_groups = []
-    visited = [False] * len(vertical_spines)
-
-    for i in range(len(vertical_spines)):
-        if visited[i]: 
-            continue
-        
-        current_group = [vertical_spines[i]]
-        visited[i] = True
-        
-        for j in range(i + 1, len(vertical_spines)):
-            if visited[j]: 
-                continue
-            
-            spine_a = current_group[-1]
-            spine_b = vertical_spines[j]
-            
-            x_diff = abs(spine_a["x_center"] - spine_b["x_center"])
-            width_diff = abs(spine_a["width"] - spine_b["width"])
-            
-            # Y축 겹침(Overlap) 확인 (나란히 선 책 방어)
-            y_overlap = max(0, min(spine_a["box"][3], spine_b["box"][3]) - max(spine_a["box"][1], spine_b["box"][1]))
-            min_height = min(spine_a["box"][3] - spine_a["box"][1], spine_b["box"][3] - spine_b["box"][1])
-            
-            if y_overlap > min_height * 0.1:
-                continue 
-            
-            if spine_b["box"][1] > spine_a["box"][3]:
-                y_gap = spine_b["box"][1] - spine_a["box"][3]
-            elif spine_a["box"][1] > spine_b["box"][3]:
-                y_gap = spine_a["box"][1] - spine_b["box"][3]
-            else:
-                y_gap = 0
-                
-            avg_width = (spine_a["width"] + spine_b["width"]) / 2
-            
-            if x_diff < avg_width * 1.5 and width_diff < avg_width * 0.85 and y_gap < avg_width * 3.5:
-                current_group.append(spine_b)
-                visited[j] = True
-                
-        spine_groups.append(current_group)
-
-    # -------------------------------------------------------------
-    # 2단계: 수학적 다각형 연결
-    # -------------------------------------------------------------
+    SPINE_CLASS_ID = 0
     valid_spine_data = []
-    mask_canvas = np.zeros((orig_height, orig_width), dtype=np.uint8)
 
-    # 세로 책 브릿지 연결
-    for group in spine_groups:
-        mask_canvas.fill(0)
-        group.sort(key=lambda g: g["box"][1])
-        
-        for g in group:
-            poly_pts = np.array(g["polygon"], dtype=np.int32).reshape((-1, 1, 2))
-            cv2.fillPoly(mask_canvas, [poly_pts], 255)
-            
-        for k in range(len(group) - 1):
-            upper_spine = group[k]
-            lower_spine = group[k + 1]
-            
-            u_poly = upper_spine["polygon"]
-            l_poly = lower_spine["polygon"]
-            
-            u_idx = np.argsort(u_poly[:, 1])[-max(3, len(u_poly)//4):] 
-            l_idx = np.argsort(l_poly[:, 1])[:max(3, len(l_poly)//4)]  
-            
-            u_pts = u_poly[u_idx]
-            l_pts = l_poly[l_idx]
-            
-            if len(u_pts) > 0 and len(l_pts) > 0:
-                u_l = u_pts[np.argmin(u_pts[:, 0])]
-                u_r = u_pts[np.argmax(u_pts[:, 0])]
-                l_l = l_pts[np.argmin(l_pts[:, 0])]
-                l_r = l_pts[np.argmax(l_pts[:, 0])]
-                
-                bridge_poly = np.array([u_l, u_r, l_r, l_l], dtype=np.int32)
-                cv2.fillPoly(mask_canvas, [bridge_poly], 255)
+    for poly, conf, cls_id in zip(segments_poly, confs, cls_ids):
+        if int(cls_id) != SPINE_CLASS_ID:
+            continue
 
-        contours, _ = cv2.findContours(mask_canvas, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
+        pts = poly.astype(np.int32)
+        if len(pts) < 3:
             continue
-            
-        largest_contour = max(contours, key=cv2.contourArea)
         
-        if cv2.contourArea(largest_contour) < 500:
-            continue
-            
-        rx, ry, rw, rh = cv2.boundingRect(largest_contour)
+        rect = cv2.minAreaRect(pts)
+        _, (rw, rh), angle = rect
+        long_side = max(rw, rh)
+        short_side = min(rw, rh)
+        aspect_ratio = long_side / max(short_side, 1)
         
-        # 비율 컷오프 (세로 책 전용)
-        if rh < rw * 0.9:
+        if aspect_ratio < 1.5 or long_side < 25:
             continue
             
-        epsilon = 0.005 * cv2.arcLength(largest_contour, True)
-        approx_polygon = cv2.approxPolyDP(largest_contour, epsilon, True)
-        refined_polygon = approx_polygon.reshape(-1, 2).astype(np.float32)
+        rx, ry, rw_b, rh_b = cv2.boundingRect(pts)
+        x1, y1 = max(0, rx), max(0, ry)
+        x2, y2 = min(image.width, rx + rw_b), min(image.height, ry + rh_b)
             
         valid_spine_data.append({
-            "polygon": refined_polygon,
-            "box": (int(rx), int(ry), int(rx + rw), int(ry + rh))
+            "polygon": pts,
+            "box": (x1, y1, x2, y2),
+            "dimensions": {"height": float(long_side), "width": float(short_side), "angle": float(angle)}
         })
 
-    # 가로 책 결합 (가로 책은 위아래 병합 과정 없이 개별 추가)
-    for h_spine in horizontal_spines:
-        poly_pts = np.array(h_spine["polygon"], dtype=np.int32)
-        if cv2.contourArea(poly_pts) < 500:
-            continue
-            
-        rx, ry, rw, rh = cv2.boundingRect(poly_pts)
-        
-        epsilon = 0.005 * cv2.arcLength(poly_pts, True)
-        approx_polygon = cv2.approxPolyDP(poly_pts, epsilon, True)
-        refined_polygon = approx_polygon.reshape(-1, 2).astype(np.float32)
-            
-        valid_spine_data.append({
-            "polygon": refined_polygon,
-            "box": (int(rx), int(ry), int(rx + rw), int(ry + rh))
-        })
-
-    # -------------------------------------------------------------
-    # 3단계: 시각화 및 특징 추출 단계
-    # -------------------------------------------------------------
     total_spines = len(valid_spine_data)
     visualized_image = image.copy()
     draw = ImageDraw.Draw(visualized_image, 'RGBA')
@@ -251,10 +162,51 @@ def process_bookshelf_pipeline(image: Image.Image):
 
     cropped_book_tensors = []
     output_metadata = []
+    image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
     for idx, data in enumerate(valid_spine_data):
         polygon = data["polygon"]
         polygon_tuple = [tuple(p) for p in polygon]
+        
+        # 무조건 완벽하게 정렬된 단일 넘파이 배열 확보
+        refined_quad = get_robust_average_quadrilateral(polygon)
+        
+        # 순서가 보장되었으므로 안전하게 가로/세로 길이 역산
+        width_top = np.linalg.norm(refined_quad[0] - refined_quad[1])
+        width_bottom = np.linalg.norm(refined_quad[3] - refined_quad[2])
+        height_left = np.linalg.norm(refined_quad[0] - refined_quad[3])
+        height_right = np.linalg.norm(refined_quad[1] - refined_quad[2])
+        
+        dst_w = int(max(width_top, width_bottom, 1))
+        dst_h = int(max(height_left, height_right, 1))
+        
+        # 💥 [안전장치 3] 혹시 모를 거대 메모리 할당(상식 밖의 해상도 폭발) 최종 차단
+        if dst_w > image.width * 2 or dst_h > image.height * 2 or dst_w > 3000 or dst_h > 3000:
+            rect = cv2.minAreaRect(polygon)
+            box = cv2.boxPoints(rect)
+            refined_quad = order_points(box)
+            width_top = np.linalg.norm(refined_quad[0] - refined_quad[1])
+            width_bottom = np.linalg.norm(refined_quad[3] - refined_quad[2])
+            height_left = np.linalg.norm(refined_quad[0] - refined_quad[3])
+            height_right = np.linalg.norm(refined_quad[1] - refined_quad[2])
+            dst_w = int(max(width_top, width_bottom, 1))
+            dst_h = int(max(height_left, height_right, 1))
+        
+        rect_dst = np.array([
+            [0, 0],
+            [dst_w - 1, 0],
+            [dst_w - 1, dst_h - 1],
+            [0, dst_h - 1]
+        ], dtype="float32")
+        
+        M_warp = cv2.getPerspectiveTransform(refined_quad.astype(np.float32), rect_dst)
+        warped_spine = cv2.warpPerspective(image_np, M_warp, (dst_w, dst_h))
+        
+        OUTPUT_DIR = "./pipeline_outputs"
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        spine_file_path = os.path.join(OUTPUT_DIR, f"adjusted_spine_{idx}.jpg")
+        cv2.imwrite(spine_file_path, warped_spine)
+
         x1, y1, x2, y2 = data["box"]
         
         mask = Image.new("L", image.size, 0)
@@ -268,14 +220,19 @@ def process_bookshelf_pipeline(image: Image.Image):
         tensor = resnet_preprocess(cropped_book)
         cropped_book_tensors.append(tensor)
         
+        # 💥 [수정] Pillow 호환성을 보장하기 위해 numpy 타입을 순수 파이썬 int 타입으로 강제 변환
+        refined_quad_tuple = [(int(p[0]), int(p[1])) for p in refined_quad]
+        
         color = unique_colors[idx]
-        draw.polygon(polygon_tuple, fill=color + (80,))
-        draw.polygon(polygon_tuple, outline=color, width=2)
+        draw.polygon(refined_quad_tuple, fill=color + (80,))
+        draw.polygon(refined_quad_tuple, outline=color, width=2)
 
         output_metadata.append({
             "book_index": idx,
             "box": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
-            "polygon": polygon.tolist()
+            "polygon": polygon.tolist(),
+            "refined_quadrilateral": refined_quad.tolist(),
+            "dimensions": {"height": float(dst_h), "width": float(dst_w)}
         })
 
     img_byte_arr = io.BytesIO()
