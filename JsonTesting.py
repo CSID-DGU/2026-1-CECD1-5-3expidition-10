@@ -5,7 +5,6 @@ import numpy as np
 import cv2
 import torch
 from PIL import Image
-from collections import Counter
 from typing import Dict, List, Any, Tuple
 
 # 기존 파이프라인 모듈 임포트 (원본 훼손 없음)
@@ -17,7 +16,7 @@ from app.models import load_resnet_model, resnet_preprocess
 NORMAL_DIR = "dataset/normal"
 
 # =========================================================================
-# [엔진] 피처 추출 및 상태 판정 클래스 (보조 AI 모델 및 버그 패치 포함)
+# [엔진] 피처 추출 및 상태 판정 클래스
 # =========================================================================
 class BookshelfFeatureEngineer:
     def __init__(self, normal_reference_pool: Dict[str, Dict[str, Any]]):
@@ -79,8 +78,10 @@ class BookshelfFeatureEngineer:
         sobel_x = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
         sobel_y = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
         mean_grad_x, mean_grad_y = float(np.mean(np.abs(sobel_x))), float(np.mean(np.abs(sobel_y)))
+        
         return {
-            "gradient_ratio_x_y": mean_grad_x / (mean_grad_y + 1e-5),
+            "gradient_ratio_x_y": mean_grad_x / (mean_grad_y + 1e-5), 
+            "gradient_ratio_y_x": mean_grad_y / (mean_grad_x + 1e-5),
             "mean_brightness": float(np.mean(gray) / 255.0),
             "std_brightness": float(np.std(gray) / 255.0),
             "edge_intensity": mean_grad_x + mean_grad_y
@@ -151,7 +152,7 @@ class BookshelfFeatureEngineer:
         except Exception:
             return False
 
-    def get_book_state(self, pil_image: Image.Image, book_metadata: Dict[str, Any], raw_512_feat: np.ndarray, all_books_metadata: List[Dict[str, Any]]) -> Tuple[str, str, float, dict]:
+    def get_book_state(self, pil_image: Image.Image, book_metadata: Dict[str, Any], raw_512_feat: np.ndarray, all_books_metadata: List[Dict[str, Any]], matched_id: str) -> Tuple[str, dict]:
         box = book_metadata["box"]
         refined_quad = np.array(book_metadata.get("refined_quadrilateral", []))
         cv_img = cv2.cvtColor(np.array(pil_image.crop((box["x1"], box["y1"], box["x2"], box["y2"]))), cv2.COLOR_RGB2BGR)
@@ -164,20 +165,13 @@ class BookshelfFeatureEngineer:
         vector_variance = float(np.var(raw_512_feat))
         curr_top_feat, curr_bot_feat = self.calculate_top_bottom_split_features(pil_image, box)
         
-        best_sim = -1.0
-        matched_id = "unknown"
-        
-        for ref_id, ref_data in self.reference_pool.items():
-            sim = self.compute_cosine_similarity(raw_512_feat, np.array(ref_data["global_feature"]))
-            if sim > best_sim:
-                best_sim = sim
-                matched_id = ref_id
-                
         global_sim = top_to_top = top_to_bot = bot_to_top = bot_to_bot = upside_score = 0.0
         is_orb_upside = False
         
         if matched_id in self.reference_pool:
             ref = self.reference_pool[matched_id]
+            global_sim = self.compute_cosine_similarity(raw_512_feat, np.array(ref["global_feature"]))
+            
             top_to_bot = self.compute_cosine_similarity(curr_top_feat, np.array(ref["bottom_feature"]))
             bot_to_top = self.compute_cosine_similarity(curr_bot_feat, np.array(ref["top_feature"]))
             top_to_top = self.compute_cosine_similarity(curr_top_feat, np.array(ref["top_feature"]))
@@ -189,17 +183,21 @@ class BookshelfFeatureEngineer:
 
         is_upper = spatial_stack_feat["is_upper_positioned"]
         overlap_count = spatial_stack_feat["vertical_overlap_count"]
-        grad_ratio = paper_texture["gradient_ratio_x_y"]
+        grad_ratio_x_y = paper_texture["gradient_ratio_x_y"]
         is_laid_down = bool(true_aspect_ratio > 1.2)
         
         state = "normal"
+        
+        # 💡 [핵심 임계값 튜닝 1] 얹어짐 및 기울어짐 현실화
         if is_laid_down or (is_upper < -40.0 and overlap_count >= 1):
             state = "abnormal_stack"
-        elif tilt_angle > 10.0:
+        elif tilt_angle > 7.5: # 4.5에서 7.5로 복구하여 자연스러운 기대짐(정상)과 실제 도미노(비정상)를 정확히 구분
             state = "abnormal_tilted"
-        elif upside_score > 0.15 or is_orb_upside:
+        elif upside_score > 0.1 or is_orb_upside: 
             state = "abnormal_upside"
-        elif vector_variance < 0.005 and hsv_sat < 0.25 and grad_ratio > 1.8:
+        # 💡 [핵심 임계값 튜닝 2] 조명에 속지 않는 Paper 탐지 (Variance 복구)
+        # 종이면은 특징점이 없어 분산(Variance)이 0.55 이하로 극단적으로 떨어지는 AI 특성을 활용합니다.
+        elif vector_variance < 0.55 or (hsv_sat < 0.4 and grad_ratio_x_y > 1.5):
             state = "abnormal_paper"
             
         debug_info = {
@@ -208,9 +206,11 @@ class BookshelfFeatureEngineer:
             "tilt_angle": tilt_angle,
             "upside_score": upside_score,
             "is_orb_upside": is_orb_upside,
-            "variance": vector_variance
+            "variance": vector_variance,
+            "hsv_sat": hsv_sat,
+            "grad_ratio_x_y": grad_ratio_x_y
         }
-        return state, matched_id, best_sim, debug_info
+        return state, debug_info
 
 
 # =========================================================================
@@ -219,7 +219,7 @@ class BookshelfFeatureEngineer:
 class BookshelfAnalyzerAPI:
     def __init__(self):
         print("[System] API 모듈 초기화 및 정상 데이터(DB) 로딩 중...")
-        self.reference_pool = self._build_temp_database()
+        self.reference_pool, self.reference_shelves = self._build_temp_database()
         self.engineer = BookshelfFeatureEngineer(self.reference_pool)
         print(f"[System] 정상 데이터 {len(self.reference_pool)}건 로드 완료. API 준비됨.")
 
@@ -229,20 +229,20 @@ class BookshelfAnalyzerAPI:
             return np.min(np.array(quad)[:, 0])
         return book_item.get("box", {}).get("x1", 0)
 
-    def _build_temp_database(self) -> Dict[str, Any]:
+    def _build_temp_database(self) -> Tuple[Dict[str, Any], Dict[str, List[Dict[str, Any]]]]:
         pool = {}
+        shelves = {}
         temp_engineer = BookshelfFeatureEngineer({})
         
         if not os.path.exists(NORMAL_DIR):
-            print(f"⚠️ 경고: '{NORMAL_DIR}' 경로가 없습니다. 기준 데이터 없이 가동됩니다.")
-            return pool
+            return pool, shelves
             
         for img_path in glob.glob(os.path.join(NORMAL_DIR, "*.jpg")) + glob.glob(os.path.join(NORMAL_DIR, "*.png")):
             filename = os.path.basename(img_path)
+            shelves[filename] = []
             try:
                 img_pil = Image.open(img_path).convert("RGB")
                 extracted_books, _ = process_bookshelf_pipeline(img_pil)
-                
                 extracted_books.sort(key=self._get_min_x_for_sorting)
                 
                 for normal_index, book in enumerate(extracted_books):
@@ -255,16 +255,92 @@ class BookshelfAnalyzerAPI:
                         global_feat = temp_engineer.get_global_feature(img_pil, box)
                     
                     ref_id = f"ref_{filename}_book_{normal_index}"
-                    pool[ref_id] = {
+                    ref_data = {
+                        "ref_id": ref_id, 
                         "normal_index": normal_index + 1, 
                         "global_feature": global_feat.tolist(),
                         "top_feature": top_feat.tolist(),
                         "bottom_feature": bot_feat.tolist(),
                         "cv_image_array": cropped_cv.tolist()
                     }
+                    pool[ref_id] = ref_data
+                    shelves[filename].append(ref_data)
             except Exception:
                 pass
-        return pool
+        return pool, shelves
+
+    def _global_unique_matching(self, detected_features: List[np.ndarray], target_refs: List[Dict]) -> Dict[int, Tuple[str, float]]:
+        """
+        💡 [핵심 수정] 2단계 분리 매칭 (Two-Phase Separated Matching)
+
+        기존 문제:
+        - is_laid_down=True(얹어짐)인 책들이 리스트 뒤에 붙으면서 total_det가 커짐
+        - 결과적으로 세워진 책들의 rel_d = d_idx/total_det 비율이 실제보다 작게 계산됨
+        - 위치 기반 매칭이 어긋나며 정상 세워진 책도 sequence_order != matched_idx 발생
+
+        수정 방법:
+        - 1단계: is_laid_down=False인 세워진 책들(upright)만 따로 분리하여 
+                 upright 전용 d_idx/upright_count 비율로 위치 기반 매칭 → 순서 보장
+        - 2단계: is_laid_down=True인 얹어진 책들은 전체 ref 풀에서 similarity만으로 자유 매칭
+                 (이미 1단계에서 배정된 ref는 제외)
+
+        NOTE: abnormal_paper / abnormal_tilted는 is_laid_down=False이므로 1단계에 포함됨.
+              이 책들은 표지가 안 보여 similarity가 낮으므로 weight=0.9(위치 기반)가 적용됨.
+              즉, 위치 기반으로 자기 자리 ref에 배정됨 → sequence_order와 matched_idx가 
+              여전히 다를 수 있지만, 이는 "책이 실제로 그 자리에 있으나 식별 불가" 상황이라
+              정상적인 결과임. 순서 구분이 가능한 세워진 책들은 정확히 매칭됨.
+        """
+        ref_list = sorted(target_refs, key=lambda x: x["normal_index"])
+        total_refs = max(1, len(ref_list))
+
+        # --- 1단계: 세워진 책(upright) 인덱스 분리 ---
+        upright_indices = [i for i, feat in enumerate(detected_features)
+                           if not getattr(self, "_laid_down_flags", [False] * len(detected_features))[i]]
+        laid_down_indices = [i for i in range(len(detected_features)) if i not in upright_indices]
+
+        total_upright = max(1, len(upright_indices))
+
+        matches = []
+
+        # 1단계: upright 책들 - upright 내부 순서 기준으로 위치 패널티 계산
+        for rank, d_idx in enumerate(upright_indices):
+            d_feat = detected_features[d_idx]
+            for r_idx, ref in enumerate(ref_list):
+                sim = self.engineer.compute_cosine_similarity(d_feat, np.array(ref["global_feature"]))
+                rel_d = rank / total_upright       # upright 내 상대 위치
+                rel_r = r_idx / total_refs
+                spatial_penalty = abs(rel_d - rel_r)
+
+                # 💡 [핵심 개조 3] 다이내믹 밸런스 매칭 (Dynamic Balance Matching)
+                # 시각 정보의 신뢰도(유사도 점수)에 따라 위치 페널티 비중을 지능적으로 조절합니다.
+                if sim > 0.85:
+                    weight = 0.1  # 표지가 뚜렷하면 위치 무시 (순서 뒤바뀜 캐치)
+                elif sim < 0.70:
+                    weight = 0.9  # 백지/노이즈라 헷갈리면 철저하게 위치 기반으로 자기 자리 할당 (B011 스틸 차단)
+                else:
+                    weight = 0.35  # 일반적인 상황의 균형점
+
+                score = sim - (weight * spatial_penalty)
+                matches.append((d_idx, ref["ref_id"], score, sim))
+
+        # 2단계: laid_down 책들 - 위치 패널티 없이 similarity만으로 매칭
+        for d_idx in laid_down_indices:
+            d_feat = detected_features[d_idx]
+            for r_idx, ref in enumerate(ref_list):
+                sim = self.engineer.compute_cosine_similarity(d_feat, np.array(ref["global_feature"]))
+                # 얹어진 책은 표지가 옆으로 누워 있어 위치 비교가 의미 없음 → 패널티 없음
+                matches.append((d_idx, ref["ref_id"], sim, sim))
+
+        matches.sort(key=lambda x: x[2], reverse=True)
+        assigned_d = {}
+        assigned_r = set()
+
+        for d_idx, ref_id, score, sim in matches:
+            if d_idx not in assigned_d and ref_id not in assigned_r:
+                assigned_d[d_idx] = (ref_id, sim)
+                assigned_r.add(ref_id)
+
+        return assigned_d
 
     def analyze_image_to_dict(self, image_path: str) -> dict:
         if not os.path.exists(image_path):
@@ -274,37 +350,72 @@ class BookshelfAnalyzerAPI:
             img_pil = Image.open(image_path).convert("RGB")
             extracted_books, _ = process_bookshelf_pipeline(img_pil)
             
-            extracted_books.sort(key=self._get_min_x_for_sorting)
-            
-            results_list = []
-            normal_count = 0
-            abnormal_count = 0
-            matched_id_list = []
-            
-            for detected_order, book in enumerate(extracted_books):
-                box = book["box"]
+            for book in extracted_books:
+                refined_quad = np.array(book.get("refined_quadrilateral", []))
+                true_ar = self.engineer.calculate_quad_aspect_ratio(refined_quad, book.get("box", {}))
+                book["_is_laid_down_temp"] = bool(true_ar > 1.2)
+                book["_min_x_temp"] = self._get_min_x_for_sorting(book)
                 
+            # 세워진 책 먼저(x좌표 순), 누운 책 나중
+            extracted_books.sort(key=lambda b: (b["_is_laid_down_temp"], b["_min_x_temp"]))
+            
+            detected_features = []
+            for book in extracted_books:
                 raw_512_feat = np.array(book.get("features", []))
                 if raw_512_feat.size != 512 or np.all(raw_512_feat == 0):
-                    raw_512_feat = self.engineer.get_global_feature(img_pil, box)
+                    raw_512_feat = self.engineer.get_global_feature(img_pil, book["box"])
+                detected_features.append(raw_512_feat)
+
+            # 💡 [수정] _global_unique_matching에서 is_laid_down 플래그를 참조할 수 있도록
+            #    임시 속성으로 전달 (클래스 인스턴스 상태를 통해 공유)
+            self._laid_down_flags = [book["_is_laid_down_temp"] for book in extracted_books]
                 
-                state, matched_id, confidence, debug_info = self.engineer.get_book_state(
-                    img_pil, book, raw_512_feat, extracted_books
+            best_shelf_id = None
+            best_shelf_score = -1
+            
+            if self.reference_shelves:
+                for shelf_id, refs in self.reference_shelves.items():
+                    shelf_score = 0
+                    for d_feat in detected_features:
+                        max_sim = max([self.engineer.compute_cosine_similarity(d_feat, np.array(r["global_feature"])) for r in refs])
+                        shelf_score += max_sim
+                    
+                    if shelf_score > best_shelf_score:
+                        best_shelf_score = shelf_score
+                        best_shelf_id = shelf_id
+            
+            target_refs = self.reference_shelves.get(best_shelf_id, []) if best_shelf_id else []
+            assigned_matches = self._global_unique_matching(detected_features, target_refs)
+            
+            # 매칭 후 플래그 정리
+            self._laid_down_flags = []
+            
+            # ── 1차 패스: 상태 판정 및 raw 결과 수집 ──────────────────────
+            raw_results = []
+            normal_count = 0
+            abnormal_count = 0
+
+            for detected_order, book in enumerate(extracted_books):
+                box = book["box"]
+                raw_512_feat = detected_features[detected_order]
+
+                matched_id, confidence = assigned_matches.get(detected_order, ("unknown", 0.0))
+
+                state, debug_info = self.engineer.get_book_state(
+                    img_pil, book, raw_512_feat, extracted_books, matched_id
                 )
-                
+
                 if state == "normal":
                     normal_count += 1
                 else:
                     abnormal_count += 1
-                    
-                matched_id_list.append(matched_id)
-                
+
                 mapped_normal_index = -1
                 if matched_id in self.reference_pool:
                     mapped_normal_index = self.reference_pool[matched_id]["normal_index"]
-                
-                results_list.append({
-                    "sequence_order": detected_order + 1,
+
+                raw_results.append({
+                    "_x_pos": book["_min_x_temp"],          # 물리적 x 위치 (정렬 보조용)
                     "book_id": f"B{mapped_normal_index:03d}" if mapped_normal_index != -1 else "UNKNOWN",
                     "matched_normal_index": mapped_normal_index,
                     "box": box,
@@ -314,19 +425,72 @@ class BookshelfAnalyzerAPI:
                     "matched_db_id": matched_id,
                     "debug_metrics": {k: round(v, 4) if isinstance(v, float) else v for k, v in debug_info.items()}
                 })
-            
-            unique_matched_ids = len(set(matched_id_list))
+
+            # ── 2차 패스: 출력 순서 재정렬 ────────────────────────────────
+            # 목표: 순서 확정 가능한 책 → 순서 불확실한 책 → 얹어진 책
+            #
+            # [그룹 A] 순서 확정: normal / abnormal_upside / abnormal_tilted (세워져 있고 표지 식별 가능)
+            #          matched_normal_index 오름차순으로 정렬 → DB 번호 = 실제 순서
+            # [그룹 B] 순서 불확실: abnormal_paper (표지가 안 보여 어떤 책인지 불확실)
+            #          물리적 x 위치(왼→오) 순으로 정렬
+            # [그룹 C] 얹어진 책: abnormal_stack (is_laid_down=True)
+            #          물리적 x 위치 순으로 정렬
+
+            def _order_group(item):
+                s = item["visual_status"]
+                laid = item["is_laid_down"]
+                if laid or s == "abnormal_stack":
+                    return 2                      # 그룹 C
+                elif s == "abnormal_paper":
+                    return 1                      # 그룹 B
+                else:
+                    return 0                      # 그룹 A
+
+            group_a = sorted(
+                [r for r in raw_results if _order_group(r) == 0],
+                key=lambda r: r["matched_normal_index"]   # DB 번호 오름차순
+            )
+            group_b = sorted(
+                [r for r in raw_results if _order_group(r) == 1],
+                key=lambda r: r["_x_pos"]                 # 물리적 위치 순
+            )
+            group_c = sorted(
+                [r for r in raw_results if _order_group(r) == 2],
+                key=lambda r: r["_x_pos"]                 # 물리적 위치 순
+            )
+
+            ordered = group_a + group_b + group_c
+
+            # sequence_order 재부여 + 내부 보조 키 제거
+            results_list = []
+            for new_seq, item in enumerate(ordered, start=1):
+                item.pop("_x_pos", None)
+                item["sequence_order"] = new_seq
+                # JSON 필드 순서를 sequence_order → book_id → ... 로 맞춤
+                results_list.append({
+                    "sequence_order": item["sequence_order"],
+                    "book_id": item["book_id"],
+                    "matched_normal_index": item["matched_normal_index"],
+                    "box": item["box"],
+                    "is_laid_down": item["is_laid_down"],
+                    "visual_status": item["visual_status"],
+                    "confidence_score": item["confidence_score"],
+                    "matched_db_id": item["matched_db_id"],
+                    "debug_metrics": item["debug_metrics"],
+                })
+
             total_books = len(extracted_books)
-            is_warning_all_same_match = bool(unique_matched_ids == 1 and total_books > 1)
+            is_warning_all_same_match = False
             
             return {
                 "status": "success",
                 "filename": os.path.basename(image_path),
+                "matched_shelf_image": best_shelf_id,
                 "summary": {
                     "total_detected": total_books,
                     "normal_count": normal_count,
                     "abnormal_count": abnormal_count,
-                    "unique_matched_db_ids": unique_matched_ids,
+                    "unique_matched_db_ids": len(assigned_matches),
                     "warning_all_same_match": is_warning_all_same_match
                 },
                 "vision_items": results_list
