@@ -41,10 +41,7 @@ uvicorn main:app --reload
 ```
 
 **터미널 2: 원클릭 마스터 스크립트 실행**
-프로젝트 루트 폴더(최상위)에서 아래 스크립트를 실행합니다.
-```bash
-python run_master.py
-```
+http://127.0.0.1:8000/dashboard 접속
 
 ### 💡 파이프라인 작동 순서
 1. `FeatureAnalysis.py` 작동 ➔ 서가 사진에서 책등 크롭 및 특징 추출
