@@ -120,6 +120,14 @@ def analyze_shelf_session(session_id: str, shelf_id: str, conn: mysql.connector.
 
             print(f"  📖 도서 [{book_id}] -> 판정: {final_status}")
 
+        cursor.execute("DELETE FROM ANALYSIS_RESULT WHERE session_id = %s", (session_id,))
+        for item in analysis_results:
+            cursor.execute(
+                "INSERT INTO ANALYSIS_RESULT (session_id, book_id, current_order, final_status) VALUES (%s, %s, %s, %s)",
+                (session_id, item['book_id'], item['current_order'], item['final_status'])
+            )
+        conn.commit()
+
         print(f"✅ [분석 완료] 총 {len(analysis_results)}권 판별 완료.")
         return {"status": "success", "session_id": session_id, "results": analysis_results}
 

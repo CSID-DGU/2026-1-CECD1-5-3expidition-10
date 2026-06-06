@@ -372,4 +372,4 @@ class BookshelfAnalyzerAPI:
 if __name__ == "__main__":
     print("💡 서가 이상 탐지 시스템 API 가동을 시작합니다.")
     api = BookshelfAnalyzerAPI()
-    api.run_test_folder_to_json(test_dir="test", output_json="vision_output/test_results.json")
+    api.run_test_folder_to_json(test_dir="dataset/test", output_json="vision_output/test_results.json")

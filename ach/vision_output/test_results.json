@@ -2,12 +2,12 @@
     "test_results": [
         {
             "status": "success",
-            "filename": "20260522_203503.jpg",
+            "filename": "uploaded_target.jpg",
             "summary": {
                 "total_detected": 12,
                 "normal_count": 12,
                 "abnormal_count": 0,
-                "unique_matched_db_ids": 12,
+                "unique_matched_db_ids": 11,
                 "warning_all_same_match": false
             },
             "vision_items": [
@@ -16,68 +16,68 @@
                     "book_id": "B001",
                     "matched_normal_index": 1,
                     "box": {
-                        "x1": 393,
-                        "y1": 531,
-                        "x2": 916,
-                        "y2": 2566
+                        "x1": 631,
+                        "y1": 568,
+                        "x2": 941,
+                        "y2": 2329
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
+                    "confidence_score": 0.895,
                     "matched_db_id": "ref_20260522_203503.jpg_book_0",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.1217,
+                        "true_aspect_ratio": 0.1152,
                         "is_laid_down": false,
-                        "tilt_angle": 8.1656,
-                        "upside_score": -0.3827,
+                        "tilt_angle": 4.2867,
+                        "upside_score": -0.1651,
                         "is_orb_upside": false,
-                        "variance": 0.5244
+                        "variance": 0.4495
                     }
                 },
                 {
                     "sequence_order": 2,
-                    "book_id": "B002",
-                    "matched_normal_index": 2,
+                    "book_id": "B003",
+                    "matched_normal_index": 3,
                     "box": {
-                        "x1": 1006,
-                        "y1": 243,
-                        "x2": 1466,
-                        "y2": 2566
+                        "x1": 843,
+                        "y1": 481,
+                        "x2": 1191,
+                        "y2": 2354
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_1",
+                    "confidence_score": 0.8617,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_2",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.1163,
+                        "true_aspect_ratio": 0.142,
                         "is_laid_down": false,
-                        "tilt_angle": 5.5835,
-                        "upside_score": -0.3136,
+                        "tilt_angle": 3.1934,
+                        "upside_score": 0.0113,
                         "is_orb_upside": false,
-                        "variance": 0.6133
+                        "variance": 0.5193
                     }
                 },
                 {
                     "sequence_order": 3,
-                    "book_id": "B003",
-                    "matched_normal_index": 3,
+                    "book_id": "B002",
+                    "matched_normal_index": 2,
                     "box": {
-                        "x1": 1318,
-                        "y1": 268,
-                        "x2": 1629,
-                        "y2": 2554
+                        "x1": 1131,
+                        "y1": 381,
+                        "x2": 1416,
+                        "y2": 2404
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_2",
+                    "confidence_score": 0.833,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_1",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.0743,
+                        "true_aspect_ratio": 0.1123,
                         "is_laid_down": false,
-                        "tilt_angle": 3.7558,
-                        "upside_score": -0.2663,
+                        "tilt_angle": 2.0311,
+                        "upside_score": -0.12,
                         "is_orb_upside": false,
-                        "variance": 0.6432
+                        "variance": 0.5021
                     }
                 },
                 {
@@ -85,183 +85,183 @@
                     "book_id": "B004",
                     "matched_normal_index": 4,
                     "box": {
-                        "x1": 1518,
-                        "y1": 256,
-                        "x2": 1804,
-                        "y2": 2541
+                        "x1": 1381,
+                        "y1": 418,
+                        "x2": 1579,
+                        "y2": 2404
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
+                    "confidence_score": 0.7979,
                     "matched_db_id": "ref_20260522_203503.jpg_book_3",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.0805,
+                        "true_aspect_ratio": 0.0746,
                         "is_laid_down": false,
-                        "tilt_angle": 2.8862,
-                        "upside_score": -0.3017,
+                        "tilt_angle": 1.4134,
+                        "upside_score": -0.0304,
                         "is_orb_upside": false,
-                        "variance": 0.6622
+                        "variance": 0.4603
                     }
                 },
                 {
                     "sequence_order": 5,
-                    "book_id": "B005",
-                    "matched_normal_index": 5,
+                    "book_id": "B006",
+                    "matched_normal_index": 6,
                     "box": {
-                        "x1": 1743,
-                        "y1": 493,
-                        "x2": 1941,
-                        "y2": 2554
+                        "x1": 1531,
+                        "y1": 368,
+                        "x2": 1741,
+                        "y2": 2366
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_4",
+                    "confidence_score": 0.6091,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_5",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.0704,
+                        "true_aspect_ratio": 0.0833,
                         "is_laid_down": false,
-                        "tilt_angle": 1.6683,
-                        "upside_score": -0.3393,
+                        "tilt_angle": 1.6873,
+                        "upside_score": -0.0062,
                         "is_orb_upside": false,
-                        "variance": 0.5831
+                        "variance": 0.5395
                     }
                 },
                 {
                     "sequence_order": 6,
-                    "book_id": "B006",
-                    "matched_normal_index": 6,
+                    "book_id": "B005",
+                    "matched_normal_index": 5,
                     "box": {
-                        "x1": 1906,
-                        "y1": 206,
-                        "x2": 2129,
-                        "y2": 2579
+                        "x1": 1718,
+                        "y1": 643,
+                        "x2": 1879,
+                        "y2": 2391
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_5",
+                    "confidence_score": 0.9087,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_4",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.0827,
+                        "true_aspect_ratio": 0.0727,
                         "is_laid_down": false,
-                        "tilt_angle": 0.8971,
-                        "upside_score": -0.3326,
+                        "tilt_angle": 1.6603,
+                        "upside_score": -0.2369,
                         "is_orb_upside": false,
-                        "variance": 0.5745
+                        "variance": 0.4987
                     }
                 },
                 {
                     "sequence_order": 7,
-                    "book_id": "B007",
-                    "matched_normal_index": 7,
+                    "book_id": "B006",
+                    "matched_normal_index": 6,
                     "box": {
-                        "x1": 2118,
-                        "y1": 106,
-                        "x2": 2391,
-                        "y2": 2579
+                        "x1": 1843,
+                        "y1": 418,
+                        "x2": 2029,
+                        "y2": 2404
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_6",
+                    "confidence_score": 0.9366,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_5",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.0981,
+                        "true_aspect_ratio": 0.0852,
                         "is_laid_down": false,
-                        "tilt_angle": 0.2094,
-                        "upside_score": -0.344,
+                        "tilt_angle": 0.9311,
+                        "upside_score": -0.2227,
                         "is_orb_upside": false,
-                        "variance": 0.6971
+                        "variance": 0.5668
                     }
                 },
                 {
                     "sequence_order": 8,
-                    "book_id": "B008",
-                    "matched_normal_index": 8,
+                    "book_id": "B007",
+                    "matched_normal_index": 7,
                     "box": {
-                        "x1": 2356,
-                        "y1": 193,
-                        "x2": 2504,
-                        "y2": 2554
+                        "x1": 2031,
+                        "y1": 343,
+                        "x2": 2254,
+                        "y2": 2466
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_7",
+                    "confidence_score": 0.9599,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_6",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.0434,
+                        "true_aspect_ratio": 0.0989,
                         "is_laid_down": false,
-                        "tilt_angle": 0.732,
-                        "upside_score": -0.5529,
+                        "tilt_angle": 0.0,
+                        "upside_score": -0.2978,
                         "is_orb_upside": false,
-                        "variance": 0.6294
+                        "variance": 0.6273
                     }
                 },
                 {
                     "sequence_order": 9,
-                    "book_id": "B009",
-                    "matched_normal_index": 9,
+                    "book_id": "B008",
+                    "matched_normal_index": 8,
                     "box": {
-                        "x1": 2481,
-                        "y1": 81,
-                        "x2": 2729,
-                        "y2": 2629
+                        "x1": 2231,
+                        "y1": 443,
+                        "x2": 2354,
+                        "y2": 2416
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_8",
+                    "confidence_score": 0.9413,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_7",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.072,
+                        "true_aspect_ratio": 0.0416,
                         "is_laid_down": false,
-                        "tilt_angle": 0.6826,
-                        "upside_score": -0.2961,
+                        "tilt_angle": 0.2634,
+                        "upside_score": -0.3517,
                         "is_orb_upside": false,
-                        "variance": 0.4519
+                        "variance": 0.6758
                     }
                 },
                 {
                     "sequence_order": 10,
-                    "book_id": "B010",
-                    "matched_normal_index": 10,
+                    "book_id": "B009",
+                    "matched_normal_index": 9,
                     "box": {
-                        "x1": 2681,
-                        "y1": 443,
-                        "x2": 3116,
-                        "y2": 2566
+                        "x1": 2318,
+                        "y1": 343,
+                        "x2": 2516,
+                        "y2": 2529
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_9",
+                    "confidence_score": 0.9231,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_8",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.1727,
+                        "true_aspect_ratio": 0.0704,
                         "is_laid_down": false,
-                        "tilt_angle": 1.1817,
-                        "upside_score": -0.3468,
+                        "tilt_angle": 1.3457,
+                        "upside_score": -0.1168,
                         "is_orb_upside": false,
-                        "variance": 0.7465
+                        "variance": 0.409
                     }
                 },
                 {
                     "sequence_order": 11,
-                    "book_id": "B011",
-                    "matched_normal_index": 11,
+                    "book_id": "B010",
+                    "matched_normal_index": 10,
                     "box": {
-                        "x1": 3031,
-                        "y1": 306,
-                        "x2": 3404,
-                        "y2": 2516
+                        "x1": 2506,
+                        "y1": 643,
+                        "x2": 2941,
+                        "y2": 2629
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
-                    "matched_db_id": "ref_20260522_203503.jpg_book_10",
+                    "confidence_score": 0.9278,
+                    "matched_db_id": "ref_20260522_203503.jpg_book_9",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.1186,
+                        "true_aspect_ratio": 0.1944,
                         "is_laid_down": false,
-                        "tilt_angle": 2.4679,
-                        "upside_score": -0.5099,
+                        "tilt_angle": 0.6457,
+                        "upside_score": -0.2649,
                         "is_orb_upside": false,
-                        "variance": 0.5341
+                        "variance": 0.5623
                     }
                 },
                 {
@@ -269,22 +269,22 @@
                     "book_id": "B012",
                     "matched_normal_index": 12,
                     "box": {
-                        "x1": 3268,
-                        "y1": 168,
-                        "x2": 3766,
-                        "y2": 2554
+                        "x1": 3181,
+                        "y1": 506,
+                        "x2": 3479,
+                        "y2": 2479
                     },
                     "is_laid_down": false,
                     "visual_status": "normal",
-                    "confidence_score": 1.0,
+                    "confidence_score": 0.8186,
                     "matched_db_id": "ref_20260522_203503.jpg_book_11",
                     "debug_metrics": {
-                        "true_aspect_ratio": 0.1308,
+                        "true_aspect_ratio": 0.0711,
                         "is_laid_down": false,
-                        "tilt_angle": 4.487,
-                        "upside_score": -0.3281,
+                        "tilt_angle": 7.2506,
+                        "upside_score": -0.0912,
                         "is_orb_upside": false,
-                        "variance": 0.5767
+                        "variance": 0.5811
                     }
                 }
             ]

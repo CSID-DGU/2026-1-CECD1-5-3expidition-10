@@ -3,223 +3,301 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VLM 도서관 서고 모니터링 대시보드</title>
+    <title>VLM 지능형 서고 관리 플랫폼</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .tab-btn.active { border-bottom: 2px solid #3B82F6; color: #3B82F6; font-weight: bold; }
-        .status-normal { background-color: #DEF7EC; color: #03543F; }
-        .status-error { background-color: #FDE8E8; color: #9B1C1C; }
+        /* 커스텀 상태 스타일 */
+        .border-dashed-custom { border: 3px dashed #CBD5E1; }
+        .border-dashed-custom:hover { border-color: #3B82F6; background-color: #EFF6FF; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <nav class="bg-white shadow-md p-4 flex justify-between items-center">
-        <div class="text-xl font-bold text-blue-600">
-            <i class="fa-solid fa-robot mr-2"></i> 지능형 서고 관리 시스템 (VLM)
+    <nav class="bg-white shadow-sm p-4 border-b border-slate-200 flex justify-between items-center px-8">
+        <div class="text-xl font-bold text-blue-600 flex items-center gap-2">
+            <i class="fa-solid fa-robot text-2xl"></i> 
+            <span>지능형 서고 모니터링 대시보드 (VLM)</span>
         </div>
-        <div class="text-sm text-gray-500">
-            <i class="fa-solid fa-circle text-green-500 text-xs mr-1"></i> 서버 연결됨
+        <div class="flex items-center gap-4">
+            <span class="text-sm text-slate-500" id="current-session-id">세션 대기 중</span>
+            <div class="text-sm bg-emerald-50 text-emerald-700 font-semibold px-3 py-1 rounded-full flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Edge AI 연결됨
+            </div>
         </div>
     </nav>
 
-    <div class="container mx-auto p-6">
+    <div class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 items-stretch">
         
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
-                <h3 class="text-gray-500 text-sm font-semibold mb-1">총 스캔 세션</h3>
-                <p class="text-3xl font-bold" id="stat-sessions">0</p>
+        <div class="lg:col-span-5 flex flex-col gap-6">
+            
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1">
+                <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-camera text-blue-500"></i> 현재 서가 사진 등록 (Test)
+                </h2>
+                
+                <label for="image-upload" class="border-dashed-custom rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all flex-1 min-h-[300px]" id="drop-zone">
+                    <input type="file" id="image-upload" class="hidden" accept="image/*" onchange="previewImage(event)">
+                    
+                    <div id="upload-placeholder" class="text-center">
+                        <i class="fa-solid fa-cloud-arrow-up text-4xl text-slate-400 mb-3"></i>
+                        <p class="text-sm font-semibold text-slate-600">클릭하거나 이미지를 이 자리에 떨어뜨리세요</p>
+                        <p class="text-xs text-slate-400 mt-1">YOLOv8 & ResNet 분석용 서가 전체 이미지 (.jpg, .png)</p>
+                    </div>
+                    
+                    <img id="image-preview" class="hidden w-full h-full object-contain rounded-lg max-h-[350px]" alt="서가 미리보기">
+                </label>
             </div>
-            <div class="bg-white rounded-lg shadow p-6 border-l-4 border-green-500">
-                <h3 class="text-gray-500 text-sm font-semibold mb-1">점검 완료 도서</h3>
-                <p class="text-3xl font-bold" id="stat-books">0</p>
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                <button onclick="startPipeline()" id="run-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-blue-200 flex items-center justify-center gap-2 transition-all text-lg disabled:bg-slate-400 disabled:shadow-none">
+                    <i class="fa-solid fa-play" id="btn-icon"></i>
+                    <span id="btn-text">VLM 자동화 파이프라인 원클릭 가동</span>
+                </button>
             </div>
-            <div class="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
-                <h3 class="text-gray-500 text-sm font-semibold mb-1">발견된 문제 도서 (오배열/누락 등)</h3>
-                <p class="text-3xl font-bold text-red-600" id="stat-issues">0</p>
-            </div>
+            
         </div>
 
-        <h2 class="text-lg font-bold text-gray-700 mb-3"><i class="fa-solid fa-clipboard-list mr-2"></i>사서 조치 필요 항목</h2>
-        <div id="librarian-tasks" class="mb-8 flex flex-col gap-2">
+        <div class="lg:col-span-7 flex flex-col gap-6">
+            
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 max-h-[450px]">
+                <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-bell text-rose-500"></i> 사서 가이드 알림판</span>
+                    <span class="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full" id="issue-count">검사 전</span>
+                </h2>
+                
+                <div id="librarian-tasks" class="overflow-y-auto flex flex-col gap-2 flex-1 pr-1">
+                    <div class="text-center text-slate-400 py-16">
+                        <i class="fa-solid fa-magnifying-glass text-3xl mb-2 block"></i>
+                        왼쪽에서 사진을 업로드한 뒤 파이프라인을 가동하면<br>실시간 탐지 에러 리포트가 여기에 생성됩니다.
+                    </div>
+                </div>
             </div>
 
-        <div class="bg-white rounded-t-lg shadow border-b border-gray-200 px-6 pt-4">
-            <div class="flex space-x-6">
-                <button onclick="changeTab('results')" id="tab-results" class="tab-btn active pb-3 px-1 text-gray-600 hover:text-blue-600">🎯 최종 분석 결과</button>
-                <button onclick="changeTab('sessions')" id="tab-sessions" class="tab-btn pb-3 px-1 text-gray-600 hover:text-blue-600">📂 세션 현황</button>
-                <button onclick="changeTab('vision')" id="tab-vision" class="tab-btn pb-3 px-1 text-gray-600 hover:text-blue-600">👁️ Vision 원본 데이터</button>
-                <button onclick="changeTab('rfid')" id="tab-rfid" class="tab-btn pb-3 px-1 text-gray-600 hover:text-blue-600">📡 RFID 원본 데이터</button>
-                <button onclick="fetchData()" class="ml-auto pb-3 px-1 text-blue-500 hover:text-blue-700 font-bold"><i class="fa-solid fa-rotate-right"></i> 새로고침</button>
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 min-h-[250px]">
+                <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-images text-amber-500"></i> 이상 항목 책등 이미지 (Crop View)
+                </h2>
+                
+                <div id="crop-images-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 overflow-y-auto flex-1 max-h-[220px]">
+                    <div class="col-span-full text-center text-slate-400 py-10 text-sm">
+                        정돈 및 재배치가 필요한 도서의 실물 사진(Crop)이 표출됩니다.
+                    </div>
+                </div>
             </div>
+            
         </div>
+    </div>
 
-        <div class="bg-white rounded-b-lg shadow overflow-x-auto">
-            <table class="min-w-full text-sm text-left">
-                <thead class="bg-gray-100 text-gray-600 font-medium border-b" id="table-head">
-                </thead>
-                <tbody class="divide-y divide-gray-200" id="table-body">
-                </tbody>
-            </table>
-            <div id="loading" class="text-center py-10 text-gray-500 hidden">
-                <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><br>데이터를 불러오는 중입니다...
+    <!-- 라이트박스 모달 -->
+    <div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm" onclick="closeLightbox()">
+        <div class="relative max-w-2xl w-full mx-4" onclick="event.stopPropagation()">
+            <button onclick="closeLightbox()" class="absolute -top-10 right-0 text-white/70 hover:text-white text-sm flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-xmark"></i> 닫기 (ESC)
+            </button>
+            <div class="bg-white rounded-2xl overflow-hidden shadow-2xl">
+                <img id="lightbox-img" src="" alt="" class="w-full object-contain max-h-[70vh]">
+                <div class="px-4 py-3 border-t border-slate-100 flex items-center justify-between">
+                    <div>
+                        <div class="text-sm font-bold text-slate-700" id="lightbox-title"></div>
+                        <div class="text-xs text-slate-400 mt-0.5" id="lightbox-status"></div>
+                    </div>
+                    <a id="lightbox-download" href="" download class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
+                        <i class="fa-solid fa-download"></i> 저장
+                    </a>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        const API_BASE = "http://127.0.0.1:8000/api/dashboard";
-        let currentTab = 'results';
-        let dbData = { sessions: [], results: [], vision: [], rfid: [] };
+        const API_BASE = "http://127.0.0.1:8000/api";
+        let targetFile = null;
 
-        // 페이지 로드 시 데이터 가져오기
-        window.onload = fetchData;
+        function openLightbox(imgUrl, title, status) {
+            const lb = document.getElementById('lightbox');
+            document.getElementById('lightbox-img').src = imgUrl;
+            document.getElementById('lightbox-title').textContent = title;
+            document.getElementById('lightbox-status').textContent = status;
+            document.getElementById('lightbox-download').href = imgUrl;
+            lb.classList.remove('hidden');
+            lb.classList.add('flex');
+        }
 
-        async function fetchData() {
-            document.getElementById('loading').classList.remove('hidden');
-            document.getElementById('table-body').innerHTML = '';
-            
-            try {
-                const [resSess, resRes, resVis, resRfid] = await Promise.all([
-                    fetch(`${API_BASE}/sessions`).then(r => r.json()),
-                    fetch(`${API_BASE}/results`).then(r => r.json()),
-                    fetch(`${API_BASE}/vision`).then(r => r.json()),
-                    fetch(`${API_BASE}/rfid`).then(r => r.json())
-                ]);
+        function closeLightbox() {
+            const lb = document.getElementById('lightbox');
+            lb.classList.add('hidden');
+            lb.classList.remove('flex');
+        }
 
-                dbData.sessions = resSess; 
-                dbData.results = resRes; 
-                dbData.vision = resVis; 
-                dbData.rfid = resRfid;
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
 
-                updateStats();
-                
-                // 🌟 [추가됨] 데이터를 다 불러온 직후, 사서 알림판을 업데이트합니다!
-                updateLibrarianTaskBoard(dbData.results);
-                
-                renderTable();
-            } catch (error) {
-                console.error("데이터 로드 실패:", error);
-                alert("백엔드 서버(FastAPI)가 실행 중인지 확인해주세요!");
-            } finally {
-                document.getElementById('loading').classList.add('hidden');
+        // 1. 좌상: 사진 로컬 미리보기 핸들러
+        function previewImage(event) {
+            const input = event.target;
+            if (input.files && input.files[0]) {
+                targetFile = input.files[0];
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('upload-placeholder').classList.add('hidden');
+                    const img = document.getElementById('image-preview');
+                    img.src = e.target.result;
+                    img.classList.remove('hidden');
+                }
+                reader.readAsDataURL(targetFile);
             }
         }
 
-        // 🌟 [수정됨] 사서 업무 알림판 생성 함수 (누락/오배열 판별 강화)
-        function updateLibrarianTaskBoard(results) {
+        // 2. 좌하: 파이프라인 트리거 버튼 로직
+        // 2. 👈 [수정됨] 좌하: 진짜 파일 데이터를 실어 파이프라인 전체를 구동하는 로직
+        async function startPipeline() {
+            if (!targetFile) {
+                alert("먼저 분석할 서가 사진을 업로드 헤주세요! (Drag & Drop 혹은 클릭)");
+                return;
+            }
+
+            // UI를 '분석 중...' 로딩 모드로 전환하여 사서의 중복 클릭 방지
+            const btn = document.getElementById('run-btn');
+            const icon = document.getElementById('btn-icon');
+            const text = document.getElementById('btn-text');
+            
+            btn.disabled = true;
+            icon.className = "fa-solid fa-spinner fa-spin text-lg";
+            text.innerText = "서버 가동: test 폴더 초기화 및 YOLO/ResNet 파이프라인 구동 중...";
+
+            // 🌟 핵심: HTML5 FormData 객체를 생성하여 바이너리 이미지 파일을 담습니다.
+            const formData = new FormData();
+            formData.append("file", targetFile); // 백엔드의 'file: UploadFile' 파라미터와 매칭
+
+            try {
+                // 🚀 백엔드가 수신하여 물리적 폴더 조작 및 스크립트를 올인원으로 실행하도록 POST 요청
+                const response = await fetch(`${API_BASE}/pipeline/run`, {
+                    method: "POST",
+                    body: formData
+                });
+
+                // response body는 한 번만 소비 가능 — ok 여부와 무관하게 먼저 파싱
+                const pipelineStatus = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(pipelineStatus.detail || "파이프라인 구동 실패");
+                }
+                console.log("파이프라인 연동 결과:", pipelineStatus);
+                
+                // 파이프라인이 정상 종료되면, 새로 적재된 최종 분석 완료 데이터를 가져와 화면을 갱신합니다.
+                const resultRes = await fetch(`${API_BASE}/dashboard/results`);
+                const latestResults = await resultRes.json();
+                
+                if (latestResults && latestResults.length > 0) {
+                    document.getElementById('current-session-id').innerText = `실시간 세션: ${pipelineStatus.session_id}`;
+                    // 🎯 대시보드 우상(메시지), 우하(책등 크롭뷰) 실시간 동기화 렌더링!
+                    renderLibrarianDashboard(latestResults);
+                } else {
+                    alert("파이프라인은 가동되었으나 적재된 데이터를 불러오지 못했습니다.");
+                }
+
+            } catch (error) {
+                console.error("통합 파이프라인 오류:", error);
+                alert(`❌ 가동 실패: ${error.message}\n(도커 엔진 및 FastAPI 업로드 용량 제한 설정을 확인하세요.)`);
+            } finally {
+                // 시스템 UI 상태를 다시 기본 모드로 원복
+                btn.disabled = false;
+                icon.className = "fa-solid fa-play";
+                text.innerText = "VLM 자동화 파이프라인 원클릭 가동";
+            }
+        }
+        // 3. 우측 전체 데이터 바인딩 아키텍처 (메시지 + 이미지 매칭)
+        function renderLibrarianDashboard(results) {
             const taskContainer = document.getElementById("librarian-tasks");
-            taskContainer.innerHTML = ""; 
+            const gridContainer = document.getElementById("crop-images-grid");
+            const countLabel = document.getElementById("issue-count");
+
+            taskContainer.innerHTML = "";
+            gridContainer.innerHTML = "";
+            
             let anomalyCount = 0;
 
             results.forEach((book) => {
                 let taskMessage = "";
                 let iconClass = "fa-triangle-exclamation";
+                let errorColor = "border-red-500 bg-red-50 text-red-700";
                 
-                // 데이터가 비어있을(null) 경우를 대비한 안전 장치
-                const seq = book.sequence_order ? `${book.sequence_order}번째 자리` : `위치 미상(누락 됨)`;
-                const bId = book.book_id || "알 수 없음";
+                const seq = book.sequence_order ? `${book.sequence_order}번째` : '위치 불명';
+                const bId = book.book_id || "Unknown";
                 const visual = book.visual_status || "";
-                const sync = book.sync_status || "";
-                const finalStat = book.final_status || ""; // 백엔드가 주는 최종 판별 결과
+                const finalStat = book.final_status || "";
 
-                // 1. 물리적 상태 이상 (Vision AI)
+                // 에러 가이드 메시지 작성 (final_status 기준으로 통일)
                 if (visual === "abnormal_upside") {
-                    taskMessage = `📍 <b>[뒤집힘]</b> <b>${seq}</b>의 책(ID: ${bId})이 거꾸로 꽂혀 있습니다. 바로 세워주세요.`;
+                    taskMessage = `<b>[뒤집힘]</b> <b>${seq}</b> 책(ID: ${bId})이 거꾸로 회전되어 있습니다. 똑바로 세워주세요.`;
                 } else if (visual === "abnormal_tilted") {
-                    taskMessage = `📍 <b>[기울어짐]</b> <b>${seq}</b>의 책(ID: ${bId})이 심하게 기울어져 쓰러질 위험이 있습니다.`;
-                } else if (visual === "abnormal_stack" || visual === "abnormal_paper") {
-                    taskMessage = `📍 <b>[이물질/가로배치]</b> <b>${seq}</b>에 책이 가로로 쌓여있거나 이물질이 있습니다.`;
-                }
-                
-                // 2. 데이터 융합 이상 (final_status와 sync_status를 모두 꼼꼼히 확인!)
-                else if (finalStat.includes("오배열") || sync.includes("MISPLACED") || sync.includes("오배열")) {
-                    taskMessage = `📍 <b>[오배열]</b> <b>${seq}</b>에 다른 책이 잘못 꽂혀 있습니다. (현재 인식된 책: ${bId})`;
+                    taskMessage = `<b>[기울어짐]</b> <b>${seq}</b> 책(ID: ${bId})이 방치되어 쓰러졌습니다. 정돈해 주세요.`;
+                    errorColor = "border-amber-500 bg-amber-50 text-amber-700";
+                } else if (finalStat.includes("오배열")) {
+                    taskMessage = `<b>[오배열]</b> <b>${seq}</b> 자리에 있어야 할 도서와 스캔된 RFID가 다릅니다. (인식: ${bId})`;
                     iconClass = "fa-shuffle";
-                } else if (finalStat.includes("누락") || sync.includes("MISSING") || sync.includes("누락")) {
-                    taskMessage = `📍 <b>[분실/누락 의심]</b> RFID는 감지되었으나, <b>${bId}</b> 도서의 실제 책등 인식을 실패했습니다. 확인이 필요합니다.`;
+                    errorColor = "border-violet-500 bg-violet-50 text-violet-700";
+                } else if (finalStat.includes("오배가")) {
+                    taskMessage = `<b>[오배가]</b> <b>${bId}</b> 도서가 이 서가에 속하지 않습니다. 원래 서가로 반납해 주세요.`;
+                    iconClass = "fa-right-left";
+                    errorColor = "border-orange-500 bg-orange-50 text-orange-700";
+                } else if (finalStat.includes("누락")) {
+                    taskMessage = `<b>[누락/분실]</b> 청구기호 명부에는 있으나, <b>${bId}</b> 도서의 실물 책등 인식을 실패했습니다.`;
                     iconClass = "fa-eye-slash";
                 }
 
-                // 문제가 있을 경우에만 UI에 카드 추가
+                // 이상 항목 발생 시 우상(텍스트) 및 우하(이미지) 랙에 동시 데이터 적재
                 if (taskMessage) {
                     anomalyCount++;
+                    
+                    // 1. 우상단 알림 메시지 카드 생성
                     const taskCard = document.createElement("div");
-                    taskCard.className = "p-4 rounded-lg border-l-4 border-red-500 bg-red-50 flex items-center shadow-sm";
+                    taskCard.className = `p-3 rounded-xl border-l-4 ${errorColor} flex items-center shadow-sm text-sm transition-all hover:scale-[1.01]`;
                     taskCard.innerHTML = `
-                        <i class="fa-solid ${iconClass} text-red-600 mr-3 text-lg"></i>
-                        <div class="text-sm text-red-700">${taskMessage}</div>
+                        <i class="fa-solid ${iconClass} mr-3 text-base opacity-90"></i>
+                        <div class="flex-1">${taskMessage}</div>
                     `;
                     taskContainer.appendChild(taskCard);
+
+                    // 2. 우하단 크롭 이미지 썸네일 박스 생성
+                    const imgBox = document.createElement("div");
+                    imgBox.className = "relative bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shadow-sm flex flex-col items-center p-1 group";
+                    
+                    // 실제 pipeline_output 폴더의 책등 이미지를 FastAPI static 경로로 연결
+                    // main.py에서 /static/spine 로 마운트된 ach/pipeline_output 디렉토리 사용
+                    const spineImgUrl = (book.spine_img_path && book.spine_img_path !== "")
+                        ? `${API_BASE.replace('/api', '')}/static/spine/${book.spine_img_path}`
+                        : "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=150&auto=format&fit=crop&q=60";
+                        
+                    imgBox.innerHTML = `
+                        <div class="w-full h-24 bg-cover bg-center rounded-md cursor-zoom-in" style="background-image: url('${spineImgUrl}')" onclick="openLightbox('${spineImgUrl}', '${seq} [${bId}]', '${finalStat}')"></div>
+                        <div class="text-[10px] font-bold mt-1 text-slate-500 truncate w-full text-center group-hover:text-blue-600">${seq} [${bId}]</div>
+                        <span class="absolute top-1 right-1 bg-rose-500 text-white text-[8px] font-extrabold px-1 rounded-sm shadow-sm">ERROR</span>
+                    `;
+                    gridContainer.appendChild(imgBox);
                 }
             });
 
-            // 문제가 발견되지 않았을 경우 칭찬 메시지 출력
-            if (anomalyCount === 0 && results.length > 0) {
+            // 스캔 결과 요약 라벨 업데이트
+            countLabel.innerText = `문제 도서 ${anomalyCount}권 발견`;
+            countLabel.className = anomalyCount > 0 
+                ? "text-xs font-semibold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full"
+                : "text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full";
+
+            // 정상 상태 예외 처리
+            if (anomalyCount === 0) {
                 taskContainer.innerHTML = `
-                    <div class="p-4 rounded-lg bg-green-50 border-l-4 border-green-500 flex items-center shadow-sm">
-                        <i class="fa-solid fa-circle-check text-green-600 mr-3 text-lg"></i>
-                        <div class="text-sm text-green-700">현재 서가에 정돈이 필요한 도서가 없습니다. 서가가 완벽한 상태입니다! ✨</div>
+                    <div class="p-5 rounded-xl bg-emerald-50 border-l-4 border-emerald-500 flex items-center text-emerald-800 shadow-sm">
+                        <i class="fa-solid fa-circle-check text-xl text-emerald-600 mr-3"></i>
+                        <div class="text-sm"><b>서가 정돈 완료:</b> 현재 검출된 문제 도서가 없습니다. 서가가 정 위치에 완벽하게 배열되어 있습니다!</div>
                     </div>
                 `;
-            } else if (results.length === 0) {
-                taskContainer.innerHTML = `
-                    <div class="p-4 rounded-lg bg-gray-50 border-l-4 border-gray-400 flex items-center shadow-sm">
-                        <i class="fa-solid fa-circle-info text-gray-500 mr-3 text-lg"></i>
-                        <div class="text-sm text-gray-600">아직 분석된 데이터가 없습니다. 무인 스캔을 시작해주세요.</div>
+                gridContainer.innerHTML = `
+                    <div class="col-span-full text-center text-emerald-600 py-10 font-medium text-sm">
+                        <i class="fa-solid fa-sparkles text-lg mb-1 block animate-bounce"></i> 모든 책등이 정상 정렬 상태입니다.
                     </div>
                 `;
             }
-        }
-        
-        function updateStats() {
-            document.getElementById('stat-sessions').innerText = dbData.sessions.length;
-            document.getElementById('stat-books').innerText = dbData.results.length;
-            const issues = dbData.results.filter(r => r.final_status !== '정상' && r.final_status !== '대출 중 (정상)');
-            document.getElementById('stat-issues').innerText = issues.length;
-        }
-
-        function changeTab(tabName) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`tab-${tabName}`).classList.add('active');
-            currentTab = tabName;
-            renderTable();
-        }
-
-        function renderTable() {
-            const head = document.getElementById('table-head');
-            const body = document.getElementById('table-body');
-            head.innerHTML = ''; body.innerHTML = '';
-
-            const data = dbData[currentTab];
-            if (!data || data.length === 0) {
-                body.innerHTML = '<tr><td colspan="10" class="px-6 py-8 text-center text-gray-500">데이터가 없습니다.</td></tr>';
-                return;
-            }
-
-            // 테이블 헤더 동적 생성
-            const keys = Object.keys(data[0]);
-            let trHead = '<tr>';
-            keys.forEach(k => { trHead += `<th class="px-6 py-3">${k.toUpperCase()}</th>`; });
-            trHead += '</tr>';
-            head.innerHTML = trHead;
-
-            // 테이블 본문 생성
-            data.forEach(row => {
-                let trBody = '<tr class="hover:bg-gray-50">';
-                keys.forEach(k => {
-                    let val = row[k];
-                    // 상태 값에 따른 색상 라벨링
-                    if (k === 'final_status' || k === 'visual_status' || k === 'sync_status') {
-                        const isNormal = val === '정상' || val === 'normal' || val === 'SUCCESS';
-                        const badgeClass = isNormal ? 'status-normal' : 'status-error';
-                        val = `<span class="px-2 py-1 rounded text-xs font-semibold ${badgeClass}">${val}</span>`;
-                    }
-                    trBody += `<td class="px-6 py-4 whitespace-nowrap">${val ?? '-'}</td>`;
-                });
-                trBody += '</tr>';
-                body.innerHTML += trBody;
-            });
         }
     </script>
 </body>
