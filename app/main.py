@@ -10,8 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 
 # 작성하신 파이프라인 함수 가져오기
-from app.pipeline import process_bookshelf_pipeline
-
+from app.pipeline import process_bookshelf_affine_pipeline
 app = FastAPI(title="Bookshelf Feature Extractor API")
 
 app.add_middleware(
@@ -35,14 +34,12 @@ async def extract_features(file: UploadFile = File(...)):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     
     # 2. 모듈화된 파이프라인 가동 
-    extracted_books, visualized_image_bytes = process_bookshelf_pipeline(image)
+    extracted_book_metadata, visualized_image_bytes = process_bookshelf_affine_pipeline(image)
 
     # 3. [요청 반영] 폴리곤 정보 제외 처리 (피처 벡터 전체 원본은 100% 온전하게 유지)
-    cleaned_books = []
-    for book in extracted_books:
-        book_data = book.copy()
-        book_data.pop("polygon", None)  # 무거운 폴리곤 배열만 삭제
-        cleaned_books.append(book_data)
+    book_data = []
+    for book in extracted_book_metadata:
+        book_data.append(book)
 
     # ====================================================================
     # 💡 기존에 저장된 이전 JSON 파일들 싹 다 지우기
@@ -57,11 +54,11 @@ async def extract_features(file: UploadFile = File(...)):
     # ====================================================================
     # 💡 원래 경로에 현재 최신 피처 데이터 딱 1개만 새로 저장
     # ====================================================================
-    base_filename = os.path.splitext(file.filename)[0]
-    json_output_path = os.path.join(OUTPUT_DIR, f"{base_filename}_features.json")
+    base_filename = "extracted_bookshelf_features"
+    json_output_path = os.path.join(OUTPUT_DIR, f"{base_filename}.json")
     
     with open(json_output_path, "w", encoding="utf-8") as f:
-        json.dump({"books": cleaned_books}, f, indent=4, ensure_ascii=False)
+        json.dump({"books": book_data}, f, indent=4, ensure_ascii=False)
         
     print(f"[🎯 파일 갱신 완료] 기존 데이터 삭제 후 새 파일 저장됨: {json_output_path}")
 
