@@ -9,5 +9,11 @@ __pycache__/
 venv/
 .venv/
 
+# 분석 세션마다 쌓이는 책등 크롭 보관소 (실행 시 자동 생성)
+spine_store/
+patrol_inbox/
+.normal_work/
+normal_history/
+
 # 혹시 나중에 만들지 모를 비밀번호 설정 파일 제외
 .env

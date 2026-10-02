@@ -1,0 +1,127 @@
+# AI ↔ 백엔드 연동 규칙과 변경점 (AI 파트 팀원용)
+
+백엔드(`backend/`)가 AI 분석(`ach/JsonTesting.py`)을 어떻게 호출하고 결과를 어떻게 읽는지, 그리고 AI 코드를 수정하거나 새 버전으로 교체할 때 **지켜 주셔야 할 것**을 정리한 문서입니다.
+`feat/backend` 브랜치 기준이며, 백엔드 · 대시보드 전체 사용법은 [루트 README](../README.md)와 [backend/README.md](../backend/README.md)를 참고하세요.
+
+---
+
+## 1. 백엔드가 AI를 호출하는 방식
+
+분석 요청 1건(= 책꽂이 한 층의 사진 1장)마다 백엔드(`backend/pipeline_jobs.py`)가 다음 순서로 실행합니다. 분석은 한 번에 하나씩만 돌아갑니다.
+
+1. 그 층의 **정상 상태 기준 이미지**만 `backend/.normal_work/`에 복사합니다. (원본: `backend/normal_images/<구역>/<책꽂이>/<층ID>.jpg`)
+2. `ach/dataset/test/` 폴더를 비우고, 분석할 사진 **1장**을 `ach/dataset/test/uploaded_target.jpg`(또는 `.png`)로 넣습니다.
+3. 아래처럼 `JsonTesting.py`를 실행합니다.
+   ```
+   작업 폴더(cwd): ach/
+   명령:          <서버를 실행한 python> JsonTesting.py
+   환경변수:       NORMAL_DIR=<backend/.normal_work 절대 경로>
+                  PYTHONIOENCODING=utf-8
+   ```
+4. **종료 코드가 0이 아니면 실패**로 처리하고, stderr(없으면 stdout)를 실패 사유로 사서 화면에 보여 줍니다.
+5. `ach/vision_output/test_results.json`을 읽어 `test_results[0].vision_items`를 DB에 저장하고 판정합니다.
+6. 각 항목의 `spine_img_file`을 `ach/pipeline_outputs/`에서 찾아 세션 보관소로 복사합니다(대시보드의 책등 사진).
+
+> ⚠️ 백엔드 서버와 AI는 **같은 Python 환경**에서 실행됩니다. AI 쪽에 새 패키지가 필요하면 루트의 `requirements.txt`에도 추가해 주세요.
+
+## 2. 지켜 주셔야 할 입출력 규칙 (가장 중요)
+
+| 항목 | 규칙 |
+|---|---|
+| 입력 사진 | `ach/dataset/test/` 안의 `*.jpg` / `*.png` (백엔드는 항상 1장만 넣음) |
+| 정상 상태 기준 이미지 폴더 | 환경변수 `NORMAL_DIR`(없으면 `dataset/normal`). 폴더 안의 `*.jpg` / `*.png`를 기준으로 사용 |
+| 결과 파일 | `ach/vision_output/test_results.json` |
+| 책등 크롭 | `ach/pipeline_outputs/` (파일명은 `spine_img_file`로 알려 줌) |
+| 실패 | 종료 코드 0이 아닌 값. 이미지를 못 읽었을 때 `test_results`가 빈 배열이어도 백엔드가 실패로 처리 |
+
+### `test_results.json` 형식
+```json
+{
+  "test_results": [
+    {
+      "status": "success",
+      "filename": "uploaded_target.jpg",
+      "summary": { ... },
+      "vision_items": [
+        {
+          "sequence_order": 1,
+          "book_id": "B003",
+          "confidence_score": 0.8215,
+          "visual_status": "normal",
+          "spine_img_file": "adjusted_spine_4.jpg"
+        }
+      ]
+    }
+  ]
+}
+```
+
+백엔드가 실제로 읽는 `vision_items` 필드는 아래 5개입니다. 다른 필드(`box`, `debug_metrics` 등)는 자유롭게 추가 · 변경해도 됩니다.
+
+| 필드 | 의미 | 백엔드에서의 사용 |
+|---|---|---|
+| `sequence_order` | 왼쪽부터 1, 2, 3 … (인식된 책의 순서) | 오배열 판정(LIS), 책등 사진 연결 |
+| `book_id` | 정상 기준 이미지에서 매칭된 책 ID (`B001` ~) · 못 찾으면 `"UNKNOWN"` | 도서 정보(`BOOK_MASTER`)와 대조 |
+| `confidence_score` | 매칭 유사도 (0 ~ 1) | 0.5 미만이면 '미확인 도서', 같은 책 중복 시 높은 쪽 채택 |
+| `visual_status` | `normal` / `abnormal_upside` / `abnormal_tilted` / `abnormal_stack` / `abnormal_paper` | 외형 이상 알림 |
+| `spine_img_file` | `pipeline_outputs` 안의 책등 크롭 파일명 | 대시보드 책등 사진 |
+
+### 책 ID 규칙
+- `book_id`는 **정상 기준 이미지에서 왼쪽부터 n번째로 인식된 책 = `B00n`** 입니다.
+- 이 번호가 도서 정보(`backend/db_create/library_data.sql`의 `BOOK_MASTER`)의 순서와 맞아야 합니다. 현재 A구역 1번 책꽂이 3층에는 실제 서가 순서대로 13권(B001 = 언리얼 엔진 4 … B013 = 지텔프)이 등록되어 있습니다.
+- 그래서 **정상 기준 이미지에서 책 하나라도 인식되지 않으면 그 뒤 ID가 한 칸씩 밀립니다.** (지금 v5 모델은 정상 이미지에서 12권을 인식해서 실제로 한 칸씩 밀려 있음)
+
+## 3. 백엔드 작업 중 `ach/JsonTesting.py`에 추가한 변경 (3곳)
+
+`feat/backend`의 `ach/JsonTesting.py`에는 아래 변경이 들어가 있습니다. **AI 코드를 새 버전으로 교체할 때 이 세 가지가 빠지면 백엔드 기능이 깨집니다.**
+
+1. **`spine_img_file` 추가** — `vision_items`마다 `f"adjusted_spine_{book['book_index']}.jpg"`
+   - `pipeline.py`는 크롭을 *탐지 순서*(`book_index`)로 저장하고, `sequence_order`는 *왼쪽부터 정렬한 순서*라 둘이 다릅니다. 이 필드가 없으면 대시보드에 엉뚱한 책 사진이 뜹니다.
+2. **분석 전 이전 크롭 삭제** — `analyze_image_to_dict()` 시작 시 `pipeline_outputs/adjusted_spine_*.jpg`를 지움
+   - 정상 기준 이미지를 처리할 때 만든 크롭이 남아 섞이는 것을 막습니다.
+3. **`NORMAL_DIR` 환경변수** — `NORMAL_DIR = os.getenv("NORMAL_DIR", "dataset/normal")`
+   - 층마다 자기 기준 이미지와만 비교하기 위함입니다. 환경변수가 없으면 예전과 똑같이 `dataset/normal`을 씁니다.
+
+## 4. 팀원 최신 코드(`origin/ach`)와의 차이 — 합치기 전에 확인 필요
+
+`origin/ach`의 최신 `JsonTesting.py`는 입출력 경로가 바뀌어 있습니다.
+
+| 항목 | 백엔드가 기대하는 값 | `origin/ach` 최신 |
+|---|---|---|
+| 입력 폴더 | `dataset/test` | `test` |
+| 결과 파일 | `vision_output/test_results.json` | `test_results.json` |
+| 기준 폴더 | `NORMAL_DIR` 환경변수 | `dataset/normal` 고정 |
+| `spine_img_file` | 있음 | 없음 |
+
+최신 코드를 `feat/backend`의 `ach/`로 가져올 때는 **위 2절의 규칙에 맞춰 주시거나**, 경로를 바꾸고 싶으면 알려 주세요. 백엔드 쪽 경로(`backend/pipeline_jobs.py`의 `TEST_DIR`, `RESULT_JSON_PATH`)를 같이 맞추겠습니다.
+
+## 5. 정상 상태 기준 이미지 위치 변경
+
+- 백엔드는 이제 `ach/dataset/normal`이 아니라 **층별 보관소** `backend/normal_images/<구역>/<책꽂이>/<층ID>.jpg`를 씁니다. (예: `backend/normal_images/A/A-01/A-01-3.jpg`)
+- 현재 `A-01-3.jpg`는 `ach/dataset/normal/20260522_203503.jpg`를 **960×720으로 줄인 버전**입니다(테스트에 써 온 버전). GitHub의 `ach/dataset/normal`에는 원본 4000×3000이 있습니다. 원본을 기준으로 쓰고 싶으면 대시보드의 '정상 상태' 탭에서 교체할 수 있습니다.
+- 사서가 대시보드에서 기준 사진을 올리거나, 최근 순찰 사진으로 교체할 수 있습니다(교체 전 사진은 `backend/normal_history/`에 보관).
+- **한 층에는 기준 이미지를 한 장만** 둡니다. 여러 장이면 이미지마다 `B001`부터 번호를 다시 매겨 책 ID가 겹치기 때문입니다.
+
+## 6. AI 수정 후 백엔드와 함께 테스트하는 방법
+
+```bash
+pip install -r requirements.txt          # 루트
+cd backend
+docker-compose up -d                     # MySQL (처음 한 번)
+python setup_db.py                       # DB 구조 · 가상 데이터 · 기준 이미지 폴더 준비
+python -m uvicorn main:app --reload      # 서버
+# 다른 터미널 (루트)
+python robot_simulator.py                # ach/dataset/test 사진을 A-01-3 순찰 사진으로 전송
+```
+http://127.0.0.1:8000/dashboard 에서 **순찰 사진 일괄 분석**을 누르고, 분석이 끝나면 A구역 1번 책꽂이 3층을 선택해 결과를 확인합니다. 실패하면 순찰 바의 '실패'에 마우스를 올리면 AI 에러 내용이 보입니다.
+
+`JsonTesting.py`만 따로 실행해도 됩니다(예전과 동일: `cd ach && python JsonTesting.py`).
+
+## 7. 함께 정해야 할 것
+
+1. **책 ID 매칭 방식** — 지금은 "정상 이미지에서 n번째로 인식된 책"이라 인식 누락 하나로 ID가 밀립니다. 정상 이미지의 각 책에 실제 도서 ID를 한 번 붙여 두는 방식 등을 검토해 주세요.
+2. **1:1 매칭** — 지금은 책마다 가장 비슷한 기준 책을 따로 고르므로 여러 권이 같은 책으로 매칭됩니다(백엔드는 '중복 인식'으로 표시). 전체를 한 번에 1:1로 짝짓는 방식(헝가리안 알고리즘)이면 중복이 사라집니다.
+3. **입출력 경로** — 4절의 차이를 어느 쪽으로 맞출지.
+4. **`requirements.txt`** — `KJI` 브랜치에도 같은 이름의 파일이 저장소 맨 위에 있어, 나중에 main에서 합칠 때 하나로 정리가 필요합니다.
+5. **모델 버전** — `feat/backend`의 GitHub 버전 `ach/app/models.py`는 아직 `yolo11l_seg_v3_best.pt`를 가리킵니다. 백엔드 테스트는 로컬에서 `yolo11m_seg_v5.pt`(KJI 브랜치)로 했습니다. 어느 모델을 쓸지 정해 주세요.
+6. **실행 결과물의 git 관리** — `ach/pipeline_outputs/*`, `ach/vision_output/test_results.json`은 분석할 때마다 바뀌는 결과물인데 git에 올라가 있어 매번 '수정됨'으로 뜹니다. `.gitignore`로 빼는 것을 제안합니다.

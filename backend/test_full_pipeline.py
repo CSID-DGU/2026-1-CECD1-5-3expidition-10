@@ -2,26 +2,28 @@ import requests
 import json
 import os
 from datetime import datetime
+from spine_archive import archive_original_image, archive_spine_image
+from config import DEFAULT_SHELF_ID
 
 # ---------------------------------------------------------
 # ⚙️ 기본 설정
 # ---------------------------------------------------------
 BASE_URL = "http://127.0.0.1:8000"
-SHELF_ID = "A-12"
+SHELF_ID = DEFAULT_SHELF_ID   # 테스트할 층 (기본: A구역 1번 책꽂이 3층)
 
 CURRENT_TIME = datetime.now()
-SESSION_ID = f"{SHELF_ID}_{CURRENT_TIME.strftime('%Y%m%d_%H%M%S')}"
+SESSION_ID = f"{SHELF_ID}_{CURRENT_TIME.strftime('%Y%m%d_%H%M%S_%f')}"
 SCAN_TIME_STR = CURRENT_TIME.strftime('%Y-%m-%d %H:%M:%S')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 💡 [핵심 연동 포인트] ach 폴더 안의 vision_output 폴더에 저장된 output.json 경로
-ACH_JSON_PATH = os.path.join(BASE_DIR, "..", "2026-1-CECD1-5-3expidition-10-ach", "vision_output", "output.json")
+# 💡 [핵심 연동 포인트] ach/JsonTesting.py가 생성하는 결과 파일 경로
+ACH_JSON_PATH = os.path.join(BASE_DIR, "..", "ach", "vision_output", "test_results.json")
 
 
 def load_payloads_from_json():
     """
-    Edge AI가 분석한 JSON 결과를 읽어와서 서버 전송용(Vision, RFID) 데이터로 변환합니다.
+    Edge AI가 분석한 JSON 결과(test_results.json)를 읽어와서 서버 전송용(Vision, RFID) 데이터로 변환합니다.
     """
     if not os.path.exists(ACH_JSON_PATH):
         print(f"❌ [에러] Edge AI 결과 파일({ACH_JSON_PATH})을 찾을 수 없습니다.")
@@ -32,45 +34,35 @@ def load_payloads_from_json():
     with open(ACH_JSON_PATH, "r", encoding="utf-8") as f:
         edge_data = json.load(f)
 
-    if edge_data.get("status") != "success":
-        print(f"❌ [에러] Edge AI 분석 실패: {edge_data.get('message', '알 수 없는 에러')}")
+    test_results = edge_data.get("test_results", [])
+    if not test_results:
+        print("❌ [에러] 분석된 이미지 결과가 없습니다.")
         return None, None
 
-    book_details = edge_data.get("book_details", [])
-    print(f"\n📄 [JSON 로드 성공] 파일명: {edge_data.get('filename')} / 인식된 책: {len(book_details)}권")
+    first_result = test_results[0]
+    vision_results = first_result.get("vision_items", [])
+    print(f"\n📄 [JSON 로드 성공] 파일명: {first_result.get('filename')} / 인식된 책: {len(vision_results)}권")
 
     vision_items = []
-    rfid_items = []
-    
-    # 🌟 물리적 배치 순서 보장: x1 좌표(왼쪽)를 기준으로 왼쪽에서 오른쪽으로 책을 정렬합니다.
-    sorted_books = sorted(book_details, key=lambda x: x["box"]["x1"])
 
-    for seq_index, book in enumerate(sorted_books, start=1):
-        # seq_index는 1부터 시작하는 책의 꽂힌 순서입니다.
-        book_id = f"B{seq_index:03d}" # B001, B002, B003...
-        
-        # 1. 서버로 보낼 Vision 데이터 세팅
-        # AI가 confidence_score를 -1로 주더라도 DB 저장을 위해 기본값(0.99) 부여
-        conf_score = book.get("confidence_score")
-        if conf_score == -1.0:
-            conf_score = 0.99
-            
+    # JsonTesting이 이미 좌→우 순서(sequence_order)와 매칭된 book_id를 부여해 둡니다.
+    for book in vision_results:
+        seq_index = book["sequence_order"]
         vision_items.append({
             "vision_id": f"V_{SESSION_ID}_{seq_index}",
-            "book_id": book_id, 
+            "book_id": book.get("book_id", "UNKNOWN"),
             "sequence_order": seq_index,
-            "confidence_score": conf_score,
-            "spine_img_path": "", 
-            "visual_status": book.get("predicted_state", "normal") # Edge AI의 최종 상태 판별값
+            "confidence_score": book.get("confidence_score", 0.0),
+            "spine_img_path": archive_spine_image(SESSION_ID, book.get("spine_img_file", "")),
+            "visual_status": book.get("visual_status", "normal")
         })
-        
-        # 2. 서버로 보낼 테스트용 RFID 데이터 (Vision과 1:1 세트로 자동 생성)
-        rfid_items.append({
-            "rfid_uid": f"UID_{book_id}",
-            "book_id": book_id,
-            "title": f"테스트 도서 {seq_index}",
-            "rssi": -45.0
-        })
+
+    # 가상 RFID 스캔 결과: 서버의 가상 도서 정보(BOOK_MASTER) 기준
+    res_tags = requests.get(f"{BASE_URL}/api/shelves/{SHELF_ID}/virtual-rfid")
+    if res_tags.status_code != 200:
+        print(f"❌ [가상 RFID 조회 실패] 에러: {res_tags.text}")
+        return None, None
+    rfid_items = res_tags.json()
 
     return {"session_id": SESSION_ID, "vision_items": vision_items}, {"session_id": SESSION_ID, "rfid_items": rfid_items}
 
@@ -83,7 +75,13 @@ def run_automation_test():
 
     # 1. 세션 시작
     print("\n1️⃣ 로봇이 서가에 도착하여 세션을 생성합니다...")
-    res_start = requests.post(f"{BASE_URL}/api/session/start", json={"session_id": SESSION_ID, "shelf_id": SHELF_ID, "scan_time": SCAN_TIME_STR})
+    # 분석에 쓰인 사진(ach/dataset/test)을 세션 원본 사진으로 보관 → 대시보드 '서가 사진'에 표시
+    test_dir = os.path.join(BASE_DIR, "..", "ach", "dataset", "test")
+    photos = sorted(f for f in os.listdir(test_dir) if f.lower().endswith((".jpg", ".png"))) if os.path.isdir(test_dir) else []
+    image_path = archive_original_image(SESSION_ID, os.path.join(test_dir, photos[0])) if photos else None
+    res_start = requests.post(f"{BASE_URL}/api/session/start", json={
+        "session_id": SESSION_ID, "shelf_id": SHELF_ID, "scan_time": SCAN_TIME_STR, "image_path": image_path
+    })
     print("-> 응답:", res_start.json())
 
     # 2. 데이터 변환

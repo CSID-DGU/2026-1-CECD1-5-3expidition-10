@@ -14,7 +14,10 @@ from app.config import DEVICE
 from app.models import load_resnet_model, resnet_preprocess
 
 # 임시 DB(파일 참조)용 경로
-NORMAL_DIR = "dataset/normal"
+# 백엔드가 층별 정상 이미지를 쓸 때는 NORMAL_DIR 환경변수로 그 층의 기준 이미지 폴더를 넘깁니다. (없으면 기존 경로)
+NORMAL_DIR = os.getenv("NORMAL_DIR", "dataset/normal")
+# app/pipeline.py가 책등 크롭을 저장하는 폴더
+SPINE_OUTPUT_DIR = "pipeline_outputs"
 
 # =========================================================================
 # [엔진] 피처 추출 및 상태 판정 클래스 (보조 AI 모델 및 버그 패치 포함)
@@ -272,10 +275,13 @@ class BookshelfAnalyzerAPI:
 
         try:
             img_pil = Image.open(image_path).convert("RGB")
+            # 이전 이미지(정상 기준 이미지 포함)의 책등 크롭이 남아 섞이지 않도록 먼저 비웁니다.
+            for old_spine in glob.glob(os.path.join(SPINE_OUTPUT_DIR, "adjusted_spine_*.jpg")):
+                os.remove(old_spine)
             extracted_books, _ = process_bookshelf_pipeline(img_pil)
-            
+
             extracted_books.sort(key=self._get_min_x_for_sorting)
-            
+
             results_list = []
             normal_count = 0
             abnormal_count = 0
@@ -305,6 +311,8 @@ class BookshelfAnalyzerAPI:
                 
                 results_list.append({
                     "sequence_order": detected_order + 1,
+                    # 파이프라인이 저장한 책등 크롭 파일명 (정렬 전 탐지 인덱스 기준)
+                    "spine_img_file": f"adjusted_spine_{book['book_index']}.jpg",
                     "book_id": f"B{mapped_normal_index:03d}" if mapped_normal_index != -1 else "UNKNOWN",
                     "matched_normal_index": mapped_normal_index,
                     "box": box,

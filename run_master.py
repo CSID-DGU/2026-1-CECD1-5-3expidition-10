@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import glob
 import json
 import requests
 import subprocess
@@ -11,12 +12,16 @@ from datetime import datetime
 # ⚙️ 로봇(Edge) 및 서버(Cloud) 환경 설정
 # =========================================================
 BASE_URL = "http://127.0.0.1:8000"
-SHELF_ID = "A-12"
+# 세션별 책등 크롭 보관 로직과 기본 칸 설정은 백엔드와 공유합니다. (backend/spine_archive.py, backend/config.py)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend"))
+from spine_archive import archive_original_image, archive_spine_image
+from config import DEFAULT_SHELF_ID
+SHELF_ID = DEFAULT_SHELF_ID   # 로봇이 촬영한 층 (기본: A구역 1번 책꽂이 3층)
 
 ACH_DIR = "ach"
 
 CURRENT_TIME = datetime.now()
-SESSION_ID = f"{SHELF_ID}_{CURRENT_TIME.strftime('%Y%m%d_%H%M%S')}"
+SESSION_ID = f"{SHELF_ID}_{CURRENT_TIME.strftime('%Y%m%d_%H%M%S_%f')}"
 SCAN_TIME_STR = CURRENT_TIME.strftime('%Y-%m-%d %H:%M:%S')
 
 def main():
@@ -28,8 +33,14 @@ def main():
     # 1️⃣ 세션 시작
     # ---------------------------------------------------------
     print("\n1️⃣ 서버에 새로운 서고 스캔 세션을 생성합니다...")
+    # 로봇이 촬영한 사진(ach/dataset/test의 첫 이미지)을 세션 원본 사진으로 보관 → 대시보드 '서가 사진'에 표시
+    test_dir = os.path.join(ACH_DIR, "dataset", "test")
+    photos = sorted(glob.glob(os.path.join(test_dir, "*.jpg")) + glob.glob(os.path.join(test_dir, "*.png")))
+    image_path = archive_original_image(SESSION_ID, photos[0]) if photos else None
     try:
-        res_start = requests.post(f"{BASE_URL}/api/session/start", json={"session_id": SESSION_ID, "shelf_id": SHELF_ID, "scan_time": SCAN_TIME_STR})
+        res_start = requests.post(f"{BASE_URL}/api/session/start", json={
+            "session_id": SESSION_ID, "shelf_id": SHELF_ID, "scan_time": SCAN_TIME_STR, "image_path": image_path
+        })
         if res_start.status_code != 200:
             print(f"❌ [세션 생성 실패] 상태코드: {res_start.status_code}")
             print(f"-> 🚨 서버 에러: {res_start.text}")
@@ -73,18 +84,13 @@ def main():
     ai_vision_items = first_result.get("vision_items", [])
 
     vision_payload = []
-    rfid_payload = []
 
-    # [RFID 조립] 실제 서가에 13권이 꽂혀 있다고 가정하고 13개의 RFID 태그 생성
-    total_books_in_shelf = 13 
-    for i in range(1, total_books_in_shelf + 1):
-        r_id = f"B{i:03d}"
-        rfid_payload.append({
-            "rfid_uid": f"UID_{r_id}",
-            "book_id": r_id,
-            "title": f"테스트 도서 {i}",
-            "rssi": -45.0
-        })
+    # [RFID 조립] 가상 RFID 스캔 결과를 서버의 가상 도서 정보(BOOK_MASTER)에서 받아옵니다.
+    res_tags = requests.get(f"{BASE_URL}/api/shelves/{SHELF_ID}/virtual-rfid")
+    if res_tags.status_code != 200:
+        print(f"❌ [가상 RFID 조회 실패] 에러: {res_tags.text}")
+        return
+    rfid_payload = res_tags.json()
 
     # [Vision 조립] AI가 정리해준 vision_items를 그대로 서버 규격에 꽂아 넣기
     for item in ai_vision_items:
@@ -94,7 +100,7 @@ def main():
             "book_id": item.get("book_id", "UNKNOWN"),  # AI가 매칭한 진짜 책 ID
             "sequence_order": seq_idx,                  # AI가 매칭한 물리적 순서
             "confidence_score": item.get("confidence_score", 0.99),
-            "spine_img_path": "crawled_spine.jpg",      # DB NOT NULL 통과용
+            "spine_img_path": archive_spine_image(SESSION_ID, item.get("spine_img_file", "")),  # 대시보드 크롭뷰용 세션별 책등 경로
             "visual_status": item.get("visual_status", "normal")
         })
 

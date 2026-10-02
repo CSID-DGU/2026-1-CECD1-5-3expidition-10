@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>일일 순찰 리포트</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/assets/common.js"></script>
+    <style>
+        @media print {
+            body { background: white; }
+            .no-print { display: none !important; }
+            .print-break-avoid { break-inside: avoid; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+
+    <nav class="no-print bg-white shadow-sm p-4 border-b border-slate-200 flex flex-wrap gap-3 justify-between items-center px-8">
+        <a href="/dashboard" class="text-xl font-bold text-blue-600 flex items-center gap-2">
+            <i class="fa-solid fa-robot text-2xl"></i> <span>지능형 서고 모니터링 대시보드</span>
+        </a>
+        <div class="flex items-center gap-2">
+            <input type="date" id="report-date" class="border border-slate-200 rounded-lg px-2 py-1.5 text-sm">
+            <button onclick="loadReport()" class="text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-lg">
+                <i class="fa-solid fa-magnifying-glass"></i> 조회
+            </button>
+            <button onclick="window.print()" class="text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg">
+                <i class="fa-solid fa-print"></i> 인쇄
+            </button>
+        </div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto p-6 flex flex-col gap-6">
+        <header>
+            <h1 class="text-2xl font-bold text-slate-800">📋 일일 서가 순찰 리포트</h1>
+            <p class="text-sm text-slate-500 mt-1" id="report-meta">불러오는 중...</p>
+        </header>
+
+        <section id="report-totals" class="grid grid-cols-2 md:grid-cols-4 gap-3"></section>
+        <section id="report-shelves" class="flex flex-col gap-5"></section>
+    </main>
+
+    <script>
+        function totalCard(label, value, icon, tone) {
+            return `
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm print-break-avoid">
+                    <div class="text-xs text-slate-500 flex items-center gap-1.5"><i class="fa-solid ${icon}"></i> ${label}</div>
+                    <div class="text-2xl font-bold mt-1 ${tone}">${value}</div>
+                </div>`;
+        }
+
+        function issueRow(row) {
+            const group = GROUP_INFO[row.issues[0].group];
+            const labels = row.issues.map(i =>
+                `<span class="text-[11px] font-semibold px-1.5 py-0.5 rounded ${GROUP_INFO[i.group].badge}">${escapeHtml(i.label)}</span>`
+            ).join(" ");
+            const handled = row.action_status !== "PENDING";
+            const status = handled
+                ? `<span class="text-emerald-700">${ACTION_LABELS[row.action_status]}<br><span class="text-[11px] text-slate-400">${formatTime(row.action_time)}</span></span>`
+                : `<span class="text-rose-600 font-semibold">미처리</span>`;
+            return `
+                <tr class="border-t border-slate-100 ${handled ? "text-slate-400" : ""}">
+                    <td class="py-2 pr-3 whitespace-nowrap"><i class="fa-solid ${group.icon} mr-1"></i>${group.title}</td>
+                    <td class="py-2 pr-3 whitespace-nowrap">${seqLabel(row)}</td>
+                    <td class="py-2 pr-3">${bookLabel(row)}</td>
+                    <td class="py-2 pr-3">${labels}</td>
+                    <td class="py-2 text-right whitespace-nowrap">${status}</td>
+                </tr>`;
+        }
+
+        function shelfHeader(shelf, meta) {
+            const desc = [shelf.bookcase_name, shelf.shelf_name].filter(Boolean).map(escapeHtml).join(" · ");
+            return `
+                <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                    <h3 class="text-base font-bold text-slate-700">${locationText(shelf)}
+                        <span class="text-sm font-normal text-slate-400 ml-1">${desc}</span></h3>
+                    <span class="text-xs text-slate-500">${meta}</span>
+                </div>`;
+        }
+
+        function shelfSection(shelf) {
+            const s = shelf.session;
+            if (!s) {
+                return `<article class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm print-break-avoid">${shelfHeader(shelf, "")}
+                    <p class="text-sm text-slate-400">이 날짜에 순찰 기록이 없습니다. (도서 ${shelf.book_count}권 등록)</p></article>`;
+            }
+
+            const meta = `마지막 순찰 ${formatTime(s.scan_time)} · 이날 순찰 ${shelf.session_count}회`;
+            const warning = s.quality.is_reliable ? "" : `
+                <div class="mb-3 p-3 rounded-lg bg-rose-50 border-l-4 border-rose-500 text-rose-800 text-sm">
+                    <b><i class="fa-solid fa-camera-rotate"></i> 인식 신뢰도 낮음 — 재촬영 필요.</b> 아래 판정은 참고용입니다.
+                    <ul class="list-disc ml-6 text-xs mt-1">${s.quality.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>
+                </div>`;
+            const sum = s.summary;
+            const summary = `
+                <p class="text-sm text-slate-600 mb-2">
+                    알림 <b>${sum.issue_count}</b>건 · 미처리 조치 필요 <b class="text-rose-600">${sum.pending_action_count}</b>건
+                    · 미처리 확인 필요 <b>${sum.pending_check_count}</b>건 · 처리됨 <b class="text-emerald-700">${sum.handled_count}</b>건
+                </p>`;
+            const table = s.results.length === 0
+                ? `<p class="text-sm text-emerald-700"><i class="fa-solid fa-circle-check"></i> 문제 도서가 없습니다.</p>`
+                : `<table class="w-full text-sm">
+                        <thead><tr class="text-left text-xs text-slate-500">
+                            <th class="pb-1 pr-3">유형</th><th class="pb-1 pr-3">위치</th><th class="pb-1 pr-3">도서</th>
+                            <th class="pb-1 pr-3">내용</th><th class="pb-1 text-right">조치</th>
+                        </tr></thead>
+                        <tbody>${[...sortByPriority(s.results.filter(isPending)), ...sortByPriority(s.results.filter(r => !isPending(r)))].map(issueRow).join("")}</tbody>
+                   </table>`;
+            return `<article class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                ${shelfHeader(shelf, meta)}
+                ${warning}${summary}${table}</article>`;
+        }
+
+        // 구역 단위 묶음: 구역 제목 + 그 구역의 순찰 대상 층들
+        function zoneSection(zone) {
+            const levels = zone.bookcases.flatMap(b => b.levels);
+            return `
+                <section class="flex flex-col gap-3">
+                    <h2 class="text-lg font-bold text-slate-800 border-b border-slate-200 pb-1">
+                        ${escapeHtml(zone.zone_id)}구역 <span class="font-normal text-slate-500">${escapeHtml(zone.zone_name)}</span>
+                        <span class="text-sm font-normal text-slate-400 ml-1">${escapeHtml(zone.location || "")}</span>
+                    </h2>
+                    ${levels.map(shelfSection).join("")}
+                </section>`;
+        }
+
+        async function loadReport() {
+            const dateInput = document.getElementById("report-date");
+            const query = dateInput.value ? `?date=${dateInput.value}` : "";
+            let report;
+            try {
+                const res = await fetch(`${API_BASE}/reports/daily${query}`);
+                report = await res.json();
+                if (!res.ok) throw new Error(report.detail || `HTTP ${res.status}`);
+            } catch (e) {
+                document.getElementById("report-meta").textContent = `리포트를 불러오지 못했습니다: ${e.message}`;
+                return;
+            }
+            dateInput.value = report.date;
+            document.getElementById("report-meta").textContent =
+                `${report.date} 순찰 기준 · 층별 마지막 순찰 결과 (도서가 등록된 층만) · 생성 ${report.generated_at.replace("T", " ")}`;
+
+            const t = report.totals;
+            document.getElementById("report-totals").innerHTML =
+                totalCard("순찰한 층", `${t.patrolled_shelves} / ${t.target_shelves}`, "fa-route", "text-slate-800") +
+                totalCard("미처리 조치 필요", t.pending_action_count, "fa-triangle-exclamation", t.pending_action_count ? "text-rose-600" : "text-emerald-600") +
+                totalCard("미처리 확인 필요", t.pending_check_count, "fa-magnifying-glass", "text-slate-700") +
+                totalCard("재촬영 필요 층", t.unreliable_shelves, "fa-camera-rotate", t.unreliable_shelves ? "text-rose-600" : "text-emerald-600");
+
+            document.getElementById("report-shelves").innerHTML = report.zones.length
+                ? report.zones.map(zoneSection).join("")
+                : `<p class="text-sm text-slate-400">도서가 등록된 층(순찰 대상)이 없습니다.</p>`;
+        }
+
+        loadReport();
+    </script>
+</body>
+</html>

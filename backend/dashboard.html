@@ -6,92 +6,167 @@
     <title>VLM 지능형 서고 관리 플랫폼</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* 커스텀 상태 스타일 */
-        .border-dashed-custom { border: 3px dashed #CBD5E1; }
-        .border-dashed-custom:hover { border-color: #3B82F6; background-color: #EFF6FF; }
-    </style>
+    <script src="/assets/common.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <nav class="bg-white shadow-sm p-4 border-b border-slate-200 flex justify-between items-center px-8">
+    <nav class="bg-white shadow-sm p-4 border-b border-slate-200 flex flex-wrap gap-3 justify-between items-center px-8">
         <div class="text-xl font-bold text-blue-600 flex items-center gap-2">
-            <i class="fa-solid fa-robot text-2xl"></i> 
+            <i class="fa-solid fa-robot text-2xl"></i>
             <span>지능형 서고 모니터링 대시보드 (VLM)</span>
         </div>
         <div class="flex items-center gap-4">
-            <span class="text-sm text-slate-500" id="current-session-id">세션 대기 중</span>
-            <div class="text-sm bg-emerald-50 text-emerald-700 font-semibold px-3 py-1 rounded-full flex items-center gap-1.5">
-                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Edge AI 연결됨
-            </div>
+            <span class="text-sm text-slate-500" id="current-session-id">확인할 서가를 선택하세요</span>
+            <button id="new-result" onclick="openNewResult()" class="hidden text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-lg items-center gap-1.5">
+                <i class="fa-solid fa-arrows-rotate"></i> 이 층의 새 순찰 결과 보기
+            </button>
+            <a href="/report" target="_blank" class="text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-file-lines"></i> 일일 리포트
+            </a>
         </div>
     </nav>
 
     <div class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 items-stretch">
-        
+
+        <!-- 로봇 순찰 사진 수신함 → 일괄 분석 -->
+        <div class="lg:col-span-12 bg-white px-5 py-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div class="flex items-center gap-3 min-w-[260px]">
+                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-robot text-lg"></i></div>
+                <div>
+                    <div class="text-sm font-bold text-slate-700">로봇 순찰 사진</div>
+                    <div id="patrol-summary" class="text-xs text-slate-500">불러오는 중...</div>
+                </div>
+            </div>
+            <div id="patrol-progress" class="flex-1 min-w-[260px] text-xs text-slate-500"></div>
+            <button id="analyze-btn" onclick="startBatchAnalysis()" disabled
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-xl shadow-lg shadow-blue-200 flex items-center gap-2 transition-all disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed">
+                <i class="fa-solid fa-play" id="analyze-icon"></i> <span id="analyze-text">순찰 사진 일괄 분석</span>
+            </button>
+        </div>
+
         <div class="lg:col-span-5 flex flex-col gap-6">
-            
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1">
-                <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-camera text-blue-500"></i> 현재 서가 사진 등록 (Test)
-                </h2>
-                
-                <label for="image-upload" class="border-dashed-custom rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all flex-1 min-h-[300px]" id="drop-zone">
-                    <input type="file" id="image-upload" class="hidden" accept="image/*" onchange="previewImage(event)">
-                    
-                    <div id="upload-placeholder" class="text-center">
-                        <i class="fa-solid fa-cloud-arrow-up text-4xl text-slate-400 mb-3"></i>
-                        <p class="text-sm font-semibold text-slate-600">클릭하거나 이미지를 이 자리에 떨어뜨리세요</p>
-                        <p class="text-xs text-slate-400 mt-1">YOLOv8 & ResNet 분석용 서가 전체 이미지 (.jpg, .png)</p>
+
+            <!-- 도서관 지도 / 선택한 층의 현재 상태 사진 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                <div class="mb-3 flex items-center justify-between gap-2">
+                    <div class="flex shrink-0 bg-slate-100 rounded-lg p-0.5 text-sm font-semibold">
+                        <button id="tab-map" onclick="showView('map')" class="px-3 py-1 rounded-md">
+                            <i class="fa-solid fa-map"></i> 도서관 지도
+                        </button>
+                        <button id="tab-photo" onclick="showView('photo')" class="px-3 py-1 rounded-md">
+                            <i class="fa-solid fa-camera"></i> 최근 순찰
+                        </button>
+                        <button id="tab-normal" onclick="showView('normal')" class="px-3 py-1 rounded-md">
+                            <i class="fa-solid fa-circle-check"></i> 정상 상태
+                        </button>
                     </div>
-                    
-                    <img id="image-preview" class="hidden w-full h-full object-contain rounded-lg max-h-[350px]" alt="서가 미리보기">
-                </label>
+                    <span class="text-xs text-slate-400 truncate min-w-0" id="view-caption"></span>
+                </div>
+
+                <div id="map-view" class="rounded-xl bg-slate-50 border border-slate-200 h-[300px] flex items-center justify-center overflow-hidden">
+                    <!-- 도서관 전체 지도 (GET /api/library-map, 아래 버튼으로 등록 · 변경) -->
+                    <img id="library-map-img" alt="도서관 전체 지도" class="w-full h-full object-contain hidden cursor-zoom-in"
+                         onload="onLibraryMapLoaded(true)" onerror="onLibraryMapLoaded(false)">
+                    <div id="map-placeholder" class="text-center text-slate-400 text-sm px-6">
+                        <i class="fa-regular fa-map text-4xl mb-2 block"></i>
+                        도서관 전체 지도 이미지가 아직 없습니다.<br>
+                        <span class="text-xs">아래 <b>지도 올리기</b>로 등록하세요.</span>
+                    </div>
+                </div>
+
+                <div id="photo-view" class="hidden rounded-xl bg-slate-50 border border-slate-200 h-[300px] flex items-center justify-center overflow-hidden">
+                    <img id="shelf-photo" alt="선택한 층의 최근 순찰 사진" class="hidden w-full h-full object-contain cursor-zoom-in">
+                    <div id="photo-placeholder" class="text-center text-slate-400 text-sm px-6">
+                        <i class="fa-solid fa-camera text-4xl mb-2 block"></i>
+                        아래에서 확인할 책꽂이의 층을 선택하면<br>최근 순찰 사진이 표시됩니다.
+                    </div>
+                </div>
+
+                <!-- 선택한 층의 정상 상태 기준 이미지 (normal_images/<구역>/<책꽂이>/<층ID>.jpg) -->
+                <div id="normal-view" class="hidden rounded-xl bg-slate-50 border border-slate-200 h-[300px] flex items-center justify-center overflow-hidden">
+                    <img id="normal-photo" alt="선택한 층의 정상 상태 기준 사진" class="hidden w-full h-full object-contain cursor-zoom-in">
+                    <div id="normal-placeholder" class="text-center text-slate-400 text-sm px-6">
+                        <i class="fa-solid fa-circle-check text-4xl mb-2 block"></i>
+                        아래에서 층을 선택하면<br>그 층의 정상 상태 기준 사진이 표시됩니다.
+                    </div>
+                </div>
+
+                <!-- 탭별 관리 버튼 (지도 등록 · 기준 사진 등록 등) -->
+                <div id="view-actions" class="mt-3 flex flex-wrap items-center gap-2 text-xs min-h-[28px]"></div>
+                <input type="file" id="map-file" accept=".jpg,.jpeg,.png,.webp" class="hidden" onchange="uploadLibraryMap(this)">
+                <input type="file" id="normal-file" accept=".jpg,.jpeg,.png" class="hidden" onchange="uploadNormalImage(this)">
             </div>
 
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                <button onclick="startPipeline()" id="run-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-blue-200 flex items-center justify-center gap-2 transition-all text-lg disabled:bg-slate-400 disabled:shadow-none">
-                    <i class="fa-solid fa-play" id="btn-icon"></i>
-                    <span id="btn-text">VLM 자동화 파이프라인 원클릭 가동</span>
-                </button>
+            <!-- 서가 선택: 구역 탭 + 책꽂이/층 미니맵 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3">
+                <h2 class="text-md font-bold text-slate-700 flex items-center justify-between gap-2">
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-map-location-dot text-teal-500"></i> 서가 선택</span>
+                    <span class="text-xs font-normal text-slate-400">층 번호는 위에서부터</span>
+                </h2>
+                <div id="zone-tabs" class="flex flex-wrap gap-1.5"></div>
+                <div id="zone-info" class="text-xs text-slate-500"></div>
+                <div id="bookcase-grid" class="flex gap-2 overflow-x-auto pb-1">
+                    <div class="text-sm text-slate-400 py-4">불러오는 중...</div>
+                </div>
+                <div id="status-legend" class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500"></div>
+                <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <button id="bulk-ref-btn" onclick="bulkUpdateReferences()" disabled
+                            class="shrink-0 whitespace-nowrap text-xs px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 font-semibold flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-images"></i> <span id="bulk-ref-text">기준 사진 일괄 갱신</span>
+                    </button>
+                    <span class="text-[11px] text-slate-400">최근 순찰이 정상이고 대출 도서가 없는 층(<span class="text-sky-600">●</span>)만 최근 순찰 사진으로 바꿉니다</span>
+                </div>
             </div>
-            
+
+            <!-- 순찰 이력 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 min-h-[200px]">
+                <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-indigo-500"></i> 순찰 이력</span>
+                    <span class="flex items-center gap-2">
+                        <button id="history-filter" onclick="setHistoryFilter(null)" class="hidden text-[11px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full" title="필터 해제"></button>
+                        <button onclick="refreshHistory()" class="text-xs text-slate-400 hover:text-slate-600" title="새로고침"><i class="fa-solid fa-rotate-right"></i></button>
+                    </span>
+                </h2>
+                <div id="session-history" class="flex flex-col gap-1.5 overflow-y-auto flex-1 max-h-[320px] pr-1">
+                    <div class="text-center text-slate-400 py-6 text-sm">불러오는 중...</div>
+                </div>
+            </div>
+
         </div>
 
         <div class="lg:col-span-7 flex flex-col gap-6">
-            
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 max-h-[450px]">
+
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 max-h-[640px]">
                 <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><i class="fa-solid fa-bell text-rose-500"></i> 사서 가이드 알림판</span>
-                    <span class="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full" id="issue-count">검사 전</span>
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-bell text-rose-500"></i> 사서 가이드 알림판
+                        <button id="back-to-list" onclick="clearSelection()" class="hidden text-xs font-normal text-slate-500 hover:text-slate-700 border border-slate-200 rounded-md px-2 py-0.5">
+                            <i class="fa-solid fa-list-check"></i> 확인 필요 목록</button></span>
+                    <span class="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full" id="issue-count">층 선택 전</span>
                 </h2>
-                
+
                 <div id="librarian-tasks" class="overflow-y-auto flex flex-col gap-2 flex-1 pr-1">
-                    <div class="text-center text-slate-400 py-16">
-                        <i class="fa-solid fa-magnifying-glass text-3xl mb-2 block"></i>
-                        왼쪽에서 사진을 업로드한 뒤 파이프라인을 가동하면<br>실시간 탐지 에러 리포트가 여기에 생성됩니다.
-                    </div>
+                    <div class="text-center text-slate-400 py-16">불러오는 중...</div>
                 </div>
             </div>
 
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 min-h-[250px]">
                 <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center gap-2">
-                    <i class="fa-solid fa-images text-amber-500"></i> 이상 항목 책등 이미지 (Crop View)
+                    <i class="fa-solid fa-images text-amber-500"></i> 미처리 항목 책등 이미지 (Crop View)
                 </h2>
-                
+
                 <div id="crop-images-grid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 overflow-y-auto flex-1 max-h-[220px]">
                     <div class="col-span-full text-center text-slate-400 py-10 text-sm">
-                        정돈 및 재배치가 필요한 도서의 실물 사진(Crop)이 표출됩니다.
+                        층을 선택하면 정돈 · 재배치가 필요한 도서의 책등 사진이 표시됩니다.
                     </div>
                 </div>
             </div>
-            
+
         </div>
     </div>
 
     <!-- 라이트박스 모달 -->
     <div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm" onclick="closeLightbox()">
-        <div class="relative max-w-2xl w-full mx-4" onclick="event.stopPropagation()">
+        <div class="relative max-w-3xl w-full mx-4" onclick="event.stopPropagation()">
             <button onclick="closeLightbox()" class="absolute -top-10 right-0 text-white/70 hover:text-white text-sm flex items-center gap-1.5 transition-colors">
                 <i class="fa-solid fa-xmark"></i> 닫기 (ESC)
             </button>
@@ -111,9 +186,36 @@
     </div>
 
     <script>
-        const API_BASE = "http://127.0.0.1:8000/api";
-        let targetFile = null;
+        // 분석 요청은 로봇(run_master.py 등)이 API로 보내므로, 화면은 주기적으로 새 결과를 확인합니다.
+        const AUTO_REFRESH_MS = 20000;
 
+        let currentSession = null;    // 화면에 표시 중인 세션 결과 (/api/dashboard/results 응답)
+        let locationTree = [];        // 서가 현황 (/api/locations 응답: 구역 → 책꽂이 → 층)
+        let shelfIndex = {};          // shelf_id → { zone, bookcase, level }
+        let selectedShelfId = null;   // 선택한 층
+        let activeZoneId = null;      // 서가 선택 카드에 펼친 구역
+        let historyFilter = null;     // 순찰 이력을 특정 층으로 좁혀 볼 때의 shelf_id
+        let patrolRunning = false;    // 순찰 사진 일괄 분석이 진행 중인지
+        let patrolProgress = -1;      // 진행 중인 묶음에서 끝난 사진 수 (바뀌면 서가 현황 갱신)
+        let patrolTimer = null;
+        const PATROL_POLL_MS = 3000;  // 일괄 분석 중 진행 상황 확인 주기
+
+        // 알림 라벨별 사서 안내 문구 (라벨/그룹 분류는 서버가 결정)
+        const MESSAGE_BY_LABEL = {
+            "누락/분실":     r => `청구기호 명부에는 있으나, <b>${bookLabel(r)}</b> 도서가 영상과 RFID 모두에서 확인되지 않았습니다.`,
+            "오배가":        r => `<b>${bookLabel(r)}</b> 도서가 이 서가에 속하지 않습니다. 원래 서가로 반납해 주세요.`,
+            "오배열":        r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 청구기호 순서에서 벗어나 있습니다. 제자리로 옮겨주세요.`,
+            "인식 실패":     r => `<b>${bookLabel(r)}</b> 도서의 RFID는 감지되었으나 영상에서 찾지 못했습니다. 서가에서 직접 확인해 주세요.`,
+            "미확인 도서":   r => `<b>${seqLabel(r)}</b> 책을 어떤 도서인지 식별하지 못했습니다. 직접 확인해 주세요.`,
+            "중복 인식":     r => `<b>${seqLabel(r)}</b> 책이 다른 위치의 책과 같은 도서(${bookLabel(r)})로 인식되었습니다. 직접 확인해 주세요.`,
+            "RFID 미인식":   r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})은 영상에서 확인되었으나 RFID 태그가 감지되지 않았습니다. 태그를 점검해 주세요.`,
+            "뒤집힘":        r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 거꾸로 회전되어 있습니다. 똑바로 세워주세요.`,
+            "기울어짐":      r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 기울어져 있습니다. 정돈해 주세요.`,
+            "가로로 누움":   r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 가로로 눕혀져 있거나 다른 책 위에 쌓여 있습니다. 세워서 꽂아주세요.`,
+            "종이 끼임 의심": r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)}) 주변에 종이나 이물질이 끼어 있는 것으로 보입니다. 확인해 주세요.`,
+        };
+
+        // ===================== 공통 UI =====================
         function openLightbox(imgUrl, title, status) {
             const lb = document.getElementById('lightbox');
             document.getElementById('lightbox-img').src = imgUrl;
@@ -132,173 +234,819 @@
 
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
 
-        // 1. 좌상: 사진 로컬 미리보기 핸들러
-        function previewImage(event) {
-            const input = event.target;
-            if (input.files && input.files[0]) {
-                targetFile = input.files[0];
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.getElementById('upload-placeholder').classList.add('hidden');
-                    const img = document.getElementById('image-preview');
-                    img.src = e.target.result;
-                    img.classList.remove('hidden');
-                }
-                reader.readAsDataURL(targetFile);
-            }
+        async function fetchJson(url, options) {
+            const res = await fetch(url, options);
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.detail || `요청 실패 (HTTP ${res.status})`);
+            return body;
         }
 
-        // 2. 좌하: 파이프라인 트리거 버튼 로직
-        // 2. 👈 [수정됨] 좌하: 진짜 파일 데이터를 실어 파이프라인 전체를 구동하는 로직
-        async function startPipeline() {
-            if (!targetFile) {
-                alert("먼저 분석할 서가 사진을 업로드 헤주세요! (Drag & Drop 혹은 클릭)");
+        // ===================== 도서관 지도 / 최근 순찰 사진 / 정상 상태 사진 =====================
+        const VIEWS = ["map", "photo", "normal"];
+        const viewCaptions = { map: "", photo: "", normal: "" };
+        let currentView = "map";
+
+        function showView(view) {
+            currentView = view;
+            const on = "bg-white shadow-sm text-slate-800", off = "text-slate-500 hover:text-slate-700";
+            VIEWS.forEach(v => {
+                document.getElementById(`${v}-view`).classList.toggle('hidden', v !== view);
+                document.getElementById(`tab-${v}`).className = `px-2.5 py-1 rounded-md whitespace-nowrap ${v === view ? on : off}`;
+            });
+            document.getElementById('view-caption').textContent = viewCaptions[view];
+            renderViewActions();
+        }
+
+        // ===================== 사서용 설정: 도서관 지도 · 정상 상태 기준 사진 =====================
+        let libraryMapExists = false;
+
+        function loadLibraryMap() {
+            // 같은 주소로 교체되므로 캐시를 피하려고 시각을 붙임
+            document.getElementById('library-map-img').src = `${API_BASE}/library-map?v=${Date.now()}`;
+        }
+
+        function onLibraryMapLoaded(ok) {
+            libraryMapExists = ok;
+            const img = document.getElementById('library-map-img');
+            img.classList.toggle('hidden', !ok);
+            document.getElementById('map-placeholder').classList.toggle('hidden', ok);
+            img.onclick = ok ? () => openLightbox(img.src, "도서관 전체 지도", "") : null;
+            renderViewActions();
+        }
+
+        function selectedLevel() {
+            return selectedShelfId && shelfIndex[selectedShelfId] ? shelfIndex[selectedShelfId].level : null;
+        }
+
+        function adminButton(label, icon, onClick, danger = false) {
+            const btn = document.createElement("button");
+            btn.className = "px-2.5 py-1.5 rounded-lg border font-semibold flex items-center gap-1.5 "
+                + (danger ? "border-rose-200 text-rose-600 hover:bg-rose-50" : "border-slate-200 text-slate-600 hover:bg-slate-50");
+            btn.innerHTML = `<i class="fa-solid ${icon}"></i> ${label}`;
+            btn.addEventListener("click", onClick);
+            return btn;
+        }
+
+        function renderViewActions() {
+            const box = document.getElementById('view-actions');
+            box.innerHTML = "";
+            if (currentView === "map") {
+                box.appendChild(adminButton(libraryMapExists ? "지도 변경" : "지도 올리기", "fa-upload",
+                    () => document.getElementById('map-file').click()));
+                if (libraryMapExists) box.appendChild(adminButton("지도 삭제", "fa-trash", deleteLibraryMap, true));
                 return;
             }
+            if (currentView !== "normal") return;
+            const level = selectedLevel();
+            if (!level) {
+                box.innerHTML = `<span class="text-slate-400">층을 선택하면 그 층의 기준 사진을 등록 · 교체할 수 있습니다.</span>`;
+                return;
+            }
+            const has = level.normal_images.length > 0;
+            box.appendChild(adminButton(has ? "기준 사진 교체" : "기준 사진 올리기", "fa-upload",
+                () => document.getElementById('normal-file').click()));
+            if (level.latest_session && level.latest_session.image_path) {
+                box.appendChild(adminButton("이 층만 최근 순찰 사진으로", "fa-camera-rotate", setNormalFromLatest));
+            }
+            if (level.normal_history_count > 0) {
+                box.appendChild(adminButton("이전 기준 사진으로 되돌리기", "fa-rotate-left", restoreNormalImage));
+            }
+            if (has) box.appendChild(adminButton("기준 사진 삭제", "fa-trash", deleteNormalImage, true));
 
-            // UI를 '분석 중...' 로딩 모드로 전환하여 사서의 중복 클릭 방지
-            const btn = document.getElementById('run-btn');
-            const icon = document.getElementById('btn-icon');
-            const text = document.getElementById('btn-text');
-            
-            btn.disabled = true;
-            icon.className = "fa-solid fa-spinner fa-spin text-lg";
-            text.innerText = "서버 가동: test 폴더 초기화 및 YOLO/ResNet 파이프라인 구동 중...";
+            // 최근 순찰 사진을 기준으로 써도 되는지 (일괄 갱신 대상 여부)
+            const ref = level.reference_update;
+            const note = document.createElement("div");
+            note.className = "w-full text-[11px] " + (ref.eligible ? "text-sky-700" : "text-slate-400");
+            note.innerHTML = ref.eligible
+                ? `<i class="fa-solid fa-circle-check"></i> 최근 순찰이 정상이고 대출 도서가 없어, 최근 순찰 사진을 기준 사진으로 쓰기 좋습니다.`
+                : `<i class="fa-solid fa-circle-info"></i> 일괄 갱신 대상 아님: ${ref.reasons.map(escapeHtml).join(" · ")}`;
+            box.appendChild(note);
+        }
 
-            // 🌟 핵심: HTML5 FormData 객체를 생성하여 바이너리 이미지 파일을 담습니다.
-            const formData = new FormData();
-            formData.append("file", targetFile); // 백엔드의 'file: UploadFile' 파라미터와 매칭
+        async function sendForm(url, method, file) {
+            const form = new FormData();
+            form.append("file", file);
+            return fetchJson(url, { method, body: form });
+        }
 
+        async function uploadLibraryMap(input) {
+            const file = input.files[0];
+            input.value = "";
+            if (!file) return;
             try {
-                // 🚀 백엔드가 수신하여 물리적 폴더 조작 및 스크립트를 올인원으로 실행하도록 POST 요청
-                const response = await fetch(`${API_BASE}/pipeline/run`, {
-                    method: "POST",
-                    body: formData
-                });
-
-                // response body는 한 번만 소비 가능 — ok 여부와 무관하게 먼저 파싱
-                const pipelineStatus = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(pipelineStatus.detail || "파이프라인 구동 실패");
-                }
-                console.log("파이프라인 연동 결과:", pipelineStatus);
-                
-                // 파이프라인이 정상 종료되면, 새로 적재된 최종 분석 완료 데이터를 가져와 화면을 갱신합니다.
-                const resultRes = await fetch(`${API_BASE}/dashboard/results`);
-                const latestResults = await resultRes.json();
-                
-                if (latestResults && latestResults.length > 0) {
-                    document.getElementById('current-session-id').innerText = `실시간 세션: ${pipelineStatus.session_id}`;
-                    // 🎯 대시보드 우상(메시지), 우하(책등 크롭뷰) 실시간 동기화 렌더링!
-                    renderLibrarianDashboard(latestResults);
-                } else {
-                    alert("파이프라인은 가동되었으나 적재된 데이터를 불러오지 못했습니다.");
-                }
-
-            } catch (error) {
-                console.error("통합 파이프라인 오류:", error);
-                alert(`❌ 가동 실패: ${error.message}\n(도커 엔진 및 FastAPI 업로드 용량 제한 설정을 확인하세요.)`);
-            } finally {
-                // 시스템 UI 상태를 다시 기본 모드로 원복
-                btn.disabled = false;
-                icon.className = "fa-solid fa-play";
-                text.innerText = "VLM 자동화 파이프라인 원클릭 가동";
+                await sendForm(`${API_BASE}/library-map`, "PUT", file);
+                loadLibraryMap();
+            } catch (e) {
+                alert(`❌ 지도 등록 실패: ${e.message}`);
             }
         }
-        // 3. 우측 전체 데이터 바인딩 아키텍처 (메시지 + 이미지 매칭)
-        function renderLibrarianDashboard(results) {
+
+        async function deleteLibraryMap() {
+            if (!confirm("도서관 지도 이미지를 삭제할까요?")) return;
+            try {
+                await fetchJson(`${API_BASE}/library-map`, { method: "DELETE" });
+                onLibraryMapLoaded(false);
+            } catch (e) {
+                alert(`❌ 지도 삭제 실패: ${e.message}`);
+            }
+        }
+
+        // 기준 사진이 바뀐 뒤: 서가 현황(기준 사진 목록 · 상태)을 다시 받아 정상 상태 탭 갱신
+        async function afterNormalChanged() {
+            await refreshLocations();
+            setNormalPhoto(selectedLevel(), true);
+            renderViewActions();
+        }
+
+        async function uploadNormalImage(input) {
+            const file = input.files[0];
+            input.value = "";
+            const level = selectedLevel();
+            if (!file || !level) return;
+            if (level.normal_images.length && !confirm(`${level.location_label}의 기준 사진을 새 사진으로 교체할까요?`)) return;
+            try {
+                await sendForm(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image`, "PUT", file);
+                await afterNormalChanged();
+            } catch (e) {
+                alert(`❌ 기준 사진 등록 실패: ${e.message}`);
+            }
+        }
+
+        async function setNormalFromLatest() {
+            const level = selectedLevel();
+            const latest = level && level.latest_session;
+            if (!latest) return;
+            const ref = level.reference_update;
+            const warning = ref.eligible ? "" : `\n\n⚠️ 주의: ${ref.reasons.join(" / ")}`;
+            if (!confirm(`${formatTime(latest.scan_time)} 순찰 사진을 ${level.location_label}의 정상 상태 기준 사진으로 지정할까요?\n(서가를 정리한 직후의 사진이어야 합니다. 이전 기준 사진은 되돌릴 수 있습니다)${warning}`)) return;
+            try {
+                await fetchJson(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image/from-session`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ session_id: latest.session_id }),
+                });
+                await afterNormalChanged();
+                showView('normal');
+            } catch (e) {
+                alert(`❌ 기준 사진 지정 실패: ${e.message}`);
+            }
+        }
+
+        async function restoreNormalImage() {
+            const level = selectedLevel();
+            if (!level || !confirm(`${level.location_label}의 기준 사진을 바로 이전 기준 사진으로 되돌릴까요?`)) return;
+            try {
+                await fetchJson(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image/restore`, { method: "POST" });
+                await afterNormalChanged();
+                showView('normal');
+            } catch (e) {
+                alert(`❌ 되돌리기 실패: ${e.message}`);
+            }
+        }
+
+        // 일괄 갱신: 먼저 대상 · 제외 목록을 받아 확인한 뒤 실행
+        async function bulkUpdateReferences() {
+            const url = `${API_BASE}/normal-images/update-from-latest`;
+            const post = body => fetchJson(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+            try {
+                const preview = await post({ dry_run: true });
+                if (preview.targets.length === 0) {
+                    alert("기준 사진을 갱신할 수 있는 층이 없습니다.");
+                    return;
+                }
+                const targetList = preview.targets.map(t => `  · ${t.location_label}`).join("\n");
+                const skippedNote = preview.skipped.length
+                    ? `\n\n제외 ${preview.skipped.length}곳 (대출 도서 있음 · 문제 발견 · 순찰 기록 없음 등)` : "";
+                if (!confirm(`다음 ${preview.targets.length}곳의 기준 사진을 최근 순찰 사진으로 바꿀까요?\n${targetList}${skippedNote}\n\n이전 기준 사진은 층마다 되돌릴 수 있습니다.`)) return;
+                const result = await post({ dry_run: false });
+                await afterNormalChanged();
+                alert(`✅ ${result.updated.length}곳의 기준 사진을 갱신했습니다.`);
+            } catch (e) {
+                alert(`❌ 기준 사진 일괄 갱신 실패: ${e.message}`);
+            }
+        }
+
+        async function deleteNormalImage() {
+            const level = selectedLevel();
+            if (!level || !confirm(`${level.location_label}의 기준 사진을 삭제할까요?\n기준 사진이 없으면 이 층은 분석할 수 없습니다. (삭제한 사진은 되돌릴 수 있습니다)`)) return;
+            try {
+                await fetchJson(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image`, { method: "DELETE" });
+                await afterNormalChanged();
+            } catch (e) {
+                alert(`❌ 기준 사진 삭제 실패: ${e.message}`);
+            }
+        }
+
+        function setCaption(view, text) {
+            viewCaptions[view] = text;
+            if (currentView === view) document.getElementById('view-caption').textContent = text;
+        }
+
+        // 선택한 층의 정상 상태 기준 사진 (없으면 넣어야 할 위치 안내)
+        function setNormalPhoto(level, bustCache = false) {
+            const img = document.getElementById('normal-photo');
+            const placeholder = document.getElementById('normal-placeholder');
+            const images = (level && level.normal_images) || [];
+            img.classList.toggle('hidden', images.length === 0);
+            placeholder.classList.toggle('hidden', images.length > 0);
+            if (images.length) {
+                const url = `/static/normal/${images[0].split("/").map(encodeURIComponent).join("/")}` + (bustCache ? `?v=${Date.now()}` : "");
+                img.src = url;
+                const caption = `${level.location_label} · 정상 상태 기준` + (images.length > 1 ? ` (기준 사진 ${images.length}장 중 1장)` : "");
+                img.onclick = () => openLightbox(url, level.location_label, caption);
+                setCaption('normal', caption);
+            } else {
+                placeholder.innerHTML = level
+                    ? `<i class="fa-solid fa-image text-4xl mb-2 block"></i><b>${escapeHtml(level.location_label)}</b>의 정상 상태 기준 사진이 없습니다.<br>
+                       <span class="text-xs">아래 <b>기준 사진 올리기</b>로 등록하면 분석에 사용됩니다.</span>`
+                    : `<i class="fa-solid fa-circle-check text-4xl mb-2 block"></i>아래에서 층을 선택하면<br>그 층의 정상 상태 기준 사진이 표시됩니다.`;
+                setCaption('normal', level ? level.location_label : "");
+            }
+            renderViewActions();
+        }
+
+        // 선택한 층의 사진을 표시 (session이 없으면 순찰 기록 없음 안내)
+        function setShelfPhoto(session, label) {
+            const img = document.getElementById('shelf-photo');
+            const placeholder = document.getElementById('photo-placeholder');
+            const url = session && session.image_path ? spineUrl(session.image_path) : "";
+            img.classList.toggle('hidden', !url);
+            placeholder.classList.toggle('hidden', !!url);
+            if (url) {
+                img.src = url;
+                const caption = `${label} · ${formatTime(session.scan_time)} 순찰 사진`;
+                img.onclick = () => openLightbox(url, label, caption);
+                setCaption('photo', caption);
+            } else {
+                placeholder.innerHTML = session
+                    ? `<i class="fa-solid fa-image text-4xl mb-2 block"></i>이 순찰에는 원본 사진이 저장되어 있지 않습니다.`
+                    : `<i class="fa-solid fa-route text-4xl mb-2 block"></i><b>${escapeHtml(label)}</b>은(는)<br>아직 순찰 기록이 없습니다.`;
+                setCaption('photo', label || "");
+            }
+            // 같은 층의 정상 상태 기준 사진도 함께 준비 (탭으로 비교)
+            const entry = session ? shelfIndex[session.shelf_id] : Object.values(shelfIndex).find(x => x.level.location_label === label);
+            setNormalPhoto(entry ? entry.level : null);
+        }
+
+        // ===================== 로봇 순찰 사진 일괄 분석 =====================
+        function setAnalyzeButton(running, enabled) {
+            const btn = document.getElementById('analyze-btn');
+            btn.disabled = running || !enabled;
+            document.getElementById('analyze-icon').className = running ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-play";
+            document.getElementById('analyze-text').innerText = running ? "분석 중..." : "순찰 사진 일괄 분석";
+        }
+
+        function renderPatrolStatus(st) {
+            const lastReceived = st.last_received_at ? ` · 마지막 수신 ${formatTime(st.last_received_at)}` : "";
+            const byZone = Object.entries(st.analyzable_by_zone || {}).map(([z, n]) => `${escapeHtml(z)}구역 ${n}`).join(" · ");
+            const unknown = st.unrecognized_files || [];
+            const unknownNote = unknown.length
+                ? `<br><span class="text-amber-700 cursor-help" title="${escapeHtml(unknown.map(f => `${f.file_path}: ${f.reason}`).join("\n"))}">
+                     <i class="fa-solid fa-triangle-exclamation"></i> 수신함에 규칙에 맞지 않는 파일 ${unknown.length}개 (마우스를 올리면 이유 표시)</span>`
+                : "";
+            document.getElementById('patrol-summary').innerHTML = (st.analyzable_count > 0
+                ? `<b class="text-blue-600">분석 대기 ${st.analyzable_count}장</b> (${byZone})${st.failed_count ? ` · 이전 실패 ${st.failed_count}장 포함` : ""}${lastReceived}`
+                : `새로 받은 순찰 사진이 없습니다${lastReceived}`) + unknownNote;
+
+            const box = document.getElementById('patrol-progress');
+            const b = st.latest_batch;
+            if (b && b.running) {
+                const finished = b.done + b.failed;
+                const pct = Math.round(finished / b.total * 100);
+                box.innerHTML = `
+                    <div class="flex justify-between mb-1"><span><b class="text-slate-700">분석 중 ${finished} / ${b.total}</b>
+                        ${b.current_location ? ` · 지금: ${escapeHtml(b.current_location)}` : " · 순서 대기 중"}</span><span>${pct}%</span></div>
+                    <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-blue-500 transition-all" style="width:${pct}%"></div></div>`;
+            } else if (b) {
+                const failures = b.failures.map(f => `${f.location_label}: ${f.error}`).join("\n");
+                box.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-500"></i>
+                    마지막 일괄 분석 ${formatTime(b.finished_at || b.started_at)} 완료 · ${b.total}장 중 <b class="text-emerald-700">${b.done}장 성공</b>`
+                    + (b.failed ? `, <b class="text-rose-600 cursor-help" title="${escapeHtml(failures)}">${b.failed}장 실패</b> (다음 분석 때 다시 시도)` : "");
+            } else {
+                box.innerHTML = "";
+            }
+            setAnalyzeButton(!!(b && b.running), st.analyzable_count > 0);
+        }
+
+        async function refreshPatrolStatus() {
+            clearTimeout(patrolTimer);
+            let st = null;
+            try {
+                st = await fetchJson(`${API_BASE}/patrol/status`);
+                renderPatrolStatus(st);
+            } catch (e) {
+                document.getElementById('patrol-summary').innerText = `수신함 상태를 불러오지 못했습니다: ${e.message}`;
+            }
+            const b = st && st.latest_batch;
+            const running = !!(b && b.running);
+            const progress = b ? b.done + b.failed : -1;
+            // 사진 하나가 끝날 때마다, 그리고 묶음이 끝났을 때 서가 현황 · 이력 갱신
+            if ((running && progress !== patrolProgress) || (patrolRunning && !running)) {
+                refreshLocations();
+                refreshHistory();
+            }
+            patrolRunning = running;
+            patrolProgress = progress;
+            patrolTimer = setTimeout(refreshPatrolStatus, running ? PATROL_POLL_MS : AUTO_REFRESH_MS);
+        }
+
+        async function startBatchAnalysis() {
+            setAnalyzeButton(true, true);
+            try {
+                const res = await fetchJson(`${API_BASE}/patrol/analyze`, { method: "POST" });
+                patrolProgress = -1;
+                console.log("일괄 분석 시작:", res);
+            } catch (e) {
+                alert(`❌ 일괄 분석을 시작하지 못했습니다: ${e.message}`);
+            }
+            refreshPatrolStatus();
+        }
+
+        // ===================== 확인이 필요한 층 목록 (층 선택 전 알림판) =====================
+        const ATTENTION_ORDER = ["pending_action", "retake", "pending_check", "no_reference"];
+
+        function renderAttentionList() {
+            const levels = Object.values(shelfIndex).map(x => x.level).filter(l => ATTENTION_ORDER.includes(l.status))
+                .sort((a, b) => ATTENTION_ORDER.indexOf(a.status) - ATTENTION_ORDER.indexOf(b.status));
+            const count = document.getElementById("issue-count");
+            count.innerText = levels.length ? `확인이 필요한 층 ${levels.length}곳` : "층 선택 전";
+            count.className = "text-xs font-semibold px-2 py-0.5 rounded-full " + (levels.length ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600");
+
+            const box = document.getElementById("librarian-tasks");
+            box.innerHTML = `
+                <div class="text-sm text-slate-500 mb-1"><i class="fa-solid fa-hand-pointer"></i>
+                    왼쪽 <b>서가 선택</b>에서 확인할 층을 누르면 그 층의 알림이 표시됩니다.</div>`;
+            if (levels.length === 0) {
+                box.insertAdjacentHTML("beforeend", `
+                    <div class="p-5 rounded-xl bg-emerald-50 border-l-4 border-emerald-500 text-emerald-800 text-sm">
+                        <i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i> 지금 확인이 필요한 층이 없습니다.</div>`);
+            } else {
+                box.insertAdjacentHTML("beforeend", `<div class="text-xs font-bold text-slate-500 mt-2">확인이 필요한 층 (우선순위순)</div>`);
+                levels.forEach(level => {
+                    const st = LEVEL_STATUS[level.status];
+                    const latest = level.latest_session;
+                    const row = document.createElement("button");
+                    row.className = "text-left px-3 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 flex items-center gap-3 text-sm";
+                    row.innerHTML = `
+                        <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full border ${st.cell}">${st.text}</span>
+                        <span class="flex-1 font-semibold text-slate-700">${escapeHtml(level.location_label)}</span>
+                        <span class="text-xs text-slate-500">${level.status === "no_reference"
+                            ? "정상 상태 기준 사진을 등록해야 분석할 수 있습니다"
+                            : `${latest.summary.pending_count ? `미처리 ${latest.summary.pending_count}건 · ` : ""}${formatTime(latest.scan_time)} 순찰`}</span>
+                        <i class="fa-solid fa-chevron-right text-slate-300"></i>`;
+                    row.addEventListener("click", () => selectShelf(level.shelf_id));
+                    box.appendChild(row);
+                });
+            }
+            document.getElementById("crop-images-grid").innerHTML =
+                `<div class="col-span-full text-center text-slate-400 py-10 text-sm">층을 선택하면 정돈 · 재배치가 필요한 도서의 책등 사진이 표시됩니다.</div>`;
+        }
+
+        // 선택을 풀고 '확인이 필요한 층' 목록으로 돌아감
+        function clearSelection() {
+            selectedShelfId = null;
+            currentSession = null;
+            checkNewResult();
+            document.getElementById('current-session-id').innerText = "확인할 서가를 선택하세요";
+            document.getElementById('back-to-list').classList.add('hidden');
+            setHistoryFilter(null);
+            setNormalPhoto(null);
+            showView('map');
+            renderShelfPicker();
+            renderAttentionList();
+        }
+
+        // ===================== 서가 선택 (구역 탭 → 책꽂이 → 층) =====================
+        async function refreshLocations() {
+            try {
+                locationTree = await fetchJson(`${API_BASE}/locations`);
+            } catch (e) {
+                document.getElementById('bookcase-grid').innerHTML =
+                    `<div class="text-sm text-rose-500 py-4">서가 정보를 불러오지 못했습니다: ${escapeHtml(e.message)}</div>`;
+                return;
+            }
+            shelfIndex = {};
+            locationTree.forEach(zone => zone.bookcases.forEach(bookcase => bookcase.levels.forEach(level => {
+                shelfIndex[level.shelf_id] = { zone, bookcase, level };
+            })));
+            if (!locationTree.some(z => z.zone_id === activeZoneId)) {
+                activeZoneId = locationTree.length ? locationTree[0].zone_id : null;
+            }
+            renderShelfPicker();
+            checkNewResult();
+            if (!selectedShelfId) renderAttentionList();
+        }
+
+        // 구역 안에서 사서가 신경 써야 할 층 수
+        function zoneSummary(zone) {
+            const count = { pending_action: 0, retake: 0, pending_check: 0 };
+            zone.bookcases.forEach(b => b.levels.forEach(l => { if (l.status in count) count[l.status]++; }));
+            return count;
+        }
+
+        function zoneBadge(zone) {
+            const c = zoneSummary(zone);
+            if (c.pending_action) return `<span class="text-[10px] px-1.5 rounded-full bg-rose-500 text-white">조치 ${c.pending_action}</span>`;
+            if (c.retake) return `<span class="text-[10px] px-1.5 rounded-full bg-orange-500 text-white">재촬영 ${c.retake}</span>`;
+            if (c.pending_check) return `<span class="text-[10px] px-1.5 rounded-full bg-amber-400 text-white">확인 ${c.pending_check}</span>`;
+            return "";
+        }
+
+        function levelCellText(level) {
+            if (level.status === "pending_action" || level.status === "pending_check") {
+                return String(level.latest_session.summary.pending_count);
+            }
+            return { retake: "!", unpatrolled: "", no_books: "", ok: "✓", no_reference: "?" }[level.status];
+        }
+
+        function renderShelfPicker() {
+            // 구역 탭
+            const tabs = document.getElementById('zone-tabs');
+            tabs.innerHTML = "";
+            locationTree.forEach(zone => {
+                const active = zone.zone_id === activeZoneId;
+                const tab = document.createElement("button");
+                tab.className = "px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 border transition-colors "
+                    + (active ? "bg-teal-600 border-teal-600 text-white" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50");
+                tab.innerHTML = `${escapeHtml(zone.zone_id)}구역 ${zoneBadge(zone)}`;
+                tab.title = `${zone.zone_name} (${zone.location || ""})`;
+                tab.addEventListener("click", () => { activeZoneId = zone.zone_id; renderShelfPicker(); });
+                tabs.appendChild(tab);
+            });
+
+            const zone = locationTree.find(z => z.zone_id === activeZoneId);
+            const grid = document.getElementById('bookcase-grid');
+            grid.innerHTML = "";
+            if (!zone) {
+                grid.innerHTML = `<div class="text-sm text-slate-400 py-4">등록된 서가가 없습니다. (backend에서 python setup_db.py 실행)</div>`;
+                return;
+            }
+            document.getElementById('zone-info').innerHTML =
+                `<b class="text-slate-600">${escapeHtml(zone.zone_name)}</b> · ${escapeHtml(zone.location || "")} · 책꽂이 ${zone.bookcases.length}개`;
+
+            // 책꽂이마다 세로로 층을 쌓은 미니맵 (한 줄에 구역의 모든 책꽂이)
+            zone.bookcases.forEach(bookcase => {
+                const col = document.createElement("div");
+                col.className = "flex-1 min-w-[52px] flex flex-col";
+                col.title = `${bookcase.bookcase_no}번 책꽂이 · ${bookcase.bookcase_name || ""}`;
+                col.innerHTML = `
+                    <div class="text-[11px] font-semibold text-slate-600 text-center mb-1">${bookcase.bookcase_no}번</div>
+                    <div class="border-2 border-amber-900/30 bg-amber-900/5 rounded-md p-0.5 flex flex-col gap-0.5" data-levels></div>`;
+                const frame = col.querySelector("[data-levels]");
+                bookcase.levels.forEach(level => {
+                    const st = LEVEL_STATUS[level.status];
+                    const selected = level.shelf_id === selectedShelfId;
+                    const cell = document.createElement("button");
+                    const refOk = level.reference_update.eligible;
+                    cell.className = `relative h-7 border rounded-sm px-1 flex items-center justify-between text-[10px] leading-none transition-all ${st.cell} `
+                        + (selected ? "ring-2 ring-blue-500 ring-offset-1 z-10 " : "")
+                        + "hover:brightness-95";
+                    const last = level.latest_session ? `\n최근 순찰 ${formatTime(level.latest_session.scan_time)}` : "";
+                    cell.title = `${level.location_label}\n${st.text} · 도서 ${level.book_count}권${last}`
+                        + (refOk ? "\n● 최근 순찰 사진으로 기준 사진 갱신 가능" : "");
+                    cell.innerHTML = `<span class="font-bold">${level.level}</span><span>${levelCellText(level)}</span>`
+                        + (refOk ? `<span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-sky-500 ring-1 ring-white"></span>` : "");
+                    cell.addEventListener("click", () => selectShelf(level.shelf_id));
+                    frame.appendChild(cell);
+                });
+                grid.appendChild(col);
+            });
+
+            document.getElementById('status-legend').innerHTML = Object.values(LEVEL_STATUS).map(st =>
+                `<span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm ${st.dot}"></span>${st.text}</span>`
+            ).join("") + `<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky-500"></span>기준 갱신 가능</span>`
+              + `<span class="text-slate-400">· 숫자 = 미처리 알림 수</span>`;
+            updateBulkReferenceButton();
+        }
+
+        // 기준 사진 일괄 갱신 버튼: 전체 구역의 후보 수 표시
+        function updateBulkReferenceButton() {
+            const count = Object.values(shelfIndex).filter(x => x.level.reference_update.eligible).length;
+            document.getElementById('bulk-ref-btn').disabled = count === 0;
+            document.getElementById('bulk-ref-text').innerText = `기준 사진 일괄 갱신 (${count}곳)`;
+        }
+
+        // 층을 선택: 최근 순찰 결과 + 사진 + 그 층의 이력
+        function selectShelf(shelfId) {
+            const entry = shelfIndex[shelfId];
+            if (!entry) return;
+            selectedShelfId = shelfId;
+            activeZoneId = entry.zone.zone_id;
+            renderShelfPicker();
+            setHistoryFilter(shelfId);
+            if (entry.level.latest_session) {
+                loadSession(entry.level.latest_session.session_id, { showPhoto: true });
+            } else {
+                showEmptyShelf(entry.level);
+            }
+        }
+
+        // 보고 있는 층에 로봇이 보낸 더 새로운 순찰 결과가 있으면 알림 버튼 표시
+        function checkNewResult() {
+            const btn = document.getElementById('new-result');
+            const entry = currentSession && shelfIndex[currentSession.shelf_id];
+            const latest = entry && entry.level.latest_session;
+            const hasNew = !!(latest && latest.session_id !== currentSession.session_id && latest.scan_time > currentSession.scan_time);
+            btn.classList.toggle('hidden', !hasNew);
+            btn.classList.toggle('flex', hasNew);
+        }
+
+        function openNewResult() {
+            const latest = shelfIndex[currentSession.shelf_id].level.latest_session;
+            loadSession(latest.session_id, { showPhoto: true });
+        }
+
+        // ===================== 순찰 이력 =====================
+        function historyBadge(s) {
+            const sum = s.summary;
+            if (!s.quality.is_reliable) return ["재촬영 필요", "bg-rose-100 text-rose-700"];
+            if (sum.pending_count > 0) {
+                return [`미처리 ${sum.pending_count}`, sum.pending_action_count > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-700"];
+            }
+            if (sum.issue_count > 0) return ["처리 완료", "bg-emerald-100 text-emerald-700"];
+            return ["문제 없음", "bg-emerald-100 text-emerald-700"];
+        }
+
+        function setHistoryFilter(shelfId) {
+            historyFilter = shelfId;
+            const chip = document.getElementById('history-filter');
+            chip.classList.toggle('hidden', !shelfId);
+            if (shelfId) {
+                const label = shelfIndex[shelfId] ? shelfIndex[shelfId].level.location_label : shelfId;
+                chip.innerHTML = `${escapeHtml(label)}만 <i class="fa-solid fa-xmark ml-0.5"></i>`;
+            }
+            refreshHistory();
+        }
+
+        async function refreshHistory() {
+            const box = document.getElementById('session-history');
+            let sessions;
+            try {
+                const filter = historyFilter ? `&shelf_id=${encodeURIComponent(historyFilter)}` : "";
+                sessions = await fetchJson(`${API_BASE}/dashboard/sessions?limit=50${filter}`);
+            } catch (e) {
+                box.innerHTML = `<div class="text-center text-rose-500 py-6 text-sm">이력을 불러오지 못했습니다: ${escapeHtml(e.message)}</div>`;
+                return;
+            }
+            if (sessions.length === 0) {
+                box.innerHTML = `<div class="text-center text-slate-400 py-6 text-sm">${historyFilter ? "이 층은" : "아직"} 순찰 기록이 없습니다.</div>`;
+                return;
+            }
+            box.innerHTML = "";
+            sessions.forEach(s => {
+                const [badgeText, badgeClass] = historyBadge(s);
+                const selected = currentSession && currentSession.session_id === s.session_id;
+                const item = document.createElement("button");
+                item.className = `text-left px-3 py-2 rounded-lg border text-sm flex items-center gap-2 transition-colors `
+                    + (selected ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:bg-slate-50");
+                item.innerHTML = `
+                    <span class="font-semibold text-slate-700 w-24 shrink-0">${formatTime(s.scan_time)}</span>
+                    <span class="text-slate-500 flex-1 truncate" title="${locationText(s)}">${locationText(s)}</span>
+                    <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full ${badgeClass}">${badgeText}</span>
+                `;
+                item.addEventListener("click", () => loadSession(s.session_id, { showPhoto: true }));
+                box.appendChild(item);
+            });
+        }
+
+        // ===================== 세션 결과 =====================
+        async function loadSession(sessionId, { showPhoto = false } = {}) {
+            const url = sessionId
+                ? `${API_BASE}/dashboard/results?session_id=${encodeURIComponent(sessionId)}`
+                : `${API_BASE}/dashboard/results`;
+            try {
+                const payload = await fetchJson(url);
+                if (!payload.session_id) return;   // 아직 세션 없음
+                currentSession = payload;
+                document.getElementById('back-to-list').classList.remove('hidden');
+                document.getElementById('current-session-id').innerText =
+                    `${payload.location_label} · ${formatTime(payload.scan_time)} 순찰`;
+                if (shelfIndex[payload.shelf_id]) {
+                    selectedShelfId = payload.shelf_id;
+                    activeZoneId = shelfIndex[payload.shelf_id].zone.zone_id;
+                    renderShelfPicker();
+                }
+                setShelfPhoto(payload, payload.location_label);
+                if (showPhoto) showView('photo');
+                renderLibrarianDashboard(currentSession);
+                refreshHistory();
+                checkNewResult();
+            } catch (e) {
+                alert(`❌ 결과를 불러오지 못했습니다: ${e.message}`);
+            }
+        }
+
+        function showEmptyShelf(level) {
+            currentSession = null;
+            checkNewResult();
+            document.getElementById('back-to-list').classList.remove('hidden');
+            document.getElementById('current-session-id').innerText = `${level.location_label} · 순찰 기록 없음`;
+            setShelfPhoto(null, level.location_label);
+            showView('photo');
+            const count = document.getElementById("issue-count");
+            count.innerText = "미순찰";
+            count.className = "text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600";
+            document.getElementById("librarian-tasks").innerHTML = `
+                <div class="text-center text-slate-400 py-16">
+                    <i class="fa-solid fa-route text-3xl mb-2 block"></i>
+                    <b>${escapeHtml(level.location_label)}</b>은(는) 아직 순찰 기록이 없습니다.
+                    ${level.book_count === 0
+                        ? `<div class="text-xs mt-2">등록된 도서가 없는 층입니다. 도서 정보가 등록되면 분석할 수 있습니다.</div>`
+                        : (level.normal_images.length ? "" : `<div class="text-xs mt-2 text-violet-600">정상 상태 기준 사진이 없습니다. 왼쪽 <b>정상 상태</b> 탭에서 등록하세요.</div>`)}
+                </div>`;
+            document.getElementById("crop-images-grid").innerHTML =
+                `<div class="col-span-full text-center text-slate-400 py-10 text-sm">표시할 책등 이미지가 없습니다.</div>`;
+        }
+
+        async function updateAction(row, status) {
+            try {
+                const updated = await fetchJson(`${API_BASE}/results/${row.result_id}/action`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status }),
+                });
+                row.action_status = updated.action_status;
+                row.action_time = updated.action_time;
+                renderLibrarianDashboard(currentSession);
+                refreshHistory();
+                refreshLocations();
+            } catch (e) {
+                alert(`❌ 조치 상태 저장 실패: ${e.message}`);
+            }
+        }
+
+        function actionButton(label, icon, classes, onClick) {
+            const btn = document.createElement("button");
+            btn.className = `text-[11px] font-semibold px-2 py-1 rounded-md flex items-center gap-1 whitespace-nowrap ${classes}`;
+            btn.innerHTML = `<i class="fa-solid ${icon}"></i> ${label}`;
+            btn.addEventListener("click", onClick);
+            return btn;
+        }
+
+        function buildTaskCard(row) {
+            const [primary, ...others] = row.issues;
+            const group = GROUP_INFO[primary.group];
+            const handled = row.action_status !== "PENDING";
+            const message = (MESSAGE_BY_LABEL[primary.label] || (r => bookLabel(r)))(row);
+            const extraBadges = others.map(o =>
+                `<span class="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded ${GROUP_INFO[o.group].badge}">+ ${escapeHtml(o.label)}</span>`
+            ).join("");
+            const handledBadge = handled
+                ? `<span class="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">${ACTION_LABELS[row.action_status]} · ${formatTime(row.action_time)}</span>`
+                : "";
+
+            const card = document.createElement("div");
+            card.className = `p-3 rounded-xl border-l-4 flex items-center gap-3 shadow-sm text-sm `
+                + (handled ? "border-slate-300 bg-slate-50 text-slate-400" : group.color);
+            card.innerHTML = `
+                <i class="fa-solid ${group.icon} text-base opacity-90"></i>
+                <div class="flex-1 ${handled ? "line-through decoration-slate-300" : ""}"><b>[${escapeHtml(primary.label)}]</b> ${message}${extraBadges}</div>
+                ${handledBadge}
+                <div class="flex flex-col gap-1 shrink-0" data-actions></div>
+            `;
+            const actions = card.querySelector("[data-actions]");
+            if (handled) {
+                actions.appendChild(actionButton("되돌리기", "fa-rotate-left", "bg-white border border-slate-200 text-slate-500 hover:bg-slate-100",
+                    () => updateAction(row, "PENDING")));
+            } else {
+                actions.appendChild(actionButton("처리 완료", "fa-check", "bg-emerald-600 text-white hover:bg-emerald-700",
+                    () => updateAction(row, "RESOLVED")));
+                actions.appendChild(actionButton("오탐", "fa-ban", "bg-white border border-slate-300 text-slate-600 hover:bg-slate-100",
+                    () => updateAction(row, "FALSE_POSITIVE")));
+            }
+            return card;
+        }
+
+        function buildSection(title, badgeClass, rows, open) {
+            const section = document.createElement("details");
+            section.className = "group/sec";
+            section.open = open;
+            section.innerHTML = `
+                <summary class="cursor-pointer select-none flex items-center gap-2 text-xs font-bold text-slate-500 py-1.5">
+                    <i class="fa-solid fa-chevron-right text-[10px] transition-transform group-open/sec:rotate-90"></i>
+                    ${title}
+                    <span class="px-1.5 py-0.5 rounded-full ${badgeClass}">${rows.length}</span>
+                </summary>
+                <div class="flex flex-col gap-2 mt-1 mb-2"></div>
+            `;
+            const list = section.querySelector("div");
+            rows.forEach(row => list.appendChild(buildTaskCard(row)));
+            return section;
+        }
+
+        function buildQualityWarning(quality) {
+            const box = document.createElement("div");
+            box.className = "p-4 rounded-xl border-l-4 border-rose-500 bg-rose-50 text-rose-800 shadow-sm text-sm";
+            box.innerHTML = `
+                <div class="flex items-center gap-2 font-bold mb-1">
+                    <i class="fa-solid fa-camera-rotate text-base"></i> 인식 신뢰도 낮음 — 재촬영이 필요합니다
+                </div>
+                <ul class="list-disc ml-6 text-xs space-y-0.5">${quality.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>
+                <div class="text-xs mt-2 text-rose-600">아래 개별 판정은 오탐일 가능성이 높아 참고용으로만 접어 두었습니다.</div>
+            `;
+            return box;
+        }
+
+        function buildSpineThumb(row) {
+            const group = GROUP_INFO[row.issues[0].group];
+            const url = spineUrl(row.spine_img_path);
+            const title = `${seqLabel(row)} [${row.book_id || "Unknown"}${row.title ? " " + row.title : ""}]`;
+            const imgBox = document.createElement("div");
+            imgBox.className = "relative bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shadow-sm flex flex-col items-center p-1 group";
+            imgBox.innerHTML = `
+                <div class="w-full h-24 bg-cover bg-center rounded-md cursor-zoom-in" style="background-image: url('${url}')"></div>
+                <div class="text-[10px] font-bold mt-1 text-slate-500 truncate w-full text-center group-hover:text-blue-600">${escapeHtml(title)}</div>
+                <span class="absolute top-1 right-1 text-[8px] font-extrabold px-1 rounded-sm shadow-sm ${group.badge}">${escapeHtml(row.issues[0].label)}</span>
+            `;
+            imgBox.firstElementChild.addEventListener("click", () => openLightbox(url, title, row.final_status || ""));
+            return imgBox;
+        }
+
+        function renderLibrarianDashboard(payload) {
+            const results = payload.results || [];
+            const quality = payload.quality;
+            const reliable = !quality || quality.is_reliable;
+
             const taskContainer = document.getElementById("librarian-tasks");
             const gridContainer = document.getElementById("crop-images-grid");
             const countLabel = document.getElementById("issue-count");
-
             taskContainer.innerHTML = "";
             gridContainer.innerHTML = "";
-            
-            let anomalyCount = 0;
 
-            results.forEach((book) => {
-                let taskMessage = "";
-                let iconClass = "fa-triangle-exclamation";
-                let errorColor = "border-red-500 bg-red-50 text-red-700";
-                
-                const seq = book.sequence_order ? `${book.sequence_order}번째` : '위치 불명';
-                const bId = book.book_id || "Unknown";
-                const visual = book.visual_status || "";
-                const finalStat = book.final_status || "";
+            const withIssues = results.filter(r => r.issues.length > 0);
+            const pending = sortByPriority(withIssues.filter(isPending));
+            const handled = sortByPriority(withIssues.filter(r => !isPending(r)));
+            const actionCount = pending.filter(r => r.issues[0].group !== "check").length;
+            const checkCount = pending.length - actionCount;
 
-                // 에러 가이드 메시지 작성 (final_status 기준으로 통일)
-                if (visual === "abnormal_upside") {
-                    taskMessage = `<b>[뒤집힘]</b> <b>${seq}</b> 책(ID: ${bId})이 거꾸로 회전되어 있습니다. 똑바로 세워주세요.`;
-                } else if (visual === "abnormal_tilted") {
-                    taskMessage = `<b>[기울어짐]</b> <b>${seq}</b> 책(ID: ${bId})이 방치되어 쓰러졌습니다. 정돈해 주세요.`;
-                    errorColor = "border-amber-500 bg-amber-50 text-amber-700";
-                } else if (finalStat.includes("오배열")) {
-                    taskMessage = `<b>[오배열]</b> <b>${seq}</b> 자리에 있어야 할 도서와 스캔된 RFID가 다릅니다. (인식: ${bId})`;
-                    iconClass = "fa-shuffle";
-                    errorColor = "border-violet-500 bg-violet-50 text-violet-700";
-                } else if (finalStat.includes("오배가")) {
-                    taskMessage = `<b>[오배가]</b> <b>${bId}</b> 도서가 이 서가에 속하지 않습니다. 원래 서가로 반납해 주세요.`;
-                    iconClass = "fa-right-left";
-                    errorColor = "border-orange-500 bg-orange-50 text-orange-700";
-                } else if (finalStat.includes("누락")) {
-                    taskMessage = `<b>[누락/분실]</b> 청구기호 명부에는 있으나, <b>${bId}</b> 도서의 실물 책등 인식을 실패했습니다.`;
-                    iconClass = "fa-eye-slash";
+            // 요약 라벨 (미처리 알림 기준)
+            const pill = "text-xs font-semibold px-2 py-0.5 rounded-full ";
+            if (!reliable) {
+                countLabel.innerText = "재촬영 필요";
+                countLabel.className = pill + "bg-rose-100 text-rose-700";
+            } else if (pending.length > 0) {
+                countLabel.innerText = `조치 필요 ${actionCount}권 · 확인 필요 ${checkCount}권`;
+                countLabel.className = pill + (actionCount > 0 ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-700");
+            } else if (withIssues.length > 0) {
+                countLabel.innerText = "모두 처리됨";
+                countLabel.className = pill + "bg-emerald-100 text-emerald-700";
+            } else {
+                countLabel.innerText = "문제 없음";
+                countLabel.className = pill + "bg-emerald-100 text-emerald-700";
+            }
+
+            // 인식 품질이 낮으면 재촬영 안내를 먼저 띄우고, 개별 판정은 접어서 참고용으로만 제공
+            let listContainer = taskContainer;
+            if (!reliable) {
+                taskContainer.appendChild(buildQualityWarning(quality));
+                if (pending.length > 0) {
+                    const detail = document.createElement("details");
+                    detail.className = "mt-1";
+                    detail.innerHTML = `<summary class="cursor-pointer select-none text-xs font-bold text-slate-500 py-1.5">참고용 상세 판정 ${pending.length}건 보기</summary><div class="flex flex-col gap-1 mt-1"></div>`;
+                    taskContainer.appendChild(detail);
+                    listContainer = detail.querySelector("div");
                 }
+            }
 
-                // 이상 항목 발생 시 우상(텍스트) 및 우하(이미지) 랙에 동시 데이터 적재
-                if (taskMessage) {
-                    anomalyCount++;
-                    
-                    // 1. 우상단 알림 메시지 카드 생성
-                    const taskCard = document.createElement("div");
-                    taskCard.className = `p-3 rounded-xl border-l-4 ${errorColor} flex items-center shadow-sm text-sm transition-all hover:scale-[1.01]`;
-                    taskCard.innerHTML = `
-                        <i class="fa-solid ${iconClass} mr-3 text-base opacity-90"></i>
-                        <div class="flex-1">${taskMessage}</div>
-                    `;
-                    taskContainer.appendChild(taskCard);
-
-                    // 2. 우하단 크롭 이미지 썸네일 박스 생성
-                    const imgBox = document.createElement("div");
-                    imgBox.className = "relative bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shadow-sm flex flex-col items-center p-1 group";
-                    
-                    // 실제 pipeline_output 폴더의 책등 이미지를 FastAPI static 경로로 연결
-                    // main.py에서 /static/spine 로 마운트된 ach/pipeline_output 디렉토리 사용
-                    const spineImgUrl = (book.spine_img_path && book.spine_img_path !== "")
-                        ? `${API_BASE.replace('/api', '')}/static/spine/${book.spine_img_path}`
-                        : "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=150&auto=format&fit=crop&q=60";
-                        
-                    imgBox.innerHTML = `
-                        <div class="w-full h-24 bg-cover bg-center rounded-md cursor-zoom-in" style="background-image: url('${spineImgUrl}')" onclick="openLightbox('${spineImgUrl}', '${seq} [${bId}]', '${finalStat}')"></div>
-                        <div class="text-[10px] font-bold mt-1 text-slate-500 truncate w-full text-center group-hover:text-blue-600">${seq} [${bId}]</div>
-                        <span class="absolute top-1 right-1 bg-rose-500 text-white text-[8px] font-extrabold px-1 rounded-sm shadow-sm">ERROR</span>
-                    `;
-                    gridContainer.appendChild(imgBox);
-                }
+            ISSUE_GROUPS.forEach(group => {
+                const rows = pending.filter(r => r.issues[0].group === group.key);
+                if (rows.length === 0) return;
+                // '확인 필요'는 조치가 필요한 알림이 있을 때 기본으로 접어 둠
+                listContainer.appendChild(buildSection(group.title, group.badge, rows, group.key !== "check" || actionCount === 0));
             });
 
-            // 스캔 결과 요약 라벨 업데이트
-            countLabel.innerText = `문제 도서 ${anomalyCount}권 발견`;
-            countLabel.className = anomalyCount > 0 
-                ? "text-xs font-semibold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full"
-                : "text-xs font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full";
+            if (handled.length > 0) {
+                taskContainer.appendChild(buildSection("처리된 알림", "bg-emerald-100 text-emerald-700", handled, false));
+            }
 
-            // 정상 상태 예외 처리
-            if (anomalyCount === 0) {
-                taskContainer.innerHTML = `
-                    <div class="p-5 rounded-xl bg-emerald-50 border-l-4 border-emerald-500 flex items-center text-emerald-800 shadow-sm">
-                        <i class="fa-solid fa-circle-check text-xl text-emerald-600 mr-3"></i>
-                        <div class="text-sm"><b>서가 정돈 완료:</b> 현재 검출된 문제 도서가 없습니다. 서가가 정 위치에 완벽하게 배열되어 있습니다!</div>
-                    </div>
-                `;
-                gridContainer.innerHTML = `
-                    <div class="col-span-full text-center text-emerald-600 py-10 font-medium text-sm">
-                        <i class="fa-solid fa-sparkles text-lg mb-1 block animate-bounce"></i> 모든 책등이 정상 정렬 상태입니다.
-                    </div>
-                `;
+            // 정상 상태 / 전부 처리된 상태 안내
+            if (pending.length === 0 && reliable) {
+                const done = document.createElement("div");
+                done.className = "p-5 rounded-xl bg-emerald-50 border-l-4 border-emerald-500 flex items-center text-emerald-800 shadow-sm";
+                done.innerHTML = withIssues.length > 0
+                    ? `<i class="fa-solid fa-circle-check text-xl text-emerald-600 mr-3"></i><div class="text-sm"><b>모든 알림 처리 완료:</b> 이 순찰에서 발견된 ${withIssues.length}건이 모두 처리되었습니다.</div>`
+                    : `<i class="fa-solid fa-circle-check text-xl text-emerald-600 mr-3"></i><div class="text-sm"><b>서가 정돈 완료:</b> 현재 검출된 문제 도서가 없습니다. 서가가 정 위치에 완벽하게 배열되어 있습니다!</div>`;
+                taskContainer.prepend(done);
+            }
+
+            // 책등 크롭은 미처리 알림 중 실제 이미지가 있는 도서만 (영상에서 찾지 못한 도서는 크롭이 없음)
+            const thumbs = pending.filter(r => r.spine_img_path);
+            thumbs.forEach(r => gridContainer.appendChild(buildSpineThumb(r)));
+            if (thumbs.length === 0) {
+                gridContainer.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10 text-sm">표시할 책등 이미지가 없습니다.</div>`;
             }
         }
+
+        // ===================== 초기화 =====================
+        showView('map');
+        (async () => {
+            await refreshLocations();   // 층 선택 전이므로 알림판에는 '확인이 필요한 층' 목록 표시
+            refreshHistory();
+            refreshPatrolStatus();
+        })();
+        loadLibraryMap();
+        // 새 결과 반영: 서가 상태와 이력만 갱신 (보고 있는 알림판은 바꾸지 않음)
+        setInterval(() => { refreshLocations(); refreshHistory(); }, AUTO_REFRESH_MS);
     </script>
 </body>
 </html>

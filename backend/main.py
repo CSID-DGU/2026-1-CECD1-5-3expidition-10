@@ -1,24 +1,29 @@
 import os
 import shutil
-import subprocess
-import sys
-import json
-from datetime import datetime
-from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Path, UploadFile, File, BackgroundTasks
+from datetime import datetime, date, timedelta
+from typing import List, Optional
+from fastapi import FastAPI, HTTPException, Path, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-import mysql.connector
 from mysql.connector import Error
-from analyzer import analyze_shelf_session
-
-LATEST_PIPELINE_RESULTS = []
+from analyzer import (analyze_shelf_session, assess_session_quality, classify_issues,
+                      get_master_book_info, get_virtual_rfid_items)
+from config import DEFAULT_SHELF_ID, NORMAL_IMAGE_DIR, SPINE_STORE_DIR
+from image_check import detect_image_ext
+from normal_images import (delete_normal_images, ensure_normal_folders, expected_normal_path, find_history_images,
+                           find_normal_images, is_current_normal_image, replace_normal_image,
+                           restore_previous_normal_image)
+from db import get_db_connection
+from locations import build_location_tree, fetch_shelf_location, fetch_shelf_locations, location_label
+from patrol import (BatchAlreadyRunning, list_patrol_photos, patrol_status, recover_interrupted_photos,
+                    save_patrol_photo, start_batch_analysis)
+from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
+from spine_archive import PIPELINE_OUTPUT_DIR
 
 app = FastAPI(title="도서관 지능형 서가 관리 자동화 API")
 
-# 🌟 [통합] 브라우저 용량 제한 및 안정적인 CORS 설정 해제
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -27,24 +32,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-PIPELINE_OUTPUT_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ach", "pipeline_outputs"))
+# 세션 보관소(config.SPINE_STORE_DIR): spine_store/<session_id>/ 에 원본 사진(original.*)과 책등 크롭을 보관
+# 작업 폴더(ach/pipeline_outputs)는 다음 분석에서 덮어써지므로, 분석 직후 보관소로 복사해 둡니다.
 os.makedirs(PIPELINE_OUTPUT_DIR, exist_ok=True)
-app.mount("/static/spine", StaticFiles(directory=PIPELINE_OUTPUT_DIR), name="spine_images")
+os.makedirs(SPINE_STORE_DIR, exist_ok=True)
+app.mount("/static/spine", StaticFiles(directory=SPINE_STORE_DIR), name="spine_images")
 
-DB_CONFIG = {
-    'host': '127.0.0.1',
-    'user': 'root',
-    'password': '1234',
-    'database': 'library_ai_db',
-    'port': 3306
-}
+# 층별 정상 상태 기준 이미지: normal_images/<구역>/<책꽂이>/<층ID>[_*].jpg → /static/normal/... (대시보드 '정상 상태' 탭)
+os.makedirs(NORMAL_IMAGE_DIR, exist_ok=True)
+app.mount("/static/normal", StaticFiles(directory=NORMAL_IMAGE_DIR), name="normal_images")
 
-def get_db_connection():
-    try:
-        return mysql.connector.connect(**DB_CONFIG)
-    except Error as e:
-        print(f"🚨 DB 연결 에러: {e}")
-        return None
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 대시보드 / 일일 리포트 화면이 공유하는 스크립트 (static/common.js)
+app.mount("/assets", StaticFiles(directory=os.path.join(BACKEND_DIR, "static")), name="assets")
+
+# 사서가 알림에 대해 기록할 수 있는 조치 상태
+ACTION_STATUSES = {"PENDING", "RESOLVED", "FALSE_POSITIVE"}   # 미처리 / 처리 완료 / 오탐
+
+
+def require_db():
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="DB 연결 실패")
+    return conn
+
 
 # ==========================================
 # 📦 데이터 검증 모델 (Pydantic Models)
@@ -53,13 +65,14 @@ class SessionStartRequest(BaseModel):
     session_id: str
     shelf_id: str
     scan_time: str
+    image_path: Optional[str] = None   # 원본 사진 (spine_store 기준 <session_id>/original.*, spine_archive.archive_original_image)
 
 class VisionItem(BaseModel):
     vision_id: str
     book_id: Optional[str] = None
     sequence_order: int
     confidence_score: Optional[float] = 0.0
-    spine_img_path: Optional[str] = "" 
+    spine_img_path: Optional[str] = ""
     visual_status: Optional[str] = "normal"
 
 class VisionScanRequest(BaseModel):
@@ -76,20 +89,21 @@ class RfidScanRequest(BaseModel):
     session_id: str
     rfid_items: List[RfidItem]
 
+class ActionUpdateRequest(BaseModel):
+    status: str   # PENDING / RESOLVED / FALSE_POSITIVE
+
 
 # ==========================================
-# 🤖 1~5단계: 로봇 수집 데이터 통신 API
+# 🤖 로봇 수집 데이터 통신 API (run_master.py 등 외부 클라이언트용)
 # ==========================================
 @app.post("/api/session/start")
 def start_session(payload: SessionStartRequest):
-    conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="DB 연결 실패")
+    conn = require_db()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO SHELF_SESSION (session_id, shelf_id, scan_time) VALUES (%s, %s, %s)",
-            (payload.session_id, payload.shelf_id, payload.scan_time)
+            "INSERT INTO SHELF_SESSION (session_id, shelf_id, scan_time, image_path) VALUES (%s, %s, %s, %s)",
+            (payload.session_id, payload.shelf_id, payload.scan_time, payload.image_path)
         )
         conn.commit()
         return {"status": "success", "message": "세션 시작됨", "session_id": payload.session_id}
@@ -102,20 +116,16 @@ def start_session(payload: SessionStartRequest):
 
 @app.post("/api/rfid/scan")
 def receive_rfid(payload: RfidScanRequest):
-    conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="DB 연결 실패")
+    conn = require_db()
     cursor = conn.cursor()
     try:
-        inserted = 0
         for item in payload.rfid_items:
             cursor.execute(
                 "INSERT INTO RFID_DATA (session_id, rfid_uid, book_id, title, rssi) VALUES (%s, %s, %s, %s, %s)",
                 (payload.session_id, item.rfid_uid, item.book_id, item.title, item.rssi)
             )
-            inserted += 1
         conn.commit()
-        return {"status": "success", "inserted_rfid_count": inserted}
+        return {"status": "success", "inserted_rfid_count": len(payload.rfid_items)}
     except Error as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"RFID 적재 에러: {e}")
@@ -125,23 +135,19 @@ def receive_rfid(payload: RfidScanRequest):
 
 @app.post("/api/vision/scan")
 def receive_vision(payload: VisionScanRequest):
-    conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="DB 연결 실패")
+    conn = require_db()
     cursor = conn.cursor()
     try:
-        inserted = 0
         for item in payload.vision_items:
             cursor.execute(
-                """INSERT INTO VISION_DATA 
-                   (vision_id, session_id, book_id, sequence_order, confidence_score, spine_img_path, visual_status) 
+                """INSERT INTO VISION_DATA
+                   (vision_id, session_id, book_id, sequence_order, confidence_score, spine_img_path, visual_status)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (item.vision_id, payload.session_id, item.book_id, item.sequence_order, 
+                (item.vision_id, payload.session_id, item.book_id, item.sequence_order,
                  item.confidence_score, item.spine_img_path, item.visual_status)
             )
-            inserted += 1
         conn.commit()
-        return {"status": "success", "inserted_vision_count": inserted}
+        return {"status": "success", "inserted_vision_count": len(payload.vision_items)}
     except Error as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Vision 적재 에러: {e}")
@@ -151,9 +157,7 @@ def receive_vision(payload: VisionScanRequest):
 
 @app.post("/api/session/{session_id}/analyze")
 def trigger_analyze(session_id: str = Path(...)):
-    conn = get_db_connection()
-    if not conn:
-        raise HTTPException(status_code=500, detail="DB 연결 실패")
+    conn = require_db()
     try:
         cursor = conn.cursor(dictionary=True)
         cursor.execute("SELECT shelf_id FROM SHELF_SESSION WHERE session_id = %s", (session_id,))
@@ -161,189 +165,422 @@ def trigger_analyze(session_id: str = Path(...)):
         cursor.close()
         if not row:
             raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
-        analyze_shelf_session(session_id, row['shelf_id'], conn)
+        result = analyze_shelf_session(session_id, row['shelf_id'], conn)
+        if result.get("status") != "success":
+            raise HTTPException(status_code=500, detail=f"분석 엔진 에러: {result.get('message')}")
         conn.commit()
         return {"status": "success", "message": "융합 분석 완료"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"분석 엔진 에러: {str(e)}")
     finally:
         conn.close()
 
 
-# =========================================================================
-# 🚀 웹 UI 전용 원클릭 전체 파이프라인 트리거 엔드포인트 (비동기 스레드 방식)
-# =========================================================================
-CURRENT_SERVER_DIR = os.path.dirname(os.path.abspath(__file__)) # CECD/backend (혹은 실행 위치)
-BASE_PROJECT_DIR = os.path.dirname(CURRENT_SERVER_DIR)         # CECD (마스터 최상위)
+# ==========================================
+# 🚀 분석 요청 (작업 대기열)
+# ==========================================
+def require_analyzable_shelf(shelf_id: str) -> dict:
+    shelf = get_shelf_or_404(shelf_id)
+    if shelf["book_count"] == 0:
+        # 정답지가 비어 있으면 인식된 모든 책이 '오배가'로 판정되므로 분석하지 않음
+        raise HTTPException(status_code=400, detail=f"{shelf['location_label']}에는 등록된 도서가 없어 분석할 수 없습니다.")
+    return shelf
 
-ACH_DIR = os.path.normpath(os.path.join(BASE_PROJECT_DIR, "ach"))
-TEST_DIR = os.path.normpath(os.path.join(ACH_DIR, "dataset", "test"))
+def require_image_ext(file: UploadFile) -> str:
+    """업로드 파일의 저장 확장자 (.jpg / .png). JsonTesting.py가 읽을 수 있는 형식만 허용"""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTS:
+        raise HTTPException(status_code=400, detail=f"지원하지 않는 이미지 형식입니다: '{ext}' (jpg, jpeg, png만 가능)")
+    return ALLOWED_IMAGE_EXTS[ext]
 
-print(f"\n🔍 [인프라 경로 매핑 레포트]")
-print(f" -> 백엔드 서버 절대위치: {CURRENT_SERVER_DIR}")
-print(f" -> AI 엔진(ach) 절대위치: {ACH_DIR}")
-print(f" -> 업로드 타겟 절대위치: {TEST_DIR}\n")
+@app.post("/api/pipeline/run", status_code=202)
+def run_full_pipeline_from_ui(file: UploadFile = File(...), shelf_id: str = Form(DEFAULT_SHELF_ID)):
+    """
+    (즉시 분석 · 테스트용) 사진 1장을 바로 분석 대기열에 넣고 작업 ID를 돌려줍니다.
+    평소 순찰은 /api/patrol/photos 로 수신함에 쌓았다가 /api/patrol/analyze 로 한꺼번에 분석합니다.
+    진행 상황은 GET /api/jobs/{job_id} 로 확인합니다.
+    """
+    shelf = require_analyzable_shelf(shelf_id)
+    ext = require_image_ext(file)
+    if not find_normal_images(shelf):
+        raise HTTPException(status_code=400, detail=f"{shelf['location_label']}의 정상 상태 기준 이미지가 없습니다. "
+                                                    f"{expected_normal_path(shelf)} 에 넣어 주세요.")
 
-# 🌟 브라우저 타임아웃을 끊기 위해 분리한 무거운 AI 파이프라인 백그라운드 워커 함수
-# =========================================================================
-# 🚀 [수정본] 환경 경로를 완벽히 보존하고 에러를 화면으로 뿜어내는 파이프라인 엔진
-# =========================================================================
-def execute_full_pipeline_task(target_image_path: str, SESSION_ID: str):
-    conn = None
-    cursor = None
+    # 세션 ID 발급 후, 원본 사진을 세션 보관소에 저장 (대기 중인 다른 요청과 섞이지 않도록 요청마다 따로 보관)
+    session_id = f"{shelf_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    image_rel_path = f"{session_id}/original{ext}"
+    os.makedirs(os.path.join(SPINE_STORE_DIR, session_id), exist_ok=True)
+    with open(os.path.join(SPINE_STORE_DIR, image_rel_path), "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    print(f"📥 [분석 요청 접수] 세션 {session_id} ({shelf['location_label']})")
+
+    return pipeline_queue.submit(session_id, shelf_id, image_rel_path)
+
+@app.get("/api/jobs/{job_id}")
+def get_job(job_id: str = Path(...)):
+    """분석 작업 상태: queued(대기, jobs_ahead=앞선 작업 수) / running / done / failed(error에 사유)"""
+    job = pipeline_queue.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="작업을 찾을 수 없습니다. (서버가 재시작되었을 수 있습니다)")
+    return job
+
+
+# ==========================================
+# 🤖 로봇 순찰 사진 수신함 → 일괄 분석
+# ==========================================
+@app.on_event("startup")
+def prepare_on_startup():
+    # 1) 분석 도중 서버가 재시작되면 대기열(메모리)이 사라지므로, 진행 중이던 사진을 분석 대기로 되돌림
+    # 2) 정상 상태 기준 이미지를 넣을 책꽂이 폴더 준비
     try:
-        script_name = "JsonTesting.py"
-        print(f"\n▶️ [엔진 가동] Edge AI 분석 시작 (YOLOv8 & ResNet)...")
-        
-        # 🌟 [핵심 패치 1] f"python" 대신 sys.executable을 사용하여 
-        # 현재 FastAPI 서버가 성공적으로 실행 중인 가상환경(venv) 파이썬을 100% 그대로 복사해 실행합니다.
-        result = subprocess.run(
-            [sys.executable, script_name], 
-            cwd=ACH_DIR,
-            capture_output=True,
-            text=True,
-            encoding='cp949',  # Windows 환경에서 한글 깨짐 방지
-            errors='ignore'  # 인코딩 에러 무시 (필요에 따라 조정 가능
-        )
-        
-        # 🌟 [핵심 패치 2] 만약 AI 스크립트 실행 중 에러(returncode != 0)가 나면
-        # 에러를 집어삼키지 않고, 예외(Exception)를 강제로 발생시켜 상위 API로 던집니다!
-        if result.returncode != 0:
-            error_log = result.stderr if result.stderr else result.stdout
-            print(f"\n❌ [Edge AI 엔진 내부 폭발] ❌\n{error_log}\n")
-            raise RuntimeError(f"AI 엔진 내부 에러 발생:\n{error_log}")
-
-        # 정상적으로 완료된 경우에만 결과 JSON 로드 진행
-        json_path = os.path.join(ACH_DIR, "vision_output", "test_results.json")
-        if not os.path.exists(json_path):
-            raise FileNotFoundError(f"AI 분석은 성공 기호가 떴으나 결과 파일({json_path})이 디스크에 생성되지 않았습니다.")
-
-        with open(json_path, "r", encoding="utf-8") as f:
-            edge_data = json.load(f)
-
-        test_results = edge_data.get("test_results", [])
-        if not test_results:
-            raise ValueError("인식된 도서 데이터 결과셋이 비어있습니다.")
-            
-        ai_vision_items = test_results[0].get("vision_items", [])
-
-        # DB 적재 시작
+        recover_interrupted_photos()
         conn = get_db_connection()
-        cursor = conn.cursor()
-
-        SHELF_ID = "A-12"
-        SCAN_TIME_STR = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        cursor.execute("DELETE FROM VISION_DATA WHERE session_id = %s", (SESSION_ID,))
-        cursor.execute("DELETE FROM RFID_DATA WHERE session_id = %s", (SESSION_ID,))
-
-        # 1) 신규 스캔 세션 메타 적재
-        cursor.execute(
-            "INSERT INTO SHELF_SESSION (session_id, shelf_id, scan_time) VALUES (%s, %s, %s)",
-            (SESSION_ID, SHELF_ID, SCAN_TIME_STR)
-        )
-
-        # 2) 가상 RFID 데이터 세트 생성 (13권 기준 명부 자동 빌드)
-        for i in range(1, 14):
-            b_id = f"B{i:03d}"
-            cursor.execute(
-                "INSERT INTO RFID_DATA (session_id, rfid_uid, book_id, title, rssi) VALUES (%s, %s, %s, %s, %s)",
-                (SESSION_ID, f"UID_{b_id}", b_id, f"테스트 도서 {i}", -45.0)
-            )
-
-        # 3) 실시간 Vision AI 결과물 적재
-        for item in ai_vision_items:
-            seq_idx = item.get("sequence_order")
-            
-            # pipeline.py가 저장하는 파일명: adjusted_spine_{idx}.jpg
-            # idx는 0-based, sequence_order는 1-based이므로 -1 적용
-            spine_filename = f"adjusted_spine_{seq_idx - 1}.jpg"
-            spine_img_path = spine_filename if os.path.exists(os.path.join(PIPELINE_OUTPUT_DIR, spine_filename)) else ""
-            
-            cursor.execute(
-                """INSERT INTO VISION_DATA 
-                   (vision_id, session_id, book_id, sequence_order, confidence_score, spine_img_path, visual_status) 
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (
-                    f"V_{SESSION_ID}_{seq_idx}", 
-                    SESSION_ID, 
-                    item.get("book_id", "UNKNOWN"), 
-                    seq_idx, 
-                    item.get("confidence_score", 0.99), 
-                    spine_img_path,   # ← 실제 파일명 (없으면 빈 문자열)
-                    item.get("visual_status", "normal")
-                )
-            )
-        
-        conn.commit()
-        print(f"💾 로그 DB 적재 성공 -> 세션: {SESSION_ID}")
-
-        # 4) 중앙 크라우드 융합 검증 교차 분석 엔진(analyzer.py) 구동
-        analyze_shelf_session(SESSION_ID, SHELF_ID, conn)
-        conn.commit()
-
-        global LATEST_PIPELINE_RESULTS
-        LATEST_PIPELINE_RESULTS = ai_vision_items # 서버 메모리에 최신 결과 저장 (디버그 및 대시보드용)
-
-        print(f"🎉 파이프라인 연동 성공! 세션: {SESSION_ID}\n")
-
-    except Exception as ex:
-        if conn and conn.is_connected():
-            conn.rollback()
-        # 발생한 에러를 상위 함수로 그대로 토스합니다.
-        raise ex
-    finally:
-        if cursor:
-            cursor.close()
-        if conn and conn.is_connected():
-            conn.close()
-
-
-@app.post("/api/pipeline/run")
-async def run_full_pipeline_from_ui(file: UploadFile = File(...)):
-    try:
-        # ① dataset/test/ 폴더 비우기
-        if os.path.exists(TEST_DIR):
-            shutil.rmtree(TEST_DIR)
-        os.makedirs(TEST_DIR, exist_ok=True)
-        
-        # ② 업로드된 새 이미지를 test 폴더에 저장
-        file_ext = os.path.splitext(file.filename)[1]
-        target_image_path = os.path.join(TEST_DIR, f"uploaded_target{file_ext}")
-        
-        with open(target_image_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        print(f"📥 [웹 업로드 수신 성공] 저장 완료: {target_image_path}")
-
-        # 고유 세션 ID 선발행
-        SESSION_ID = f"A-12_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-        # ③ AI 파이프라인 가동 (이제 내부 에러가 나면 아래 except로 떨어집니다!)
-        execute_full_pipeline_task(target_image_path, SESSION_ID)
-
-        return {
-            "status": "success", 
-            "message": "AI 파이프라인 분석 및 DB 적재가 완벽하게 완료되었습니다.",
-            "session_id": SESSION_ID
-        }
-
+        if conn:
+            try:
+                ensure_normal_folders(fetch_shelf_locations(conn))
+            finally:
+                conn.close()
     except Exception as e:
-        # 🌟 여기서 AI가 뱉은 진짜 에러 로그(ModuleNotFoundError 등)를 잡아채서 
-        # 브라우저가 읽을 수 있는 HTTP 500 에러 메시지로 가공해 뿜어냅니다!
-        print(f"🚨 파이프라인 가동 실패: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"⚠️ 시작 준비 실패 (DB가 켜져 있는지, setup_db.py를 실행했는지 확인): {e}")
+
+@app.post("/api/patrol/photos", status_code=201)
+def receive_patrol_photo(file: UploadFile = File(...), shelf_id: str = Form(...),
+                         captured_at: Optional[datetime] = Form(None)):
+    """
+    [로봇 → 서버] 순찰 중 촬영한 사진 1장을 수신함에 저장합니다. 분석은 하지 않습니다.
+    shelf_id: 촬영한 층 (예: A-01-3) / captured_at: 촬영 시각 (ISO 형식, 생략하면 수신 시각)
+    """
+    shelf = require_analyzable_shelf(shelf_id)
+    ext = require_image_ext(file)
+    conn = require_db()
+    try:
+        photo = save_patrol_photo(conn, file.file, ext, shelf, captured_at)
+    finally:
+        conn.close()
+    print(f"📷 [순찰 사진 수신] #{photo['photo_id']} {shelf['location_label']}")
+    return {**photo, "location_label": shelf["location_label"]}
+
+@app.get("/api/patrol/status")
+def get_patrol_status():
+    """수신함 현황(분석 대기 / 실패 장수, 마지막 수신 시각)과 가장 최근 일괄 분석의 진행 상황"""
+    conn = require_db()
+    try:
+        return patrol_status(conn)
+    finally:
+        conn.close()
+
+@app.get("/api/patrol/photos")
+def get_patrol_photos(status: Optional[str] = None, limit: int = Query(100, ge=1, le=500)):
+    """수신한 순찰 사진 목록 (status: WAITING / QUEUED / ANALYZING / DONE / FAILED)"""
+    conn = require_db()
+    try:
+        return list_patrol_photos(conn, status, limit)
+    finally:
+        conn.close()
+
+@app.post("/api/patrol/analyze", status_code=202)
+def analyze_patrol_photos():
+    """
+    [사서 버튼] 수신함의 분석 대기 · 실패 사진을 모두 분석 대기열에 넣습니다.
+    진행 상황은 GET /api/patrol/status 의 latest_batch 로 확인합니다.
+    """
+    conn = require_db()
+    try:
+        result = start_batch_analysis(conn)
+    except BatchAlreadyRunning:
+        raise HTTPException(status_code=409, detail="이미 순찰 사진을 분석하고 있습니다. 끝난 뒤 다시 시도해 주세요.")
+    finally:
+        conn.close()
+    if result["photo_count"] == 0:
+        raise HTTPException(status_code=400, detail="분석할 순찰 사진이 없습니다. (로봇이 보낸 사진이 수신함에 없음)")
+    return result
+
 
 # ==========================================
-# 🖥️ 대시보드 데이터 조회용 API
+# 📚 도서관 공간(구역 / 책꽂이 / 층) · 가상 도서 정보 API
 # ==========================================
-def fetch_table_data(query: str):
+def get_shelf_or_404(shelf_id: str) -> dict:
+    conn = require_db()
+    try:
+        shelf = fetch_shelf_location(conn, shelf_id)
+    finally:
+        conn.close()
+    if shelf is None:
+        raise HTTPException(status_code=404, detail=f"등록되지 않은 칸입니다: {shelf_id} (setup_db.py 실행 여부를 확인하세요)")
+    return shelf
+
+@app.get("/api/shelves")
+def get_shelves():
+    """모든 층(칸) 목록: 구역 → 책꽂이 → 층 순서, 위치 표시 문구와 등록 도서 수 포함"""
+    conn = require_db()
+    try:
+        return list(fetch_shelf_locations(conn).values())
+    finally:
+        conn.close()
+
+def level_status(shelf: dict, latest: Optional[dict], has_normal: bool = True) -> str:
+    """
+    서가 현황 맵의 칸 상태: no_books / no_reference / unpatrolled / retake / pending_action / pending_check / ok
+    no_reference: 도서는 있지만 정상 상태 기준 사진이 없어 다음 분석이 실패하는 층 (처리할 알림이 없을 때만 표시)
+    """
+    if shelf["book_count"] == 0:
+        return "no_books"
+    if latest is None:
+        return "unpatrolled" if has_normal else "no_reference"
+    if not latest["quality"]["is_reliable"]:
+        return "retake"
+    if latest["summary"]["pending_action_count"] > 0:
+        return "pending_action"
+    if latest["summary"]["pending_check_count"] > 0:
+        return "pending_check"
+    return "ok" if has_normal else "no_reference"
+
+def reference_update_check(loc: dict, latest: Optional[dict]) -> dict:
+    """
+    최근 순찰 사진을 이 층의 정상 상태 기준 사진으로 써도 되는지 판정합니다. (일괄 갱신 대상 = eligible)
+      - 도서가 등록되어 있고, 최근 순찰에 원본 사진이 있으며, 인식 신뢰도가 정상
+      - 대출 중인 도서가 없음 (순찰 당시 판정의 '대출 중' + 현재 대출 상태)
+      - 문제가 없던 순찰: 알림이 없거나 전부 '오탐'. '처리 완료' 알림이 있으면 정리 전 사진이므로 제외
+    latest: load_session_detail() 결과 (results 포함)
+    """
+    if loc["book_count"] == 0:
+        return {"eligible": False, "reasons": ["등록된 도서가 없습니다"]}
+    if latest is None:
+        return {"eligible": False, "reasons": ["순찰 기록이 없습니다"]}
+    reasons = []
+    photo = os.path.join(SPINE_STORE_DIR, latest["image_path"]) if latest["image_path"] else ""
+    if not photo or not os.path.exists(photo):
+        reasons.append("최근 순찰에 원본 사진이 없습니다")
+    if not latest["quality"]["is_reliable"]:
+        reasons.append("최근 순찰의 인식 신뢰도가 낮습니다")
+    loaned_then = sum(1 for r in latest["results"] if (r["final_status"] or "").startswith("대출 중"))
+    if loaned_then or loc["loaned_count"]:
+        reasons.append(f"대출 중인 도서가 있습니다 (순찰 당시 {loaned_then}권 · 현재 {loc['loaned_count']}권)")
+    real_issues = [r for r in latest["results"] if r["issues"] and r["action_status"] != "FALSE_POSITIVE"]
+    if real_issues:
+        reasons.append(f"최근 순찰에서 문제가 {len(real_issues)}건 발견되었습니다 (처리 완료 포함 — 정리 전 사진)")
+    if not reasons and is_current_normal_image(loc, photo):
+        return {"eligible": False, "reasons": ["이미 최근 순찰 사진이 기준 사진입니다"], "already_current": True}
+    return {"eligible": not reasons, "reasons": reasons}
+
+
+def build_level_states(conn) -> dict:
+    """
+    모든 층의 위치 정보에 최근 순찰 요약, 기준 사진, 상태(level_status), 기준 사진 갱신 후보 판정을 붙입니다.
+    반환: shelf_id → 층 정보 (서가 현황 API와 기준 사진 일괄 갱신이 함께 사용)
+    """
+    locations = fetch_shelf_locations(conn)
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT s.session_id, s.shelf_id, s.scan_time, s.image_path
+           FROM SHELF_SESSION s
+           JOIN (SELECT shelf_id, MAX(scan_time) AS last_time FROM SHELF_SESSION GROUP BY shelf_id) last
+             ON s.shelf_id = last.shelf_id AND s.scan_time = last.last_time
+           ORDER BY s.session_id DESC"""
+    )
+    latest_sessions = {}
+    for row in cursor.fetchall():
+        latest_sessions.setdefault(row["shelf_id"], row)   # 같은 초에 여러 세션이면 ID가 가장 늦은 것
+    cursor.close()
+
+    master_cache = {}
+    for shelf_id, loc in locations.items():
+        latest = None
+        if shelf_id in latest_sessions:
+            latest = load_session_detail(conn, latest_sessions[shelf_id], master_cache, locations)
+            latest.pop("location")
+        loc["normal_images"] = find_normal_images(loc)            # 정상 상태 기준 이미지 (보관소 기준 상대 경로)
+        loc["normal_history_count"] = len(find_history_images(loc))   # 되돌릴 수 있는 이전 기준 사진 수
+        loc["expected_normal_path"] = expected_normal_path(loc)   # 없을 때 넣어야 할 위치 안내
+        loc["reference_update"] = reference_update_check(loc, latest)
+        if latest:
+            latest.pop("results")
+        loc["latest_session"] = latest
+        loc["status"] = level_status(loc, latest, has_normal=bool(loc["normal_images"]))
+    return locations
+
+
+@app.get("/api/locations")
+def get_location_tree():
+    """
+    서가 현황: 구역 → 책꽂이 → 층 트리. 층마다 최근 순찰 요약, 상태(level_status),
+    기준 사진 목록과 '최근 순찰 사진으로 기준 갱신 가능' 여부(reference_update)를 붙입니다.
+    """
+    conn = require_db()
+    try:
+        return build_location_tree(build_level_states(conn))
+    finally:
+        conn.close()
+
+
+# ==========================================
+# 🛠️ 사서용 설정: 층별 정상 상태 기준 사진 · 도서관 지도
+# ==========================================
+async def read_checked_image(file: UploadFile, allowed: tuple) -> tuple:
+    """업로드 파일을 읽어 실제 이미지인지 확인하고 (바이트, 저장 확장자)를 반환합니다."""
+    data = await file.read()
+    try:
+        ext, _ = detect_image_ext(data, allowed)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return data, ext
+
+def normal_image_response(shelf: dict) -> dict:
+    return {"shelf_id": shelf["shelf_id"], "location_label": shelf["location_label"],
+            "normal_images": find_normal_images(shelf)}
+
+@app.put("/api/shelves/{shelf_id}/normal-image")
+async def upload_normal_image(shelf_id: str = Path(...), file: UploadFile = File(...)):
+    """층의 정상 상태 기준 사진을 올린 사진 한 장으로 교체합니다. (AI 분석은 jpg / png만 읽음)"""
+    shelf = get_shelf_or_404(shelf_id)
+    data, ext = await read_checked_image(file, ("JPEG", "PNG"))
+    replace_normal_image(shelf, data, ext)
+    print(f"🖼️ [기준 사진 교체] {shelf['location_label']}")
+    return normal_image_response(shelf)
+
+class NormalFromSessionRequest(BaseModel):
+    session_id: str
+
+@app.post("/api/shelves/{shelf_id}/normal-image/from-session")
+def set_normal_image_from_session(payload: NormalFromSessionRequest, shelf_id: str = Path(...)):
+    """같은 층의 순찰 사진(세션 원본)을 정상 상태 기준 사진으로 지정합니다. (서가를 정리한 직후의 순찰 사진 활용)"""
+    shelf = get_shelf_or_404(shelf_id)
+    conn = require_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT shelf_id, image_path FROM SHELF_SESSION WHERE session_id = %s", (payload.session_id,))
+        session = cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+    if session is None or session["shelf_id"] != shelf_id:
+        raise HTTPException(status_code=404, detail="이 층의 순찰 기록이 아닙니다.")
+    src = os.path.join(SPINE_STORE_DIR, session["image_path"]) if session["image_path"] else ""
+    if not src or not os.path.exists(src):
+        raise HTTPException(status_code=404, detail="이 순찰에는 원본 사진이 저장되어 있지 않습니다.")
+    with open(src, "rb") as f:
+        data = f.read()
+    try:
+        ext, _ = detect_image_ext(data, ("JPEG", "PNG"))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    replace_normal_image(shelf, data, ext)
+    print(f"🖼️ [기준 사진 지정] {shelf['location_label']} ← 순찰 {payload.session_id}")
+    return normal_image_response(shelf)
+
+@app.post("/api/shelves/{shelf_id}/normal-image/restore")
+def restore_normal_image(shelf_id: str = Path(...)):
+    """가장 최근의 이전 기준 사진으로 되돌립니다. (지금 기준 사진은 이력으로 옮겨져 다시 되돌릴 수 있음)"""
+    shelf = get_shelf_or_404(shelf_id)
+    if restore_previous_normal_image(shelf) is None:
+        raise HTTPException(status_code=404, detail="되돌릴 이전 기준 사진이 없습니다.")
+    print(f"↩️ [기준 사진 되돌리기] {shelf['location_label']}")
+    return normal_image_response(shelf)
+
+class BulkReferenceUpdateRequest(BaseModel):
+    dry_run: bool = True               # True면 바꾸지 않고 대상 · 제외 목록만 반환
+    zone_id: Optional[str] = None      # 지정하면 그 구역만
+
+@app.post("/api/normal-images/update-from-latest")
+def bulk_update_normal_images(payload: BulkReferenceUpdateRequest):
+    """
+    [일괄] 기준 사진 갱신 후보인 모든 층(reference_update.eligible)의 기준 사진을 최근 순찰 사진으로 바꿉니다.
+    이전 기준 사진은 이력으로 옮겨져 층마다 되돌릴 수 있습니다.
+    """
+    conn = require_db()
+    try:
+        levels = build_level_states(conn)
+    finally:
+        conn.close()
+    targets, skipped = [], []
+    for loc in levels.values():
+        if payload.zone_id and loc["zone_id"] != payload.zone_id:
+            continue
+        if loc["book_count"] == 0:
+            continue   # 도서가 없는 층은 대상 아님 (목록에도 넣지 않음)
+        check = loc["reference_update"]
+        entry = {"shelf_id": loc["shelf_id"], "location_label": loc["location_label"]}
+        if check["eligible"]:
+            targets.append((loc, entry))
+        else:
+            skipped.append({**entry, "reasons": check["reasons"]})
+
+    updated = []
+    if not payload.dry_run:
+        for loc, entry in targets:
+            with open(os.path.join(SPINE_STORE_DIR, loc["latest_session"]["image_path"]), "rb") as f:
+                data = f.read()
+            ext, _ = detect_image_ext(data, ("JPEG", "PNG"))
+            replace_normal_image(loc, data, ext)
+            updated.append(entry)
+        print(f"🖼️ [기준 사진 일괄 갱신] {len(updated)}곳")
+    return {"dry_run": payload.dry_run, "targets": [e for _, e in targets], "updated": updated, "skipped": skipped}
+
+@app.delete("/api/shelves/{shelf_id}/normal-image")
+def remove_normal_image(shelf_id: str = Path(...)):
+    shelf = get_shelf_or_404(shelf_id)
+    removed = delete_normal_images(shelf)
+    return {**normal_image_response(shelf), "removed": removed}
+
+LIBRARY_MAP_DIR = os.path.join(BACKEND_DIR, "static")   # library_map.<jpg|png|webp>
+
+def find_library_map() -> Optional[str]:
+    for ext in (".png", ".jpg", ".webp"):
+        path = os.path.join(LIBRARY_MAP_DIR, f"library_map{ext}")
+        if os.path.exists(path):
+            return path
+    return None
+
+@app.get("/api/library-map")
+def get_library_map():
+    """대시보드 '도서관 지도' 탭의 전체 지도 이미지"""
+    path = find_library_map()
+    if path is None:
+        raise HTTPException(status_code=404, detail="도서관 지도 이미지가 없습니다.")
+    # 형식 추측(mimetypes)이 OS마다 달라 webp가 text/plain이 되는 경우가 있어 직접 지정
+    media_type = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}[os.path.splitext(path)[1]]
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "no-cache"})
+
+@app.put("/api/library-map")
+async def upload_library_map(file: UploadFile = File(...)):
+    """도서관 전체 지도 이미지를 교체합니다. (jpg / png / webp)"""
+    data, ext = await read_checked_image(file, ("JPEG", "PNG", "WEBP"))
+    old = find_library_map()
+    while old:   # 형식이 바뀌어도 지도는 한 장만 유지
+        os.remove(old)
+        old = find_library_map()
+    with open(os.path.join(LIBRARY_MAP_DIR, f"library_map{ext}"), "wb") as f:
+        f.write(data)
+    print("🗺️ [도서관 지도 교체]")
+    return {"status": "success"}
+
+@app.delete("/api/library-map")
+def remove_library_map():
+    old = find_library_map()
+    while old:
+        os.remove(old)
+        old = find_library_map()
+    return {"status": "success"}
+
+@app.get("/api/shelves/{shelf_id}/virtual-rfid")
+def get_shelf_virtual_rfid(shelf_id: str = Path(...)):
+    """가상 RFID 스캔 결과 (실제 RFID 리더 대신 사용). 응답을 그대로 /api/rfid/scan 의 rfid_items로 보내면 됩니다."""
+    get_shelf_or_404(shelf_id)
+    conn = require_db()
+    try:
+        return get_virtual_rfid_items(shelf_id, conn)
+    finally:
+        conn.close()
+
+
+# ==========================================
+# 🖥️ 세션 결과 조회 (대시보드 / 일일 리포트 공용)
+# ==========================================
+def fetch_table_data(query: str, params: tuple = ()):
     conn = get_db_connection()
     if not conn:
         return []
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute(query)
+        cursor.execute(query, params)
         return cursor.fetchall()
     except Error as e:
         print(f"DB 조회 에러: {e}")
@@ -352,61 +589,154 @@ def fetch_table_data(query: str):
         cursor.close()
         conn.close()
 
-@app.get("/api/dashboard/sessions")
-def get_all_sessions():
-    return fetch_table_data("SELECT * FROM SHELF_SESSION ORDER BY scan_time DESC")
+# analyzer는 인식된 책(vision row)마다 current_order = sequence_order인 결과를 1건씩,
+# Vision에 없는 책(누락/인식 실패/대출 중)은 current_order = -1로 기록합니다.
+# 같은 책으로 중복 매칭되거나 미확인(UNKNOWN)인 경우 book_id가 겹치므로 순서 번호로 조인합니다.
+RESULTS_QUERY = """
+    SELECT
+        r.result_id,
+        r.book_id,
+        b.title,
+        r.current_order AS sequence_order,
+        IFNULL(v.visual_status, 'normal') AS visual_status,
+        r.final_status,
+        IFNULL(v.spine_img_path, '') AS spine_img_path,
+        r.action_status,
+        r.action_time
+    FROM ANALYSIS_RESULT r
+    LEFT JOIN VISION_DATA v
+        ON r.session_id = v.session_id AND r.current_order = v.sequence_order
+    LEFT JOIN BOOK_MASTER b ON r.book_id = b.book_id
+    WHERE r.session_id = %s
+    ORDER BY r.current_order ASC, r.book_id ASC
+"""
 
-@app.get("/api/dashboard/results")
-def get_all_results():
-    conn = get_db_connection()
-    if not conn: return []
+
+def summarize_results(results: list) -> dict:
+    """알림이 있는 도서 수와, 아직 처리하지 않은(PENDING) 알림을 그룹별로 집계합니다."""
+    with_issues = [r for r in results if r["issues"]]
+    pending = [r for r in with_issues if r["action_status"] == "PENDING"]
+    by_group = {}
+    for r in pending:
+        group = r["issues"][0]["group"]
+        by_group[group] = by_group.get(group, 0) + 1
+    return {
+        "issue_count": len(with_issues),
+        "pending_count": len(pending),
+        "pending_action_count": sum(1 for r in pending if r["issues"][0]["group"] != "check"),
+        "pending_check_count": by_group.get("check", 0),
+        "handled_count": len(with_issues) - len(pending),
+        "pending_by_group": by_group,
+    }
+
+
+def load_session_detail(conn, session: dict, master_cache: dict, locations: dict) -> dict:
+    """
+    세션 1건의 위치, 도서별 판정(+알림 분류), 인식 품질, 요약을 만듭니다.
+    master_cache: 층별 정답지 재사용 / locations: fetch_shelf_locations() 결과
+    """
+    sid, shelf_id = session["session_id"], session["shelf_id"]
     cursor = conn.cursor(dictionary=True)
     try:
-        # 1. 가장 최신 세션 ID 가져오기
-        cursor.execute("SELECT session_id FROM SHELF_SESSION ORDER BY scan_time DESC LIMIT 1")
-        latest = cursor.fetchone()
-        if not latest: return []
-        sid = latest['session_id']
-        
-        # 2. MySQL은 FULL OUTER JOIN 미지원 → LEFT JOIN + RIGHT JOIN UNION으로 구현
-        # - RFID만 잡힌 도서 (Vision 누락): ANALYSIS_RESULT 기준 LEFT JOIN
-        # - Vision만 잡힌 도서 (RFID 고장): VISION_DATA 기준 RIGHT JOIN
-        # → 두 결과를 UNION하면 양쪽 어느 한 곳이라도 있는 도서 전체가 포함됨
-        query = """
-            SELECT 
-                r.book_id,
-                IFNULL(v.sequence_order, -1) AS sequence_order,
-                IFNULL(v.visual_status, 'normal') AS visual_status,
-                IFNULL(r.final_status, '판별대기') AS final_status,
-                IFNULL(v.spine_img_path, '') AS spine_img_path
-            FROM ANALYSIS_RESULT r
-            LEFT JOIN VISION_DATA v ON r.session_id = v.session_id AND r.book_id = v.book_id
-            WHERE r.session_id = %s
+        cursor.execute(RESULTS_QUERY, (sid,))
+        results = cursor.fetchall()
+        for row in results:
+            row["issues"] = classify_issues(row["final_status"], row["visual_status"])
 
-            UNION
+        # 인식 품질 평가 (인식 누락/오매칭이 많으면 개별 알림 대신 재촬영을 안내)
+        cursor.execute("SELECT book_id, sequence_order, confidence_score FROM VISION_DATA WHERE session_id = %s", (sid,))
+        vision_rows = cursor.fetchall()   # 같은 연결로 다음 조회를 하기 전에 결과를 모두 읽어야 함
+        if shelf_id not in master_cache:
+            master_cache[shelf_id] = get_master_book_info(shelf_id, conn)
+        quality = assess_session_quality(vision_rows, master_cache[shelf_id])
+    finally:
+        cursor.close()
 
-            SELECT
-                IFNULL(r.book_id, v.book_id) AS book_id,
-                v.sequence_order,
-                v.visual_status,
-                IFNULL(r.final_status, '판별대기') AS final_status,
-                IFNULL(v.spine_img_path, '') AS spine_img_path
-            FROM VISION_DATA v
-            LEFT JOIN ANALYSIS_RESULT r ON r.session_id = v.session_id AND r.book_id = v.book_id
-            WHERE v.session_id = %s
-              AND r.book_id IS NULL
+    loc = locations.get(shelf_id)
+    return {
+        "session_id": sid,
+        "shelf_id": shelf_id,
+        "location": loc,
+        "location_label": location_label(loc, fallback=shelf_id),
+        "scan_time": session["scan_time"],
+        "image_path": session.get("image_path") or "",
+        "quality": quality,
+        "summary": summarize_results(results),
+        "results": results,
+    }
 
-            ORDER BY sequence_order ASC
-        """
-        cursor.execute(query, (sid, sid))
-        data = cursor.fetchall()
-        
-        print(f"DEBUG: [최종 병합 조회] 세션 {sid} 데이터 {len(data)}건 추출")
-        return data
-        
-    except Error as e:
-        print(f"DEBUG: 최종 조회 에러 -> {e}")
-        return []
+
+@app.get("/api/dashboard/sessions")
+def get_all_sessions(limit: int = Query(30, ge=1, le=200), shelf_id: Optional[str] = None):
+    """세션 이력 (최신순): 세션별 위치, 인식 품질, 미처리 알림 요약 포함 (도서별 결과는 제외). shelf_id로 칸 필터"""
+    conn = require_db()
+    try:
+        locations = fetch_shelf_locations(conn)
+        cursor = conn.cursor(dictionary=True)
+        if shelf_id:
+            cursor.execute(
+                "SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION WHERE shelf_id = %s ORDER BY scan_time DESC LIMIT %s",
+                (shelf_id, limit)
+            )
+        else:
+            cursor.execute(
+                "SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION ORDER BY scan_time DESC LIMIT %s",
+                (limit,)
+            )
+        sessions = cursor.fetchall()
+        cursor.close()
+        master_cache = {}
+        history = []
+        for s in sessions:
+            detail = load_session_detail(conn, s, master_cache, locations)
+            detail.pop("results")
+            history.append(detail)
+        return history
+    finally:
+        conn.close()
+
+@app.get("/api/dashboard/results")
+def get_all_results(session_id: Optional[str] = None):
+    """
+    세션의 도서별 판정 결과(알림 분류·조치 상태 포함), 인식 품질 평가, 요약을 반환합니다.
+    session_id를 주면 해당 세션을, 생략하면 가장 최근 세션을 조회합니다.
+    """
+    empty = {"session_id": None, "quality": None, "summary": None, "results": []}
+    conn = require_db()
+    try:
+        cursor = conn.cursor(dictionary=True)
+        if session_id:
+            cursor.execute("SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION WHERE session_id = %s", (session_id,))
+        else:
+            cursor.execute("SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION ORDER BY scan_time DESC LIMIT 1")
+        session = cursor.fetchone()
+        cursor.close()
+        if not session:
+            return empty
+        return load_session_detail(conn, session, {}, fetch_shelf_locations(conn))
+    finally:
+        conn.close()
+
+@app.patch("/api/results/{result_id}/action")
+def update_result_action(payload: ActionUpdateRequest, result_id: int = Path(...)):
+    """알림에 대한 사서의 조치 상태 기록: RESOLVED(처리 완료) / FALSE_POSITIVE(오탐) / PENDING(되돌리기)"""
+    if payload.status not in ACTION_STATUSES:
+        raise HTTPException(status_code=400, detail=f"조치 상태는 {sorted(ACTION_STATUSES)} 중 하나여야 합니다.")
+    conn = require_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT 1 FROM ANALYSIS_RESULT WHERE result_id = %s", (result_id,))
+        if cursor.fetchone() is None:
+            raise HTTPException(status_code=404, detail="판정 결과를 찾을 수 없습니다.")
+        # 시각은 MySQL NOW()(컨테이너 기준 UTC)가 아니라 scan_time과 같은 서버 로컬 시각으로 기록합니다.
+        action_time = None if payload.status == "PENDING" else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute(
+            "UPDATE ANALYSIS_RESULT SET action_status = %s, action_time = %s WHERE result_id = %s",
+            (payload.status, action_time, result_id)
+        )
+        conn.commit()
+        cursor.execute("SELECT result_id, action_status, action_time FROM ANALYSIS_RESULT WHERE result_id = %s", (result_id,))
+        return cursor.fetchone()
     finally:
         cursor.close()
         conn.close()
@@ -421,12 +751,74 @@ def get_rfid_data():
 
 
 # ==========================================
-# 🖥️ 6단계: 프론트엔드 HTML 자동 호스팅
+# 📋 일일 순찰 리포트
 # ==========================================
+@app.get("/api/reports/daily")
+def get_daily_report(report_date: Optional[date] = Query(None, alias="date")):
+    """
+    해당 날짜(기본: 오늘)의 순찰 결과를 구역 → 책꽂이 → 층 트리로 정리합니다.
+    순찰 대상(도서가 등록된 층)마다 그날 마지막 세션의 인식 품질과 알림 목록을 붙입니다. (순찰하지 않은 층은 session=None)
+    """
+    report_date = report_date or date.today()
+    day_start = datetime.combine(report_date, datetime.min.time())
+    day_end = day_start + timedelta(days=1)
+
+    conn = require_db()
+    try:
+        locations = fetch_shelf_locations(conn)
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION
+               WHERE scan_time >= %s AND scan_time < %s ORDER BY scan_time DESC, session_id DESC""",
+            (day_start, day_end)
+        )
+        day_sessions = cursor.fetchall()
+        cursor.close()
+
+        targets = {sid: loc for sid, loc in locations.items() if loc["book_count"] > 0}
+        master_cache = {}
+        totals = {"target_shelves": len(targets), "patrolled_shelves": 0, "unreliable_shelves": 0,
+                  "pending_action_count": 0, "pending_check_count": 0}
+        for shelf_id, loc in targets.items():
+            sessions = [s for s in day_sessions if s["shelf_id"] == shelf_id]
+            loc["session_count"] = len(sessions)
+            loc["session"] = None
+            if sessions:
+                detail = load_session_detail(conn, sessions[0], master_cache, locations)
+                detail.pop("location")
+                # 리포트에는 알림이 있는 도서만 포함
+                detail["results"] = [r for r in detail["results"] if r["issues"]]
+                loc["session"] = detail
+                totals["patrolled_shelves"] += 1
+                if not detail["quality"]["is_reliable"]:
+                    totals["unreliable_shelves"] += 1
+                totals["pending_action_count"] += detail["summary"]["pending_action_count"]
+                totals["pending_check_count"] += detail["summary"]["pending_check_count"]
+
+        return {
+            "date": report_date.isoformat(),
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "totals": totals,
+            "zones": build_location_tree(targets),
+        }
+    finally:
+        conn.close()
+
+
+# ==========================================
+# 🖥️ 화면 (대시보드 / 일일 리포트)
+# ==========================================
+def serve_page(filename: str):
+    page_path = os.path.join(BACKEND_DIR, filename)
+    if os.path.exists(page_path):
+        return FileResponse(page_path)
+    raise HTTPException(status_code=404, detail=f"{filename} 파일을 찾을 수 없습니다.")
+
 @app.get("/")
 @app.get("/dashboard")
 def serve_dashboard():
-    dashboard_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
-    if os.path.exists(dashboard_path):
-        return FileResponse(dashboard_path)
-    raise HTTPException(status_code=404, detail="dashboard.html 파일을 찾을 수 없습니다.")
+    return serve_page("dashboard.html")
+
+@app.get("/report")
+def serve_report():
+    return serve_page("report.html")

@@ -10,5 +10,9 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - ./db_create/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # 파일 이름 순서대로 실행되므로 번호로 순서를 고정 (세션 테이블 → 도서관 스키마 → 가상 데이터)
+      - ./db_create/init.sql:/docker-entrypoint-initdb.d/1_init.sql
+      - ./db_create/library_schema.sql:/docker-entrypoint-initdb.d/2_library_schema.sql
+      - ./db_create/library_data.sql:/docker-entrypoint-initdb.d/3_library_data.sql
+      - ./db_create/patrol_schema.sql:/docker-entrypoint-initdb.d/4_patrol_schema.sql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci

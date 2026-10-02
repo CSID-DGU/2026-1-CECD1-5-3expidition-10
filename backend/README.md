@@ -1,98 +1,226 @@
-# 📚 지능형 서가 관리 시스템 - 엣지 컴퓨팅 백엔드 API 서버
+# 📚 서가 상태 판정 백엔드 & 사서 대시보드
 
-> 도서관의 자율주행 무인 순찰 로봇이 야간 폐관 후에 스캔한 컴퓨터 비전(Vision AI) 및 RFID 데이터를 로봇 내부(Edge)에서 고속으로 1차 처리·분석하고, 최종 결과만을 중앙 시스템으로 전송하는 **엣지 컴퓨팅(Edge Computing) 기반 자동화 백엔드 서버**입니다.
+Vision AI(`ach/`)가 분석한 도서별 인식 결과를 받아 가상 RFID · 서가 정보와 교차 검증하고, **서가의 상태를 판정해 사서 대시보드와 일일 리포트로 전달**하는 서버입니다.
 
----
-
-## 📖 프로젝트 개요
-
-본 프로젝트는 도서관 내 서가의 도서 배치 상태를 실시간으로 교차 검증하여 **오배열(순서 바뀜), 누락(분실 위험), 오배가(타 서가 도서 유입)**를 정교하게 판별하는 알고리즘 엔진과 무인 자동화 파이프라인을 담당합니다. 
-
-단순한 데이터 적재를 넘어, **외부 도서관 시스템(ILS)과의 연동 스위치(Mocking Mode)**, 대출 상태를 고려한 **동적 순서 재계산(Dynamic Re-indexing)**, 야간 순찰 시 자정을 넘겨도 데이터가 유실되지 않는 **자정 통과 방어(Midnight-Crossing Safe Batch)** 및 **중복 분석 방어 로직**이 설계되어 실전 투입이 가능한(Production-Ready) 견고함을 갖추고 있습니다.
-
-### ✨ 주요 파이프라인 흐름
-1. **🚩 세션 시작 (`/api/session/start`)** : 로봇이 순찰할 서가에 도착하면 고유 세션을 생성하고, 일일 배치 스케줄에 따라 최근 24시간 이전의 과거 센서 찌꺼기 데이터를 자동으로 청소합니다.
-2. **📡 데이터 수신 (`/api/vision/scan`, `/api/rfid/scan`)** : 로봇의 Vision AI 프로그램(책등 이미지 및 인식 순서)과 RFID 센서(태그 UID 및 RSSI 신호 강도)가 거의 동시에 비동기적으로 밀어 넣는 대량의 센서 데이터를 에러 없이 수신합니다. RFID 수신부는 기기나 도서관 규격에 구애받지 않도록 유연한 데이터 매핑(Key-flexible `Dict[str, Any]`) 구조로 방어되어 있습니다.
-3. **🧠 분석 트리거 (`/api/session/{session_id}/analyze`)** : 스캔이 완료되면 교차 검증 알고리즘을 가동합니다. 대출 중인 도서를 마스터 데이터에서 식별해 숨긴 뒤, 서가에 남아있어야 할 도서들로만 '상대적 예상 순서'를 동적 재계산하여 억울한 오배열 판정을 차단합니다. 판별 결과는 `ANALYSIS_RESULT`에 업로드되고 로봇 로컬의 센서 원본 데이터는 당일 디버깅용으로 안전하게 보존됩니다.
-4. **🏁 순찰 결산 보고 (`/api/robot/finish_daily_patrol`)** : 야간 순찰이 모두 종료되면 자정 통과 버그가 방어된 12시간 범위 내의 모든 오류 도서 리스트를 취합하여 아침에 출근할 사서 시스템 및 메신저로 전송할 일일 리포트 미리보기를 생성합니다.
+설치와 전체 실행 방법은 [루트 README](../README.md)를 참고하세요.
 
 ---
 
-## 🛠️ 기술 스택 (Tech Stack)
+## 🗺️ 도서관 공간 구조
+서가 위치는 **구역 → 책꽂이 → 층**의 3단계로 관리합니다. 로봇이 찍는 사진 1장은 **책꽂이 한 층**이고, 분석 세션·정답지(도서 목록)·가상 RFID도 모두 층 단위입니다.
 
-- **Language**: Python 3.12+
-- **Framework**: FastAPI (Uvicorn Asynchronous Server)
-- **Database**: MySQL 8.0 (Docker Compose 기반 컨테이너 환경)
-- **Data Validation**: Pydantic v2
-- **Libraries**: `mysql-connector-python`, `requests`
+| 단계 | 테이블 | ID 형식 | 예시 |
+|---|---|---|---|
+| 구역 | `ZONE` | `<구역>` | `A` (공학·컴퓨터, 2층 제1자료실) |
+| 책꽂이 | `BOOKCASE` | `<구역>-<번호 2자리>` | `A-01` (A구역 1번 책꽂이) |
+| 층 | `SHELF_INFO` | `<책꽂이>-<층>` | `A-01-3` (A구역 1번 책꽂이 3층) |
 
----
-
-## ⚙️ 설치 및 실행 방법 (Getting Started)
-
-### 1. 저장소 클론 (Clone Repository)
-```bash
-git clone https://github.com/CSID-DGU/2026-1-CECD1-5-3expidition-10.git
-cd 2026-1-CSCD1-5-3expidition-10
-```
-
-### 2. 패키지 설치 (Install Requirements)
-```bash
-pip install fastapi uvicorn pydantic mysql-connector-python requests
-```
-
-### 3. 데이터베이스 자동화 세팅 (Database Setup Via Docker)
-본 프로젝트는 Docker를 이용해 DB 환경 및 볼륨을 인프라 코드로 관리합니다. 도커 데스크탑이 실행 중인지 확인한 후 아래 명령어를 입력하면 MySQL DB와 초기 스키마가 한 번에 백그라운드로 구축됩니다.
-```bash
-docker-compose up -d
-```
-*로봇 탑재 및 실전 배포 시에는 `main.py`와 `analyzer.py` 내부의 `DB_CONFIG` 호스트 주소를 로컬호스트(`127.0.0.1`)에서 도서관 메인 시스템의 고정 외부 IP 주소로 수정해 주십시오.*
-
-## 🗄️ 4. 데이터베이스 접속 툴 세팅 (DBeaver 설치 및 연결)
-도커로 생성된 DB를 시각적으로 확인하고 관리하기 위해 무료 DB 툴인 DBeaver를 세팅합니다.
-
-1. **다운로드 및 설치:** [DBeaver 공식 사이트](https://dbeaver.io/download/)에서 Community 버전을 다운로드하고 설치합니다.
-2. **새 연결 만들기:** DBeaver를 실행하고 왼쪽 상단의 플러그 모양(새 연결) 아이콘을 눌러 **MySQL**을 선택합니다.
-3. **연결 정보 입력:**
-   * **Server Host:** `localhost` (또는 `127.0.0.1`)
-   * **Port:** `3306`
-   * **Database:** `library_ai_db`
-   * **Username:** `root`
-   * **Password:** `1234`
-4. **드라이버 설치 및 테스트:** 화면 하단의 `Test Connection(테스트 연결)`을 누릅니다. 만약 드라이버 설치 팝업이 뜬다면 `Download`를 눌러 설치합니다. `Connected` 팝업이 뜨면 완료(Finish)를 누릅니다.
-5. **테이블 확인:** 생성된 연결을 열어 `SHELF_SESSION`, `VISION_DATA`, `RFID_DATA`, `ANALYSIS_RESULT` 4개의 테이블이 정상적으로 생성되었는지 확인합니다.
-
-### 5. 엣지 백엔드 서버 구동 (Run Server)
-로봇 내부에서 화면 출력 성능 저하를 방지하고 야간 블랙박스 디버깅용 로그 파일을 확보하기 위해 실전 구동 시에는 모든 출력을 텍스트 파일로 리다이렉트하여 실행하는 것을 권장합니다.
-```bash
-# 개발 및 디버깅 모드 (화면에 로그 출력)
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-
-# 실전 야간 무인 가동 모드 (조용히 로그 파일에 축적)
-uvicorn main:app --host 0.0.0.0 --port 8000 > daily_robot_log.txt 2>&1
-```
+- 층 번호는 **위에서부터 1층**입니다.
+- 화면과 API에는 `location_label`("A구역 1번 책꽂이 3층")로 표시됩니다.
+- 도서가 등록되지 않은 층은 분석 요청이 거절됩니다(400). 정답지가 비어 있으면 인식된 모든 책이 오배가로 판정되기 때문입니다.
 
 ---
 
-## 🧪 테스트 및 파이프라인 검증 스크립트
+## 🔄 처리 흐름
+**로봇 순찰 → 수신함 → 사서의 일괄 분석 버튼 → 분석 대기열 → 판정 → 확인** 순서입니다.
 
-전체 무인 자동화 시나리오가 유기적으로 통신하는지 서버를 켜둔 상태에서 단계별 단위 테스트 및 통합 테스트를 수행할 수 있습니다.
+0. **사진 수신** (`POST /api/patrol/photos`, 로봇 · `robot_simulator.py`)
+   - 로봇이 층마다 찍은 사진을 `patrol_inbox/<구역>/<책꽂이>/<층ID>_<촬영시각>_<임의값>.jpg`로 저장하고 `PATROL_PHOTO`에 `WAITING`으로 등록합니다(분석하지 않음).
+   - 도서가 없는 층이나 jpg/png가 아닌 파일은 거절합니다.
+   - **직접 넣은 사진 동기화** (`patrol.sync_inbox`, 수신함 현황 조회 · 일괄 분석 때 실행): 책꽂이 폴더 안에 층 ID로 시작하는 이름으로 넣은 사진을 `WAITING`으로 등록합니다(촬영 시각 = 파일 수정 시각). 규칙에 맞지 않는 파일은 등록하지 않고 `unrecognized_files`로 이유를 알려 주며, 분석 전인데 파일이 사라진 사진은 등록을 취소합니다. 모든 책꽂이 폴더는 미리 만들어 둡니다.
+1. **일괄 분석 시작** (`POST /api/patrol/analyze`, 대시보드 버튼)
+   - `WAITING` · `FAILED` 사진을 **구역 → 책꽂이 번호 → 층 → 촬영 시각** 순서로 하나의 묶음(batch)으로 만듭니다. 이미 분석 중인 묶음이 있으면 409.
+   - 사진마다 세션 ID(`<층ID>_<묶음 시각>_<사진ID>`)를 발급하고, 원본을 `spine_store/<세션ID>/original.jpg`로 복사해 분석 대기열에 넣습니다.
+   - 사진 상태: `WAITING` → `QUEUED` → `ANALYZING` → `DONE` / `FAILED`. 성공하면 수신함 파일을 지우고, 실패하면 남겨 두어 다음 묶음에서 다시 시도합니다.
+   - 서버가 분석 도중 재시작되면, 시작할 때 `QUEUED` · `ANALYZING` 사진을 `WAITING`으로 되돌립니다.
+   - (테스트용) `POST /api/pipeline/run`은 사진 1장을 수신함을 거치지 않고 바로 대기열에 넣습니다.
+2. **대기열 처리** (`pipeline_jobs.py`)
+   - 워커 스레드 하나가 요청을 접수 순서대로 하나씩 처리합니다.
+   - AI 입력 폴더와 결과 파일을 함께 쓰기 때문에 동시에 실행하지 않습니다.
+3. **AI 분석**
+   - 그 층의 정상 상태 기준 이미지(`normal_images/<구역>/<책꽂이>/<층ID>*.jpg`)만 작업 폴더 `.normal_work/`에 모읍니다. 없으면 넣어야 할 위치를 알려 주며 실패합니다.
+   - 원본 사진을 `ach/dataset/test/`로 복사하고, `NORMAL_DIR=.normal_work` 환경변수와 함께 `ach/JsonTesting.py`를 실행합니다. 층마다 자기 기준 이미지와만 비교하게 됩니다.
+4. **DB 적재**
+   - 세션, 가상 RFID(`BOOK_MASTER` 기준), Vision 결과를 저장합니다.
+   - 책등 크롭을 세션 폴더로 복사합니다.
+5. **상태 판정**: `analyzer.py`가 판정하고 결과를 `ANALYSIS_RESULT`에 저장합니다.
+   - 도중에 실패하면 반쯤 만들어진 세션(DB 기록과 사진)은 지웁니다.
+   - 세션의 순찰 시각(`scan_time`)은 분석 시각이 아니라 **사진을 찍은 시각**입니다.
+6. **결과 표시**
+   - 대시보드는 `GET /api/patrol/status`로 진행률을 확인하고(분석 중 3초, 평소 20초 간격), 사진 하나가 끝날 때마다 서가 현황과 이력을 갱신합니다.
+   - 층을 고르기 전 알림판에는 **확인이 필요한 층** 목록이 우선순위순으로 나오고, 층을 고르면 그 층의 알림이 열립니다.
+   - 보고 있는 층에 새 결과가 오면 상단에 "새 순찰 결과 보기" 버튼이 뜹니다.
+7. **사서 조치**: 알림마다 처리 완료 / 오탐을 기록합니다(`PATCH /api/results/{id}/action`).
+   - 기록은 세션 이력과 일일 리포트에 반영됩니다.
 
-### 시나리오 1: 데이터베이스 백지 초기화 (DBeaver/SQL Client)
-테스트 정합성을 위해 꼬여있는 기존 데이터를 완벽히 제거하고 일련번호를 초기화합니다.
-```sql
-SET FOREIGN_KEY_CHECKS = 0;
-TRUNCATE TABLE ANALYSIS_RESULT;
-TRUNCATE TABLE RFID_DATA;
-TRUNCATE TABLE VISION_DATA;
-TRUNCATE TABLE SHELF_SESSION;
-SET FOREIGN_KEY_CHECKS = 1;
-```
+---
 
-### 시나리오 2: 동적 순서 재계산 및 유연한 RFID 양식 통합 테스트
-2번 도서가 대출 중이어서 뒤에 있던 도서들이 앞으로 밀려 당겨진 상태(`sequence_order` 변동) 및 RFID 장비의 키 이름이 규격과 다른 상황을 연출하여 알고리즘의 유연성을 검증합니다.
-```bash
-# 서버가 켜진 상태에서 터미널을 하나 더 열어 실행
-python test_full_pipeline.py
-```
-*실행 후 DB의 `ANALYSIS_RESULT`에 에러 없이 정밀한 교차 분석 리포트가 적재되었는지 확인하십시오.*
+## 🧠 판정 로직 (`analyzer.py`)
+
+### 위치 판정
+| Vision | RFID | 서가 정보 | 판정 |
+|---|---|---|---|
+| ✅ | ✅ | 있음 | **정상**, 또는 순서가 어긋났으면 **오배열** |
+| ✅ | ❌ | 있음 | **RFID 미인식** (태그 점검 필요) |
+| ❌ | ✅ | 있음 | **인식 실패** (육안 확인 필요): 서가에 있지만 영상에서 못 찾음 |
+| ❌ | ❌ | 있음 | **누락** (분실 위험) |
+| ✅ 또는 RFID ✅ | | 없음 | **오배가** (타 서가 도서) |
+| ✅ 또는 RFID ✅ | | 대출 중 | **오배가** (미반납 도서) |
+| ❌ | ❌ | 대출 중 | 대출 중 (정상) |
+
+- **오배열 판정 방식 (LIS)**: 인식된 순서대로 각 책의 기대 순서를 나열하고, 그중 가장 긴 증가 부분수열(LIS)에 속한 책은 제자리로 봅니다. 책 한 권이 누락되거나 인식되지 않아도 뒤의 책들이 줄줄이 오배열로 판정되지 않습니다.
+- **기대 순서 다시 계산**: 대출 중인 책은 빼고 남은 책들로 기대 순서를 다시 매깁니다.
+- **미확인 도서**: 매칭 결과가 `UNKNOWN`이거나 유사도가 `MIN_MATCH_CONFIDENCE`보다 낮은 인식입니다.
+- **중복 인식**: 여러 책이 같은 도서로 매칭된 경우, 유사도가 가장 높은 것만 그 도서로 보고 나머지는 중복 인식으로 표시합니다.
+
+### 외형 판정
+AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / 종이 끼임 의심)를 위치 판정과 합쳐 하나의 문장으로 만듭니다.
+- 예: `오배열 및 뒤집힘`, `위치 정상, 단 외형 불량 (기울어짐)`
+
+### 사서 알림 분류
+`classify_issues()`가 판정 문장을 알림 그룹으로 나눕니다. 대시보드와 일일 리포트가 같은 분류를 쓰도록 서버에서 결정합니다.
+
+| 그룹 (심각도순) | 포함 판정 |
+|---|---|
+| 분실 위험 | 누락 |
+| 오배가 | 오배가 (타 서가 / 미반납) |
+| 오배열 | 오배열 |
+| 외형 이상 | 뒤집힘, 기울어짐, 가로로 누움, 종이 끼임 의심 |
+| 확인 필요 | 인식 실패, 미확인 도서, 중복 인식, RFID 미인식 |
+
+한 도서에 문제가 여러 개면 가장 심각한 문제가 대표 알림이 되고, 나머지는 배지로 붙습니다.
+
+### 서가 현황 맵의 층 상태 (`main.level_status`)
+층마다 가장 최근 순찰 세션을 기준으로 상태를 정합니다.
+
+| 상태 | 조건 |
+|---|---|
+| 도서 없음 (`no_books`) | 등록된 도서가 없는 층 |
+| 미순찰 (`unpatrolled`) | 순찰 기록 없음 |
+| 재촬영 (`retake`) | 최근 순찰의 인식 신뢰도 낮음 |
+| 조치 필요 (`pending_action`) | 미처리 알림 중 분실·오배가·오배열·외형 이상이 있음 |
+| 확인 필요 (`pending_check`) | 미처리 알림이 확인 필요(인식 실패 등)만 있음 |
+| 정상 (`ok`) | 미처리 알림 없음 |
+| 기준 사진 없음 (`no_reference`) | 도서는 있지만 정상 상태 기준 사진이 없어 다음 분석이 실패하는 층 (미순찰 · 정상일 때만 표시, 알림이 있으면 알림 상태 우선) |
+
+### 기준 사진 갱신 후보 (`main.reference_update_check`)
+최근 순찰 사진을 그 층의 정상 상태 기준 사진으로 써도 되는지 판정합니다. 모두 만족하면 후보(`eligible`)가 되어, 맵에 파란 점으로 표시되고 일괄 갱신 대상이 됩니다.
+- 도서가 등록되어 있고, 최근 순찰에 원본 사진이 있으며, 인식 신뢰도가 정상
+- **대출 중인 도서가 없음**: 순찰 당시 판정에 '대출 중'이 없고, 현재 `BOOK_MASTER`에도 대출 중인 도서가 없음
+- **문제가 없던 순찰**: 알림이 없거나 전부 '오탐'. '처리 완료' 알림은 사진을 찍은 *뒤에* 정리했다는 뜻이므로 그 사진은 정상이 아님 → 제외
+- 이미 그 순찰 사진이 기준 사진이면 제외
+
+### 인식 품질 평가
+세션 전체의 인식 결과를 믿을 만한지 평가합니다. 아래 중 하나라도 걸리면 대시보드와 리포트는 **"재촬영 필요"** 를 먼저 띄우고, 개별 판정은 참고용으로 보여줍니다.
+- 인식된 책 수가 서가 정보의 80% 미만이거나 120% 초과
+- (미확인 + 중복 인식)이 인식 건수의 30% 초과
+
+기준값은 `analyzer.py` 상단의 `MIN_MATCH_CONFIDENCE`, `MIN_DETECTION_RATIO`, `MAX_DETECTION_RATIO`, `MAX_UNRESOLVED_RATIO`입니다. 모두 임시로 정한 값이라, AI 모델의 정확도가 확정되면 조정이 필요합니다.
+
+---
+
+## 🗄️ 데이터베이스
+
+| 테이블 | 내용 | `reset_db.py`로 초기화 |
+|---|---|---|
+| `SHELF_SESSION` | 분석 1회 단위 세션 (서가, 시각, 원본 사진 경로) | ✅ |
+| `VISION_DATA` | 도서별 AI 인식 결과 (순서, 매칭 도서, 유사도, 외형 상태, 책등 사진 경로) | ✅ |
+| `RFID_DATA` | RFID 스캔 결과 (현재 가상 데이터) | ✅ |
+| `ANALYSIS_RESULT` | 도서별 최종 판정 + 사서 조치 상태(`PENDING` / `RESOLVED` / `FALSE_POSITIVE`)와 조치 시각 | ✅ |
+| `PATROL_PHOTO` | 로봇 순찰 사진 수신함: 촬영한 층, 촬영 시각, 분석 상태, 묶음 ID, 만들어진 세션, 실패 사유 | ✅ |
+| `ZONE` | 구역 (가상 데이터) | ❌ |
+| `BOOKCASE` | 책꽂이: 소속 구역, 번호 (가상 데이터) | ❌ |
+| `SHELF_INFO` | 층: 소속 책꽂이, 층 번호 (가상 데이터) | ❌ |
+| `BOOK_MASTER` | 층마다 있어야 할 도서 · 순서 · 서명 · RFID UID · 대출 상태 (가상 데이터) | ❌ |
+
+- **스키마 파일**: `db_create/init.sql`(세션 테이블), `db_create/library_schema.sql`(구역·책꽂이·층·도서 테이블), `db_create/library_data.sql`(가상 데이터), `db_create/patrol_schema.sql`(순찰 사진 수신함). 새 docker 볼륨에서는 이 순서로 자동 실행됩니다.
+- **이미 있는 DB를 최신 구조로 맞추기**: `python setup_db.py`. 새 테이블·컬럼과 가상 데이터를 추가하며, 여러 번 실행해도 안전합니다.
+  - 예전 단일 서가 구조(`A-12`)의 도서와 세션 기록은 `A-01-3`으로 자동 이전됩니다.
+- **서가·도서 목록 바꾸기**: `library_data.sql`을 수정한 뒤 `python setup_db.py`를 실행합니다.
+- **실제 도서관 시스템 연동**: `analyzer.py`의 `USE_MOCK_ILS = False`로 바꾸면 외부 API에서 서가 정보를 받아옵니다(연동 전).
+- **시각 기준**: 순찰 시각과 조치 시각은 서버(Python)의 로컬 시각으로 기록합니다. MySQL 컨테이너의 `NOW()`는 UTC라서 쓰지 않습니다.
+
+---
+
+## 🌐 API
+
+### 로봇 순찰 · 일괄 분석
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/patrol/photos` | [로봇] 순찰 사진 1장을 수신함에 저장 (201). 폼 필드: `file`(jpg/jpeg/png), `shelf_id`(필수), `captured_at`(ISO, 생략하면 수신 시각). 없는 층 404, 도서 없는 층 400 |
+| GET | `/api/patrol/status` | 수신함 현황(`analyzable_count`, 구역별 `analyzable_by_zone`, `failed_count`, 등록하지 못한 파일 `unrecognized_files`, `last_received_at`)과 최근 묶음 진행 상황(`latest_batch`: 총·성공·실패·남은 장수, 진행 중 여부, 지금 분석 중인 위치, 실패 사유) |
+| POST | `/api/patrol/analyze` | [사서 버튼] 분석 대기 · 실패 사진을 모두 분석 대기열에 넣음 (202). 이미 분석 중이면 409, 사진이 없으면 400 |
+| GET | `/api/patrol/photos?status=&limit=` | 수신한 순찰 사진 목록 |
+| POST | `/api/pipeline/run` | (테스트용) 사진 1장을 수신함 없이 바로 분석 대기열에 넣음 (202). 폼 필드: `file`, `shelf_id`(생략하면 `A-01-3`) |
+| GET | `/api/jobs/{job_id}` | 분석 작업 상태: `queued`(`jobs_ahead`=앞선 작업 수) / `running` / `done` / `failed`(`error`) |
+
+### 사서용 설정 (대시보드에서 사용)
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| PUT | `/api/shelves/{shelf_id}/normal-image` | 층의 정상 상태 기준 사진을 올린 사진 한 장으로 교체 (`file`, jpg / png만. 실제 이미지인지 내용으로 확인) |
+| POST | `/api/shelves/{shelf_id}/normal-image/from-session` | 같은 층의 순찰 사진(`{"session_id"}`의 원본)을 기준 사진으로 지정 |
+| DELETE | `/api/shelves/{shelf_id}/normal-image` | 층의 기준 사진 삭제 (이력으로 옮김) |
+| POST | `/api/shelves/{shelf_id}/normal-image/restore` | 가장 최근의 이전 기준 사진으로 되돌리기 (지금 사진은 이력으로 옮겨져 다시 되돌릴 수 있음) |
+| POST | `/api/normal-images/update-from-latest` | 기준 사진 일괄 갱신. 본문 `{"dry_run": true, "zone_id": null}` — `dry_run`이면 대상 · 제외 목록만, 아니면 갱신 후보(`reference_update.eligible`)인 층의 기준 사진을 최근 순찰 사진으로 교체 |
+| GET / PUT / DELETE | `/api/library-map` | 도서관 전체 지도 이미지 조회 / 교체(`file`, jpg · png · webp) / 삭제 |
+
+### 대시보드 · 리포트
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/locations` | 서가 현황: 구역 → 책꽂이 → 층 트리, 층마다 최근 순찰 요약과 상태, 정상 상태 기준 이미지 목록(`normal_images`)과 없을 때 넣을 위치(`expected_normal_path`) |
+| GET | `/api/dashboard/results?session_id=` | 세션의 위치, 도서별 판정(알림 분류 `issues`, 조치 상태 포함), 인식 품질, 요약. `session_id`를 생략하면 최근 세션 |
+| GET | `/api/dashboard/sessions?limit=&shelf_id=` | 순찰 이력 (세션별 위치, 인식 품질, 미처리 알림 요약). `shelf_id`로 층 필터 |
+| PATCH | `/api/results/{result_id}/action` | 조치 기록. 본문 `{"status": "RESOLVED" \| "FALSE_POSITIVE" \| "PENDING"}` |
+| GET | `/api/reports/daily?date=YYYY-MM-DD` | 일일 리포트: 순찰 대상 층(도서 등록된 층)을 구역 → 책꽂이 → 층 트리로, 층마다 그날 마지막 세션의 알림 목록과 전체 집계 (날짜를 생략하면 오늘) |
+| GET | `/api/shelves` | 층 목록 (위치 표시 문구, 등록 도서 수 포함) |
+
+### 로봇 · 외부 스크립트용 (`run_master.py`, `test_full_pipeline.py`)
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| POST | `/api/session/start` | 세션 생성. `image_path`(선택)에 세션 보관소의 원본 사진 경로를 주면 대시보드 '서가 사진'에 표시 |
+| GET | `/api/shelves/{shelf_id}/virtual-rfid` | 가상 RFID 스캔 결과 (응답을 그대로 `/api/rfid/scan`에 보내면 됨) |
+| POST | `/api/rfid/scan` | RFID 스캔 결과 저장 |
+| POST | `/api/vision/scan` | Vision 인식 결과 저장 |
+| POST | `/api/session/{session_id}/analyze` | 저장된 데이터로 상태 판정 실행 |
+| GET | `/api/dashboard/vision`, `/api/dashboard/rfid` | 원본 데이터 조회 |
+
+### 화면 · 파일
+| 경로 | 설명 |
+|---|---|
+| `/`, `/dashboard` | 사서 대시보드 |
+| `/report` | 일일 순찰 리포트 (인쇄용) |
+| `/static/spine/<세션ID>/<파일명>` | 세션별 원본 사진(`original.*`)과 책등 크롭 |
+| `/static/normal/<구역>/<책꽂이>/<파일명>` | 층별 정상 상태 기준 이미지 (대시보드 '정상 상태' 탭) |
+| `/assets/common.js` | 대시보드와 리포트가 함께 쓰는 스크립트 |
+
+자동 생성 API 문서: http://127.0.0.1:8000/docs
+
+---
+
+## 📁 파일 구성
+| 파일 | 역할 |
+|---|---|
+| `main.py` | FastAPI 서버: API 정의, 화면 호스팅 |
+| `pipeline_jobs.py` | 분석 작업 대기열과 실행 (AI 분석 → DB 적재 → 판정), 실패한 세션 정리, 작업별 콜백 |
+| `patrol.py` | 로봇 순찰 사진 수신함: 사진 저장, 일괄 분석 묶음 만들기, 진행 상황 집계, 재시작 복구 |
+| `normal_images.py` | 층별 정상 상태 기준 이미지: 폴더 준비, 찾기 · 교체 · 삭제, 분석용 작업 폴더 준비 |
+| `image_check.py` | 업로드 이미지 검사 (확장자가 아니라 파일 내용으로 형식 판단) |
+| `normal_images/` | 정상 상태 기준 이미지 보관소 (`<구역>/<책꽂이>/<층ID>[_*].jpg`) |
+| `normal_history/` | 교체 · 삭제된 이전 기준 이미지 (되돌리기용, git 제외) |
+| `analyzer.py` | 서가 정보 조회, 가상 RFID 생성, 상태 판정, 알림 분류, 인식 품질 평가 |
+| `locations.py` | 구역 / 책꽂이 / 층 위치 조회, 위치 표시 문구, 트리 구성 |
+| `dashboard.html` | 사서 대시보드 (순찰 사진 일괄 분석 바, 도서관 지도 / 서가 사진, 서가 선택 미니맵, 확인 필요 목록 · 알림판, 조치 기록, 순찰 이력) |
+| `report.html` | 일일 순찰 리포트 |
+| `static/common.js` | 두 화면이 공유하는 알림 그룹 표시 설정과 유틸리티 |
+| `static/library_map.*` | 대시보드에서 올린 도서관 전체 지도 이미지 (`/api/library-map`) |
+| `config.py` | DB 접속 정보, 기본 층 ID(`A-01-3`), 세션 보관소 경로 |
+| `db.py` | DB 연결 |
+| `spine_archive.py` | 원본 사진·책등 크롭을 세션 보관소로 복사 (서버와 스크립트가 같이 사용) |
+| `setup_db.py` | 기존 DB를 최신 구조로 맞춤 (공간 스키마, 추가 컬럼, 가상 데이터, 예전 구조 이전) |
+| `reset_db.py` | 세션 데이터, 순찰 사진 수신함, 보관 사진 초기화 |
+| `test_full_pipeline.py` | AI 분석 없이, 이미 만들어진 `test_results.json`을 서버에 보내 판정만 테스트 |
+| `docker-compose.yml`, `db_create/` | MySQL 컨테이너와 초기 스키마 |
+
+## 🧪 DB 접속 툴 (선택)
+DBeaver 같은 툴로 DB를 직접 확인할 수 있습니다.
+- 접속 정보: `localhost:3306`, DB `library_ai_db`, 계정 `root` / `1234`

@@ -15,7 +15,8 @@ CREATE TABLE SHELF_SESSION (
     session_id VARCHAR(50) PRIMARY KEY COMMENT '스캔 1회 단위 고유 세션 ID',
     shelf_id VARCHAR(50) NOT NULL COMMENT '대상 서가 식별자',
     scan_time DATETIME NOT NULL COMMENT '스캔 완료 시간',
-    sync_status VARCHAR(20) DEFAULT 'WAITING' COMMENT '메인 DB 동기화 상태 (WAITING/SUCCESS/FAIL)'
+    sync_status VARCHAR(20) DEFAULT 'WAITING' COMMENT '메인 DB 동기화 상태 (WAITING/SUCCESS/FAIL)',
+    image_path VARCHAR(255) NULL COMMENT '원본 서가 사진 경로 (spine_store 기준 <session_id>/original.*)'
 );
 
 -- 4. 자식 테이블 1: 비전 AI 인식 데이터 (VISION_DATA) - 새 규격 반영
@@ -48,5 +49,7 @@ CREATE TABLE ANALYSIS_RESULT (
     book_id VARCHAR(50) NOT NULL COMMENT '최종 확정된 도서 ID',
     current_order INT NOT NULL COMMENT '최종 판별된 서가 내 순서',
     final_status VARCHAR(100) NOT NULL COMMENT '최종 상태 (정상/오배열/오배가/누락)',
+    action_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '사서 조치 상태 (PENDING/RESOLVED/FALSE_POSITIVE)',
+    action_time DATETIME NULL COMMENT '조치 기록 시각',
     FOREIGN KEY (session_id) REFERENCES SHELF_SESSION(session_id) ON DELETE CASCADE
 );
