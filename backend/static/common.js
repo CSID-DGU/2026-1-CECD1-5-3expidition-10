@@ -1,6 +1,46 @@
 // 대시보드(dashboard.html)와 일일 리포트(report.html)가 함께 쓰는 설정과 유틸리티
 const API_BASE = "/api";
-const SPINE_BASE = "/static/spine";
+const SPINE_BASE = "/api/files/spine";   // 세션 원본 사진 · 책등 크롭 (로그인한 도서관 것만 내려줌)
+
+// API 호출: 로그인이 만료되었으면(401) 로그인 화면으로 보냄. 실패하면 서버의 detail 메시지로 에러
+async function fetchJson(url, options) {
+    const res = await fetch(url, { credentials: "same-origin", ...options });
+    if (res.status === 401) {
+        location.href = "/login";
+        throw new Error("로그인이 필요합니다.");
+    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `요청 실패 (HTTP ${res.status})`);
+    return body;
+}
+
+// 로그인한 사서 정보 { library_id, library_name, display_name, role, is_admin, ... }
+async function loadMe() {
+    return fetchJson(`${API_BASE}/auth/me`);
+}
+
+async function logout() {
+    await fetch(`${API_BASE}/auth/logout`, { method: "POST", credentials: "same-origin" });
+    location.href = "/login";
+}
+
+// 상단 바의 도서관 · 사서 표시 + 로그아웃 버튼 (요소 id: user-box)
+function renderUserBox(me) {
+    const box = document.getElementById("user-box");
+    if (!box) return;
+    const role = me.is_admin
+        ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">관리자</span>`
+        : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">사서</span>`;
+    box.innerHTML = `
+        <span class="text-sm text-slate-600 flex items-center gap-1.5">
+            <i class="fa-solid fa-building-columns text-slate-400"></i>
+            <b class="text-slate-700">${escapeHtml(me.library_name)}</b>
+            <span class="text-slate-300">|</span> ${escapeHtml(me.display_name)} ${role}
+        </span>
+        <button onclick="logout()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
+            <i class="fa-solid fa-right-from-bracket"></i> 로그아웃
+        </button>`;
+}
 
 // 알림 그룹 표시 설정. 순서 = 심각도 순서이며, 그룹 분류 자체는 서버(analyzer.classify_issues)가 결정합니다.
 const ISSUE_GROUPS = [

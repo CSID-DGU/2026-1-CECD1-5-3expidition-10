@@ -65,17 +65,17 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
     scan_time: 순찰 시각 (로봇이 사진을 찍은 시각). 없으면 분석 시각.
     AI 입력 폴더와 결과 파일을 공유하므로 반드시 한 번에 하나만 실행되어야 합니다. (PipelineJobQueue가 보장)
     """
-    # ⓪ 이 층의 정상 상태 기준 이미지만 모아 둠 (없으면 넣어야 할 위치를 알려 주며 실패)
+    # ⓪ 이 층의 정상 상태 기준 이미지를 DB에서 꺼내 둠 (없으면 등록 방법을 알려 주며 실패)
     conn = get_db_connection()
     if not conn:
         raise RuntimeError("DB 연결 실패")
     try:
         loc = fetch_shelf_location(conn, shelf_id)
+        if loc is None:
+            raise RuntimeError(f"등록되지 않은 층입니다: {shelf_id}")
+        normal_dir = prepare_normal_work_dir(conn, loc)
     finally:
         conn.close()
-    if loc is None:
-        raise RuntimeError(f"등록되지 않은 층입니다: {shelf_id}")
-    normal_dir = prepare_normal_work_dir(loc)
 
     # ① AI 입력 폴더를 이번 사진 하나로 교체
     if os.path.exists(TEST_DIR):
@@ -95,8 +95,8 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "INSERT INTO SHELF_SESSION (session_id, shelf_id, scan_time, image_path) VALUES (%s, %s, %s, %s)",
-            (session_id, shelf_id, (scan_time or datetime.now()).strftime('%Y-%m-%d %H:%M:%S'), image_rel_path)
+            "INSERT INTO SHELF_SESSION (session_id, library_id, shelf_id, scan_time, image_path) VALUES (%s, %s, %s, %s, %s)",
+            (session_id, loc["library_id"], shelf_id, (scan_time or datetime.now()).strftime('%Y-%m-%d %H:%M:%S'), image_rel_path)
         )
 
         # 가상 RFID 스캔 결과 (가상 도서 정보 BOOK_MASTER 기준)

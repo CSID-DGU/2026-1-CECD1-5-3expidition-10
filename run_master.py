@@ -15,7 +15,11 @@ BASE_URL = "http://127.0.0.1:8000"
 # 세션별 책등 크롭 보관 로직과 기본 칸 설정은 백엔드와 공유합니다. (backend/spine_archive.py, backend/config.py)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend"))
 from spine_archive import archive_original_image, archive_spine_image
-from config import DEFAULT_SHELF_ID
+from config import DEFAULT_SHELF_ID, DEMO_ROBOT_KEY
+
+# 서버 API는 로봇 키(X-Robot-Key) 또는 사서 로그인이 필요합니다. 이 스크립트는 로봇 역할이므로 로봇 키를 보냅니다.
+api = requests.Session()
+api.headers["X-Robot-Key"] = DEMO_ROBOT_KEY
 SHELF_ID = DEFAULT_SHELF_ID   # 로봇이 촬영한 층 (기본: A구역 1번 책꽂이 3층)
 
 ACH_DIR = "ach"
@@ -38,7 +42,7 @@ def main():
     photos = sorted(glob.glob(os.path.join(test_dir, "*.jpg")) + glob.glob(os.path.join(test_dir, "*.png")))
     image_path = archive_original_image(SESSION_ID, photos[0]) if photos else None
     try:
-        res_start = requests.post(f"{BASE_URL}/api/session/start", json={
+        res_start = api.post(f"{BASE_URL}/api/session/start", json={
             "session_id": SESSION_ID, "shelf_id": SHELF_ID, "scan_time": SCAN_TIME_STR, "image_path": image_path
         })
         if res_start.status_code != 200:
@@ -86,7 +90,7 @@ def main():
     vision_payload = []
 
     # [RFID 조립] 가상 RFID 스캔 결과를 서버의 가상 도서 정보(BOOK_MASTER)에서 받아옵니다.
-    res_tags = requests.get(f"{BASE_URL}/api/shelves/{SHELF_ID}/virtual-rfid")
+    res_tags = api.get(f"{BASE_URL}/api/shelves/{SHELF_ID}/virtual-rfid")
     if res_tags.status_code != 200:
         print(f"❌ [가상 RFID 조회 실패] 에러: {res_tags.text}")
         return
@@ -109,13 +113,13 @@ def main():
     # ---------------------------------------------------------
     print("\n4️⃣ RFID 및 Vision 데이터를 서버로 전송합니다...")
     
-    res_rfid = requests.post(f"{BASE_URL}/api/rfid/scan", json={"session_id": SESSION_ID, "rfid_items": rfid_payload})
+    res_rfid = api.post(f"{BASE_URL}/api/rfid/scan", json={"session_id": SESSION_ID, "rfid_items": rfid_payload})
     if res_rfid.status_code != 200:
         print(f"❌ [RFID 전송 실패] 에러: {res_rfid.text}")
         return
     print(f"-> ✅ RFID 전송 완료 (성공 건수: {res_rfid.json().get('inserted_rfid_count', 0)})")
 
-    res_vision = requests.post(f"{BASE_URL}/api/vision/scan", json={"session_id": SESSION_ID, "vision_items": vision_payload})
+    res_vision = api.post(f"{BASE_URL}/api/vision/scan", json={"session_id": SESSION_ID, "vision_items": vision_payload})
     if res_vision.status_code != 200:
         print(f"❌ [Vision 전송 실패] 에러: {res_vision.text}")
         return
@@ -125,7 +129,7 @@ def main():
     # 5️⃣ 융합 교차 분석 요청
     # ---------------------------------------------------------
     print("\n5️⃣ 데이터 적재 완료. 서버 엔진에 융합 교차 분석을 요청합니다...")
-    res_analyze = requests.post(f"{BASE_URL}/api/session/{SESSION_ID}/analyze")
+    res_analyze = api.post(f"{BASE_URL}/api/session/{SESSION_ID}/analyze")
     
     if res_analyze.status_code != 200:
         print(f"❌ [융합 분석 요청 실패] 에러: {res_analyze.text}")

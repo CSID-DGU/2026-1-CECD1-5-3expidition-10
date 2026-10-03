@@ -3,7 +3,11 @@ import json
 import os
 from datetime import datetime
 from spine_archive import archive_original_image, archive_spine_image
-from config import DEFAULT_SHELF_ID
+from config import DEFAULT_SHELF_ID, DEMO_ROBOT_KEY
+
+# 서버 API는 로봇 키(X-Robot-Key) 또는 사서 로그인이 필요합니다. 이 스크립트는 로봇 역할이므로 로봇 키를 보냅니다.
+api = requests.Session()
+api.headers["X-Robot-Key"] = DEMO_ROBOT_KEY
 
 # ---------------------------------------------------------
 # ⚙️ 기본 설정
@@ -58,7 +62,7 @@ def load_payloads_from_json():
         })
 
     # 가상 RFID 스캔 결과: 서버의 가상 도서 정보(BOOK_MASTER) 기준
-    res_tags = requests.get(f"{BASE_URL}/api/shelves/{SHELF_ID}/virtual-rfid")
+    res_tags = api.get(f"{BASE_URL}/api/shelves/{SHELF_ID}/virtual-rfid")
     if res_tags.status_code != 200:
         print(f"❌ [가상 RFID 조회 실패] 에러: {res_tags.text}")
         return None, None
@@ -79,7 +83,7 @@ def run_automation_test():
     test_dir = os.path.join(BASE_DIR, "..", "ach", "dataset", "test")
     photos = sorted(f for f in os.listdir(test_dir) if f.lower().endswith((".jpg", ".png"))) if os.path.isdir(test_dir) else []
     image_path = archive_original_image(SESSION_ID, os.path.join(test_dir, photos[0])) if photos else None
-    res_start = requests.post(f"{BASE_URL}/api/session/start", json={
+    res_start = api.post(f"{BASE_URL}/api/session/start", json={
         "session_id": SESSION_ID, "shelf_id": SHELF_ID, "scan_time": SCAN_TIME_STR, "image_path": image_path
     })
     print("-> 응답:", res_start.json())
@@ -93,15 +97,15 @@ def run_automation_test():
 
     # 3. Vision & RFID 데이터 전송
     print("\n3️⃣ 변환된 데이터를 클라우드 서버(DB)로 전송합니다...")
-    res_vision = requests.post(f"{BASE_URL}/api/vision/scan", json=vision_payload)
+    res_vision = api.post(f"{BASE_URL}/api/vision/scan", json=vision_payload)
     print(f"-> Vision 저장 성공 건수: {res_vision.json().get('inserted_vision_count')}")
 
-    res_rfid = requests.post(f"{BASE_URL}/api/rfid/scan", json=rfid_payload)
+    res_rfid = api.post(f"{BASE_URL}/api/rfid/scan", json=rfid_payload)
     print(f"-> RFID 저장 성공 건수: {res_rfid.json().get('inserted_rfid_count')}")
 
     # 4. 분석 가동
     print("\n4️⃣ 데이터 적재 완료. 서버 엔진에 융합 교차 분석을 요청합니다...")
-    res_analyze = requests.post(f"{BASE_URL}/api/session/{SESSION_ID}/analyze")
+    res_analyze = api.post(f"{BASE_URL}/api/session/{SESSION_ID}/analyze")
     
     print("\n📊 =============== [ 서버 최종 융합 리포트 ] ===============")
     print(json.dumps(res_analyze.json(), indent=2, ensure_ascii=False))

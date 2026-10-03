@@ -13,7 +13,6 @@ venv/
 spine_store/
 patrol_inbox/
 .normal_work/
-normal_history/
 
 # 혹시 나중에 만들지 모를 비밀번호 설정 파일 제외
 .env

@@ -9,7 +9,7 @@
 
 분석 요청 1건(= 책꽂이 한 층의 사진 1장)마다 백엔드(`backend/pipeline_jobs.py`)가 다음 순서로 실행합니다. 분석은 한 번에 하나씩만 돌아갑니다.
 
-1. 그 층의 **정상 상태 기준 이미지**만 `backend/.normal_work/`에 복사합니다. (원본: `backend/normal_images/<구역>/<책꽂이>/<층ID>.jpg`)
+1. 그 층의 **정상 상태 기준 이미지**를 DB에서 꺼내 `backend/.normal_work/<층 코드>_0.jpg`(예: `A-01-3_0.jpg`) 한 장으로 씁니다. (5절 참고)
 2. `ach/dataset/test/` 폴더를 비우고, 분석할 사진 **1장**을 `ach/dataset/test/uploaded_target.jpg`(또는 `.png`)로 넣습니다.
 3. 아래처럼 `JsonTesting.py`를 실행합니다.
    ```
@@ -97,10 +97,18 @@
 
 ## 5. 정상 상태 기준 이미지 위치 변경
 
-- 백엔드는 이제 `ach/dataset/normal`이 아니라 **층별 보관소** `backend/normal_images/<구역>/<책꽂이>/<층ID>.jpg`를 씁니다. (예: `backend/normal_images/A/A-01/A-01-3.jpg`)
-- 현재 `A-01-3.jpg`는 `ach/dataset/normal/20260522_203503.jpg`를 **960×720으로 줄인 버전**입니다(테스트에 써 온 버전). GitHub의 `ach/dataset/normal`에는 원본 4000×3000이 있습니다. 원본을 기준으로 쓰고 싶으면 대시보드의 '정상 상태' 탭에서 교체할 수 있습니다.
-- 사서가 대시보드에서 기준 사진을 올리거나, 최근 순찰 사진으로 교체할 수 있습니다(교체 전 사진은 `backend/normal_history/`에 보관).
+- 백엔드는 이제 `ach/dataset/normal`이 아니라 **DB(`NORMAL_IMAGE` 테이블)에 저장된 층별 기준 이미지**를 씁니다. 컴퓨터를 바꿔도 같은 DB를 쓰면 기준 이미지를 다시 옮길 필요가 없습니다.
+- AI 쪽에서 달라지는 것은 없습니다. 백엔드가 분석 직전에 DB의 이미지를 `backend/.normal_work/`에 파일로 써 주고, 지금처럼 `NORMAL_DIR`로 알려 줍니다.
+- 처음 DB를 만들 때는 `setup_db.py`가 `backend/db_create/seed/normal_images/LIB001/A/A-01/A-01-3.jpg`를 A구역 1번 책꽂이 3층의 기준 이미지로 넣습니다. 이 파일은 `ach/dataset/normal/20260522_203503.jpg`를 **960×720으로 줄인 버전**입니다(테스트에 써 온 버전). GitHub의 `ach/dataset/normal`에는 원본 4000×3000이 있습니다.
+- 기준 이미지는 관리자 계정으로 대시보드 '정상 상태' 탭에서 바꿉니다(사진 올리기 · 최근 순찰 사진으로 교체 · 이전 사진으로 되돌리기).
 - **한 층에는 기준 이미지를 한 장만** 둡니다. 여러 장이면 이미지마다 `B001`부터 번호를 다시 매겨 책 ID가 겹치기 때문입니다.
+
+## 5-1. 로그인 · 층 ID 변경 (테스트할 때 알아야 할 것)
+
+- 대시보드는 이제 **로그인**이 필요합니다. 시연용 계정: 도서관 ID `LIB001`, 아이디 `admin`, 비밀번호 `admin1234` (관리자). 일반 사서는 `librarian` / `lib1234`.
+- 층 ID 앞에 도서관 ID가 붙었습니다: `A-01-3` → **`LIB001-A-01-3`**. 화면과 수신함 파일 이름에는 지금처럼 `A-01-3`으로 보입니다.
+- 서버 API를 스크립트로 부를 때는 로봇 키 헤더 `X-Robot-Key: demo-robot-key-LIB001`이 필요합니다. `robot_simulator.py`, `run_master.py`, `backend/test_full_pipeline.py`는 이미 넣어 두었습니다.
+- 코드를 받은 뒤에는 `cd backend && python setup_db.py`를 한 번 실행해 주세요(계정 · 기준 이미지 생성, 예전 DB 자동 이전).
 
 ## 6. AI 수정 후 백엔드와 함께 테스트하는 방법
 
@@ -108,12 +116,12 @@
 pip install -r requirements.txt          # 루트
 cd backend
 docker-compose up -d                     # MySQL (처음 한 번)
-python setup_db.py                       # DB 구조 · 가상 데이터 · 기준 이미지 폴더 준비
+python setup_db.py                       # DB 구조 · 가상 데이터 · 계정 · 기준 이미지 준비 (매번 실행해도 안전)
 python -m uvicorn main:app --reload      # 서버
 # 다른 터미널 (루트)
-python robot_simulator.py                # ach/dataset/test 사진을 A-01-3 순찰 사진으로 전송
+python robot_simulator.py                # ach/dataset/test 사진을 LIB001-A-01-3 순찰 사진으로 전송
 ```
-http://127.0.0.1:8000/dashboard 에서 **순찰 사진 일괄 분석**을 누르고, 분석이 끝나면 A구역 1번 책꽂이 3층을 선택해 결과를 확인합니다. 실패하면 순찰 바의 '실패'에 마우스를 올리면 AI 에러 내용이 보입니다.
+http://127.0.0.1:8000 에서 `LIB001` / `admin` / `admin1234`로 로그인한 뒤 **순찰 사진 일괄 분석**을 누르고, 분석이 끝나면 A구역 1번 책꽂이 3층을 선택해 결과를 확인합니다. 실패하면 순찰 바의 '실패'에 마우스를 올리면 AI 에러 내용이 보입니다.
 
 `JsonTesting.py`만 따로 실행해도 됩니다(예전과 동일: `cd ach && python JsonTesting.py`).
 

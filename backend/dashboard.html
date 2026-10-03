@@ -23,6 +23,7 @@
             <a href="/report" target="_blank" class="text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
                 <i class="fa-solid fa-file-lines"></i> 일일 리포트
             </a>
+            <div id="user-box" class="flex items-center gap-3 pl-3 border-l border-slate-200"></div>
         </div>
     </nav>
 
@@ -70,7 +71,7 @@
                     <div id="map-placeholder" class="text-center text-slate-400 text-sm px-6">
                         <i class="fa-regular fa-map text-4xl mb-2 block"></i>
                         도서관 전체 지도 이미지가 아직 없습니다.<br>
-                        <span class="text-xs">아래 <b>지도 올리기</b>로 등록하세요.</span>
+                        <span id="map-placeholder-hint" class="text-xs">아래 <b>지도 올리기</b>로 등록하세요.</span>
                     </div>
                 </div>
 
@@ -82,7 +83,7 @@
                     </div>
                 </div>
 
-                <!-- 선택한 층의 정상 상태 기준 이미지 (normal_images/<구역>/<책꽂이>/<층ID>.jpg) -->
+                <!-- 선택한 층의 정상 상태 기준 이미지 (DB에 저장, GET /api/shelves/{shelf_id}/normal-image) -->
                 <div id="normal-view" class="hidden rounded-xl bg-slate-50 border border-slate-200 h-[300px] flex items-center justify-center overflow-hidden">
                     <img id="normal-photo" alt="선택한 층의 정상 상태 기준 사진" class="hidden w-full h-full object-contain cursor-zoom-in">
                     <div id="normal-placeholder" class="text-center text-slate-400 text-sm px-6">
@@ -101,15 +102,25 @@
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col gap-3">
                 <h2 class="text-md font-bold text-slate-700 flex items-center justify-between gap-2">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-map-location-dot text-teal-500"></i> 서가 선택</span>
-                    <span class="text-xs font-normal text-slate-400">층 번호는 위에서부터</span>
+                    <span class="flex items-center gap-2">
+                        <span class="text-xs font-normal text-slate-400">맨 아래가 1층</span>
+                        <button id="structure-edit-btn" onclick="toggleEditMode()"
+                                class="hidden shrink-0 whitespace-nowrap text-xs font-semibold px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 items-center gap-1.5">
+                            <i class="fa-solid fa-pen-ruler"></i> <span>구조 편집</span>
+                        </button>
+                    </span>
                 </h2>
+                <div id="edit-banner" class="hidden text-[11px] text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 leading-relaxed">
+                    <b>구조 편집 중</b> · <b>+</b> 버튼으로 구역 · 책꽂이 · 층(맨 위에 쌓임)을 추가하고, 책꽂이 번호나 층을 눌러 이름을 고치거나 지웁니다.
+                    순찰 기록 · 도서가 있는 층은 지울 수 없습니다.
+                </div>
                 <div id="zone-tabs" class="flex flex-wrap gap-1.5"></div>
                 <div id="zone-info" class="text-xs text-slate-500"></div>
                 <div id="bookcase-grid" class="flex gap-2 overflow-x-auto pb-1">
                     <div class="text-sm text-slate-400 py-4">불러오는 중...</div>
                 </div>
                 <div id="status-legend" class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500"></div>
-                <div class="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <div id="bulk-ref-row" class="hidden flex items-center gap-2 pt-2 border-t border-slate-100">
                     <button id="bulk-ref-btn" onclick="bulkUpdateReferences()" disabled
                             class="shrink-0 whitespace-nowrap text-xs px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 font-semibold flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
                         <i class="fa-solid fa-images"></i> <span id="bulk-ref-text">기준 사진 일괄 갱신</span>
@@ -164,6 +175,24 @@
         </div>
     </div>
 
+    <!-- 구조 편집 입력 창 (openFormModal) -->
+    <div id="form-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closeFormModal()">
+        <form id="form-modal-form" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 flex flex-col gap-3" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between">
+                <h3 id="form-modal-title" class="font-bold text-slate-700"></h3>
+                <button type="button" onclick="closeFormModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="form-modal-info" class="text-xs text-slate-500 leading-relaxed"></div>
+            <div id="form-modal-fields" class="flex flex-col gap-3"></div>
+            <div id="form-modal-error" class="hidden text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2"></div>
+            <div class="flex items-center gap-2 pt-1">
+                <div id="form-modal-danger" class="mr-auto"></div>
+                <button type="button" onclick="closeFormModal()" class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">취소</button>
+                <button type="submit" id="form-modal-submit" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">저장</button>
+            </div>
+        </form>
+    </div>
+
     <!-- 라이트박스 모달 -->
     <div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm" onclick="closeLightbox()">
         <div class="relative max-w-3xl w-full mx-4" onclick="event.stopPropagation()">
@@ -199,6 +228,8 @@
         let patrolProgress = -1;      // 진행 중인 묶음에서 끝난 사진 수 (바뀌면 서가 현황 갱신)
         let patrolTimer = null;
         const PATROL_POLL_MS = 3000;  // 일괄 분석 중 진행 상황 확인 주기
+        let ME = { is_admin: false };  // 로그인한 사서 (/api/auth/me) — 관리자만 지도 · 기준 사진 · 구조 설정 가능
+        let editMode = false;         // 관리자의 구조 편집 모드 (서가 선택 카드에서 구역 · 책꽂이 · 층 추가 · 수정 · 삭제)
 
         // 알림 라벨별 사서 안내 문구 (라벨/그룹 분류는 서버가 결정)
         const MESSAGE_BY_LABEL = {
@@ -226,6 +257,8 @@
             lb.classList.add('flex');
         }
 
+        document.addEventListener("keydown", e => { if (e.key === "Escape") closeFormModal(); });
+
         function closeLightbox() {
             const lb = document.getElementById('lightbox');
             lb.classList.add('hidden');
@@ -233,13 +266,6 @@
         }
 
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
-
-        async function fetchJson(url, options) {
-            const res = await fetch(url, options);
-            const body = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(body.detail || `요청 실패 (HTTP ${res.status})`);
-            return body;
-        }
 
         // ===================== 도서관 지도 / 최근 순찰 사진 / 정상 상태 사진 =====================
         const VIEWS = ["map", "photo", "normal"];
@@ -291,6 +317,11 @@
             const box = document.getElementById('view-actions');
             box.innerHTML = "";
             if (currentView === "map") {
+                document.getElementById('map-placeholder-hint').classList.toggle('hidden', !ME.is_admin);
+                if (!ME.is_admin) {
+                    if (!libraryMapExists) box.innerHTML = `<span class="text-slate-400">도서관 지도는 관리자가 등록할 수 있습니다.</span>`;
+                    return;
+                }
                 box.appendChild(adminButton(libraryMapExists ? "지도 변경" : "지도 올리기", "fa-upload",
                     () => document.getElementById('map-file').click()));
                 if (libraryMapExists) box.appendChild(adminButton("지도 삭제", "fa-trash", deleteLibraryMap, true));
@@ -302,16 +333,20 @@
                 box.innerHTML = `<span class="text-slate-400">층을 선택하면 그 층의 기준 사진을 등록 · 교체할 수 있습니다.</span>`;
                 return;
             }
-            const has = level.normal_images.length > 0;
-            box.appendChild(adminButton(has ? "기준 사진 교체" : "기준 사진 올리기", "fa-upload",
-                () => document.getElementById('normal-file').click()));
-            if (level.latest_session && level.latest_session.image_path) {
-                box.appendChild(adminButton("이 층만 최근 순찰 사진으로", "fa-camera-rotate", setNormalFromLatest));
+            const has = level.has_normal_image;
+            if (!ME.is_admin) {
+                box.innerHTML = `<span class="text-slate-400"><i class="fa-solid fa-lock"></i> 기준 사진 등록 · 교체는 관리자만 할 수 있습니다.</span>`;
+            } else {
+                box.appendChild(adminButton(has ? "기준 사진 교체" : "기준 사진 올리기", "fa-upload",
+                    () => document.getElementById('normal-file').click()));
+                if (level.latest_session && level.latest_session.image_path) {
+                    box.appendChild(adminButton("이 층만 최근 순찰 사진으로", "fa-camera-rotate", setNormalFromLatest));
+                }
+                if (level.normal_history_count > 0) {
+                    box.appendChild(adminButton("이전 기준 사진으로 되돌리기", "fa-rotate-left", restoreNormalImage));
+                }
+                if (has) box.appendChild(adminButton("기준 사진 삭제", "fa-trash", deleteNormalImage, true));
             }
-            if (level.normal_history_count > 0) {
-                box.appendChild(adminButton("이전 기준 사진으로 되돌리기", "fa-rotate-left", restoreNormalImage));
-            }
-            if (has) box.appendChild(adminButton("기준 사진 삭제", "fa-trash", deleteNormalImage, true));
 
             // 최근 순찰 사진을 기준으로 써도 되는지 (일괄 갱신 대상 여부)
             const ref = level.reference_update;
@@ -363,7 +398,7 @@
             input.value = "";
             const level = selectedLevel();
             if (!file || !level) return;
-            if (level.normal_images.length && !confirm(`${level.location_label}의 기준 사진을 새 사진으로 교체할까요?`)) return;
+            if (level.has_normal_image && !confirm(`${level.location_label}의 기준 사진을 새 사진으로 교체할까요?`)) return;
             try {
                 await sendForm(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image`, "PUT", file);
                 await afterNormalChanged();
@@ -446,19 +481,20 @@
         function setNormalPhoto(level, bustCache = false) {
             const img = document.getElementById('normal-photo');
             const placeholder = document.getElementById('normal-placeholder');
-            const images = (level && level.normal_images) || [];
-            img.classList.toggle('hidden', images.length === 0);
-            placeholder.classList.toggle('hidden', images.length > 0);
-            if (images.length) {
-                const url = `/static/normal/${images[0].split("/").map(encodeURIComponent).join("/")}` + (bustCache ? `?v=${Date.now()}` : "");
+            const has = !!(level && level.has_normal_image);
+            img.classList.toggle('hidden', !has);
+            placeholder.classList.toggle('hidden', has);
+            if (has) {
+                // 기준 사진은 DB에 있으며, 교체 직후에는 브라우저 캐시를 피하려고 시각을 붙임
+                const url = `${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image` + (bustCache ? `?v=${Date.now()}` : "");
                 img.src = url;
-                const caption = `${level.location_label} · 정상 상태 기준` + (images.length > 1 ? ` (기준 사진 ${images.length}장 중 1장)` : "");
+                const caption = `${level.location_label} · 정상 상태 기준`;
                 img.onclick = () => openLightbox(url, level.location_label, caption);
                 setCaption('normal', caption);
             } else {
                 placeholder.innerHTML = level
                     ? `<i class="fa-solid fa-image text-4xl mb-2 block"></i><b>${escapeHtml(level.location_label)}</b>의 정상 상태 기준 사진이 없습니다.<br>
-                       <span class="text-xs">아래 <b>기준 사진 올리기</b>로 등록하면 분석에 사용됩니다.</span>`
+                       <span class="text-xs">${ME.is_admin ? "아래 <b>기준 사진 올리기</b>로 등록하면 분석에 사용됩니다." : "관리자에게 기준 사진 등록을 요청하세요."}</span>`
                     : `<i class="fa-solid fa-circle-check text-4xl mb-2 block"></i>아래에서 층을 선택하면<br>그 층의 정상 상태 기준 사진이 표시됩니다.`;
                 setCaption('normal', level ? level.location_label : "");
             }
@@ -576,7 +612,12 @@
             box.innerHTML = `
                 <div class="text-sm text-slate-500 mb-1"><i class="fa-solid fa-hand-pointer"></i>
                     왼쪽 <b>서가 선택</b>에서 확인할 층을 누르면 그 층의 알림이 표시됩니다.</div>`;
-            if (levels.length === 0) {
+            if (Object.keys(shelfIndex).length === 0) {
+                box.insertAdjacentHTML("beforeend", `
+                    <div class="p-5 rounded-xl bg-slate-50 border-l-4 border-slate-300 text-slate-600 text-sm">
+                        <i class="fa-solid fa-building-columns mr-1"></i> 등록된 층이 없습니다. `
+                        + (ME.is_admin ? "왼쪽 <b>서가 선택</b>에서 도서관 구조를 먼저 만들어 주세요." : "관리자가 도서관 구조를 등록하면 순찰 결과가 표시됩니다.") + `</div>`);
+            } else if (levels.length === 0) {
                 box.insertAdjacentHTML("beforeend", `
                     <div class="p-5 rounded-xl bg-emerald-50 border-l-4 border-emerald-500 text-emerald-800 text-sm">
                         <i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i> 지금 확인이 필요한 층이 없습니다.</div>`);
@@ -660,57 +701,97 @@
         }
 
         function renderShelfPicker() {
-            // 구역 탭
+            updateEditControls();
             const tabs = document.getElementById('zone-tabs');
+            const grid = document.getElementById('bookcase-grid');
+            const info = document.getElementById('zone-info');
             tabs.innerHTML = "";
+            grid.innerHTML = "";
+            info.innerHTML = "";
+
+            // 구역 탭
             locationTree.forEach(zone => {
                 const active = zone.zone_id === activeZoneId;
                 const tab = document.createElement("button");
                 tab.className = "px-3 py-1.5 rounded-lg text-sm font-semibold flex items-center gap-1.5 border transition-colors "
                     + (active ? "bg-teal-600 border-teal-600 text-white" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50");
-                tab.innerHTML = `${escapeHtml(zone.zone_id)}구역 ${zoneBadge(zone)}`;
+                tab.innerHTML = `${escapeHtml(zone.zone_code)}구역 ${zoneBadge(zone)}`;
                 tab.title = `${zone.zone_name} (${zone.location || ""})`;
                 tab.addEventListener("click", () => { activeZoneId = zone.zone_id; renderShelfPicker(); });
                 tabs.appendChild(tab);
             });
+            if (editMode && locationTree.length) tabs.appendChild(addButton("구역", openAddZone, "px-3 py-1.5 text-sm"));
 
             const zone = locationTree.find(z => z.zone_id === activeZoneId);
-            const grid = document.getElementById('bookcase-grid');
-            grid.innerHTML = "";
             if (!zone) {
-                grid.innerHTML = `<div class="text-sm text-slate-400 py-4">등록된 서가가 없습니다. (backend에서 python setup_db.py 실행)</div>`;
+                grid.innerHTML = ME.is_admin
+                    ? `<div class="w-full text-center py-6 text-sm text-slate-500 border-2 border-dashed border-slate-200 rounded-xl">
+                           <i class="fa-solid fa-building-columns text-2xl text-slate-300 mb-2 block"></i>
+                           아직 등록된 구역이 없습니다.<br><span class="text-xs text-slate-400">구역 → 책꽂이 → 층 순서로 도서관 구조를 만들어 주세요.</span>
+                           <div class="mt-3"><button onclick="openAddZone()" class="text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg">
+                               <i class="fa-solid fa-plus"></i> 첫 구역 추가</button></div></div>`
+                    : `<div class="text-sm text-slate-400 py-4">관리자가 아직 도서관 구조(구역 · 책꽂이 · 층)를 등록하지 않았습니다.</div>`;
+                document.getElementById('status-legend').innerHTML = "";
+                updateBulkReferenceButton();
                 return;
             }
-            document.getElementById('zone-info').innerHTML =
-                `<b class="text-slate-600">${escapeHtml(zone.zone_name)}</b> · ${escapeHtml(zone.location || "")} · 책꽂이 ${zone.bookcases.length}개`;
+            info.innerHTML = `<b class="text-slate-600">${escapeHtml(zone.zone_name)}</b>`
+                + (zone.location ? ` · ${escapeHtml(zone.location)}` : "") + ` · 책꽂이 ${zone.bookcases.length}개`
+                + (editMode ? ` <button onclick="openEditZone()" class="ml-1 text-indigo-600 hover:underline"><i class="fa-solid fa-pen"></i> 구역 수정</button>` : "");
+
+            if (zone.bookcases.length === 0 && !editMode) {
+                grid.innerHTML = `<div class="text-sm text-slate-400 py-4">이 구역에는 아직 책꽂이가 없습니다.</div>`;
+            }
 
             // 책꽂이마다 세로로 층을 쌓은 미니맵 (한 줄에 구역의 모든 책꽂이)
             zone.bookcases.forEach(bookcase => {
                 const col = document.createElement("div");
-                col.className = "flex-1 min-w-[52px] flex flex-col";
+                col.className = "flex-1 min-w-[52px] flex flex-col justify-end";
                 col.title = `${bookcase.bookcase_no}번 책꽂이 · ${bookcase.bookcase_name || ""}`;
-                col.innerHTML = `
-                    <div class="text-[11px] font-semibold text-slate-600 text-center mb-1">${bookcase.bookcase_no}번</div>
+                const head = editMode
+                    ? `<button data-edit-bookcase class="text-[11px] font-semibold text-indigo-600 hover:underline text-center mb-1 whitespace-nowrap">${bookcase.bookcase_no}번 <i class="fa-solid fa-pen text-[9px]"></i></button>`
+                    : `<div class="text-[11px] font-semibold text-slate-600 text-center mb-1">${bookcase.bookcase_no}번</div>`;
+                col.innerHTML = `${head}
                     <div class="border-2 border-amber-900/30 bg-amber-900/5 rounded-md p-0.5 flex flex-col gap-0.5" data-levels></div>`;
+                if (editMode) col.querySelector("[data-edit-bookcase]").addEventListener("click", () => openEditBookcase(zone, bookcase));
                 const frame = col.querySelector("[data-levels]");
-                bookcase.levels.forEach(level => {
+                if (bookcase.levels.length === 0) {
+                    frame.innerHTML = `<div class="h-7 flex items-center justify-center text-[10px] text-slate-400">층 없음</div>`;
+                }
+                // 위층부터 그려서 1층이 맨 아래에 오도록
+                [...bookcase.levels].sort((a, b) => b.level - a.level).forEach(level => {
                     const st = LEVEL_STATUS[level.status];
                     const selected = level.shelf_id === selectedShelfId;
                     const cell = document.createElement("button");
-                    const refOk = level.reference_update.eligible;
+                    const refOk = level.reference_update.eligible && !editMode;
                     cell.className = `relative h-7 border rounded-sm px-1 flex items-center justify-between text-[10px] leading-none transition-all ${st.cell} `
-                        + (selected ? "ring-2 ring-blue-500 ring-offset-1 z-10 " : "")
-                        + "hover:brightness-95";
+                        + (selected && !editMode ? "ring-2 ring-blue-500 ring-offset-1 z-10 " : "")
+                        + (editMode ? "hover:ring-2 hover:ring-indigo-400 " : "hover:brightness-95");
                     const last = level.latest_session ? `\n최근 순찰 ${formatTime(level.latest_session.scan_time)}` : "";
-                    cell.title = `${level.location_label}\n${st.text} · 도서 ${level.book_count}권${last}`
-                        + (refOk ? "\n● 최근 순찰 사진으로 기준 사진 갱신 가능" : "");
-                    cell.innerHTML = `<span class="font-bold">${level.level}</span><span>${levelCellText(level)}</span>`
+                    cell.title = editMode ? `${level.location_label}\n눌러서 이름 수정 · 삭제`
+                        : `${level.location_label}\n${st.text} · 도서 ${level.book_count}권${last}`
+                          + (refOk ? "\n● 최근 순찰 사진으로 기준 사진 갱신 가능" : "");
+                    cell.innerHTML = `<span class="font-bold">${level.level}</span><span>${editMode ? "" : levelCellText(level)}</span>`
                         + (refOk ? `<span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-sky-500 ring-1 ring-white"></span>` : "");
-                    cell.addEventListener("click", () => selectShelf(level.shelf_id));
+                    cell.addEventListener("click", () => editMode ? openEditLevel(bookcase, level) : selectShelf(level.shelf_id));
                     frame.appendChild(cell);
                 });
+                if (editMode) {
+                    // 새 층은 맨 위에 쌓이므로 버튼도 책꽂이 위에
+                    const addLevelBtn = addButton("층", () => addLevel(bookcase), "mb-1 py-0.5 text-[10px] justify-center");
+                    addLevelBtn.title = `${bookcase.bookcase_no}번 책꽂이 맨 위에 ${bookcase.levels.length + 1}층 추가`;
+                    col.insertBefore(addLevelBtn, frame);
+                }
                 grid.appendChild(col);
             });
+            if (editMode) {
+                const col = document.createElement("div");
+                col.className = "min-w-[64px] flex flex-col";
+                col.innerHTML = `<div class="text-[11px] text-center mb-1 text-transparent">-</div>`;
+                const btn = addButton("책꽂이", () => openAddBookcase(zone), "flex-col justify-center text-[11px] min-h-[80px] w-full");
+                col.appendChild(btn);
+                grid.appendChild(col);
+            }
 
             document.getElementById('status-legend').innerHTML = Object.values(LEVEL_STATUS).map(st =>
                 `<span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm ${st.dot}"></span>${st.text}</span>`
@@ -719,8 +800,255 @@
             updateBulkReferenceButton();
         }
 
+        // ===================== 도서관 구조 편집 (관리자) =====================
+        function addButton(label, onClick, extra = "") {
+            const btn = document.createElement("button");
+            btn.className = `rounded-lg border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 font-semibold flex items-center gap-1 whitespace-nowrap ${extra}`;
+            btn.innerHTML = `<i class="fa-solid fa-plus"></i> <span>${label}</span>`;
+            btn.addEventListener("click", onClick);
+            return btn;
+        }
+
+        function updateEditControls() {
+            const btn = document.getElementById('structure-edit-btn');
+            btn.className = "shrink-0 whitespace-nowrap text-xs font-semibold px-2.5 py-1 rounded-lg border items-center gap-1.5 "
+                + (ME.is_admin ? "flex " : "hidden ")
+                + (editMode ? "bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50");
+            btn.querySelector("span").innerText = editMode ? "편집 마치기" : "구조 편집";
+            document.getElementById('edit-banner').classList.toggle('hidden', !editMode);
+        }
+
+        function toggleEditMode() {
+            editMode = !editMode;
+            renderShelfPicker();
+        }
+
+        let formModalSubmit = null;
+        // fields: [{ name, label, value, type, placeholder, help, min, max, required }]
+        // danger: { label, onClick, disabledReason } — 삭제 버튼 (disabledReason이 있으면 비활성 + 이유 표시)
+        function openFormModal({ title, info = "", fields = [], submitLabel = "저장", onSubmit, danger = null }) {
+            document.getElementById('form-modal-title').innerText = title;
+            document.getElementById('form-modal-info').innerHTML = info;
+            const box = document.getElementById('form-modal-fields');
+            box.innerHTML = "";
+            fields.forEach(f => {
+                const wrap = document.createElement("label");
+                wrap.className = "flex flex-col gap-1 text-xs font-semibold text-slate-600";
+                wrap.innerHTML = `<span>${f.label}${f.required ? ' <span class="text-rose-500">*</span>' : ""}</span>`;
+                const input = document.createElement("input");
+                input.name = f.name;
+                input.type = f.type || "text";
+                input.value = f.value ?? "";
+                if (f.placeholder) input.placeholder = f.placeholder;
+                if (f.min !== undefined) input.min = f.min;
+                if (f.max !== undefined) input.max = f.max;
+                if (f.required) input.required = true;
+                input.className = "font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300";
+                wrap.appendChild(input);
+                if (f.help) wrap.insertAdjacentHTML("beforeend", `<span class="font-normal text-[11px] text-slate-400">${f.help}</span>`);
+                box.appendChild(wrap);
+            });
+            const dangerBox = document.getElementById('form-modal-danger');
+            dangerBox.innerHTML = "";
+            if (danger) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "text-sm px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5";
+                btn.innerHTML = `<i class="fa-solid fa-trash"></i> ${danger.label}`;
+                btn.disabled = !!danger.disabledReason;
+                if (danger.disabledReason) btn.title = danger.disabledReason;
+                btn.addEventListener("click", () => runModalAction(danger.onClick));
+                dangerBox.appendChild(btn);
+            }
+            document.getElementById('form-modal-submit').innerText = submitLabel;
+            document.getElementById('form-modal-submit').classList.toggle('hidden', !onSubmit);
+            document.getElementById('form-modal-error').classList.add('hidden');
+            formModalSubmit = onSubmit;
+            const modal = document.getElementById('form-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            const first = box.querySelector("input");
+            if (first) first.focus();
+        }
+
+        function closeFormModal() {
+            const modal = document.getElementById('form-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            formModalSubmit = null;
+        }
+
+        // 모달 안의 동작 실행: 성공하면 닫고 서가 현황 갱신, 실패하면 이유를 모달에 표시
+        async function runModalAction(action, values = {}) {
+            const err = document.getElementById('form-modal-error');
+            const submit = document.getElementById('form-modal-submit');
+            err.classList.add('hidden');
+            submit.disabled = true;
+            try {
+                const cancelled = (await action(values)) === false;
+                if (cancelled) return;
+                closeFormModal();
+                await refreshLocations();
+                if (selectedShelfId && !shelfIndex[selectedShelfId]) clearSelection();
+                refreshPatrolStatus();
+            } catch (e) {
+                err.innerText = e.message;
+                err.classList.remove('hidden');
+            } finally {
+                submit.disabled = false;
+            }
+        }
+
+        document.getElementById('form-modal-form').addEventListener("submit", e => {
+            e.preventDefault();
+            if (!formModalSubmit) return;
+            const values = Object.fromEntries(new FormData(e.target).entries());
+            runModalAction(formModalSubmit, values);
+        });
+
+        function sendJson(url, method, body) {
+            return fetchJson(url, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+        }
+
+        // 다음 구역 코드 추천: 쓰지 않은 가장 앞의 알파벳
+        function nextZoneCode() {
+            const used = new Set(locationTree.map(z => z.zone_code));
+            for (let i = 0; i < 26; i++) {
+                const c = String.fromCharCode(65 + i);
+                if (!used.has(c)) return c;
+            }
+            return "";
+        }
+
+        function typicalLevelCount(zone) {
+            const counts = (zone ? zone.bookcases : []).map(b => b.levels.length).filter(n => n > 0);
+            return counts.length ? counts[counts.length - 1] : 5;
+        }
+
+        function openAddZone() {
+            if (!editMode) { editMode = true; renderShelfPicker(); }
+            openFormModal({
+                title: "구역 추가",
+                info: "구역 코드는 위치 표시(예: <b>A</b>구역 1번 책꽂이 3층)와 순찰 사진 이름에 쓰이므로 만든 뒤에는 바꿀 수 없습니다.",
+                fields: [
+                    { name: "zone_code", label: "구역 코드", value: nextZoneCode(), placeholder: "A", required: true, help: "영문 대문자 · 숫자 1~5자" },
+                    { name: "zone_name", label: "구역 이름 (주제)", placeholder: "예: 공학·컴퓨터", required: true },
+                    { name: "location", label: "위치 설명", placeholder: "예: 2층 제1자료실" },
+                    { name: "bookcase_count", label: "책꽂이 함께 만들기 (개)", type: "number", value: 0, min: 0, max: 30, help: "0이면 구역만 만들고 책꽂이는 하나씩 추가합니다" },
+                    { name: "level_count", label: "책꽂이마다 층 수", type: "number", value: 5, min: 1, max: 20 },
+                ],
+                submitLabel: "추가",
+                onSubmit: async v => {
+                    const res = await sendJson(`${API_BASE}/structure/zones`, "POST", {
+                        zone_code: v.zone_code, zone_name: v.zone_name, location: v.location,
+                        bookcase_count: Number(v.bookcase_count || 0), level_count: Number(v.level_count || 5),
+                    });
+                    activeZoneId = `${ME.library_id}-${res.zone_code}`;
+                },
+            });
+        }
+
+        function openEditZone() {
+            const zone = locationTree.find(z => z.zone_id === activeZoneId);
+            if (!zone) return;
+            const levels = zone.bookcases.reduce((n, b) => n + b.levels.length, 0);
+            const blocked = zone.bookcases.flatMap(b => b.levels).filter(l => l.book_count > 0 || l.session_count > 0);
+            openFormModal({
+                title: `${zone.zone_code}구역 수정`,
+                info: `책꽂이 ${zone.bookcases.length}개 · 층 ${levels}개`,
+                fields: [
+                    { name: "zone_name", label: "구역 이름 (주제)", value: zone.zone_name, required: true },
+                    { name: "location", label: "위치 설명", value: zone.location || "" },
+                ],
+                onSubmit: v => sendJson(`${API_BASE}/structure/zones/${encodeURIComponent(zone.zone_code)}`, "PATCH", v),
+                danger: {
+                    label: "구역 삭제",
+                    disabledReason: blocked.length ? `도서 · 순찰 기록이 있는 층 ${blocked.length}개가 있어 지울 수 없습니다` : "",
+                    onClick: async () => {
+                        if (!confirm(`${zone.zone_code}구역과 안의 책꽂이 ${zone.bookcases.length}개 · 층 ${levels}개를 모두 지울까요?\n(층의 기준 사진도 함께 지워집니다)`)) return false;
+                        await fetchJson(`${API_BASE}/structure/zones/${encodeURIComponent(zone.zone_code)}`, { method: "DELETE" });
+                    },
+                },
+            });
+            if (blocked.length) {
+                document.getElementById('form-modal-info').innerHTML +=
+                    `<div class="mt-1 text-amber-700"><i class="fa-solid fa-lock"></i> 도서 · 순찰 기록이 있는 층이 있어 구역을 지울 수 없습니다. 이름은 고칠 수 있습니다.</div>`;
+            }
+        }
+
+        function openAddBookcase(zone) {
+            const nextNo = zone.bookcases.reduce((m, b) => Math.max(m, b.bookcase_no), 0) + 1;
+            openFormModal({
+                title: `${zone.zone_code}구역에 책꽂이 추가`,
+                fields: [
+                    { name: "bookcase_no", label: "책꽂이 번호", type: "number", value: nextNo, min: 1, max: 99, required: true, help: "만든 뒤에는 바꿀 수 없습니다" },
+                    { name: "bookcase_name", label: "설명", placeholder: "예: 컴퓨터·게임 개발" },
+                    { name: "level_count", label: "층 수", type: "number", value: typicalLevelCount(zone), min: 0, max: 20, help: "층은 나중에 하나씩 더 추가할 수 있습니다" },
+                ],
+                submitLabel: "추가",
+                onSubmit: v => sendJson(`${API_BASE}/structure/zones/${encodeURIComponent(zone.zone_code)}/bookcases`, "POST", {
+                    bookcase_no: Number(v.bookcase_no), bookcase_name: v.bookcase_name, level_count: Number(v.level_count || 0),
+                }),
+            });
+        }
+
+        function openEditBookcase(zone, bookcase) {
+            const blocked = bookcase.levels.filter(l => l.book_count > 0 || l.session_count > 0);
+            openFormModal({
+                title: `${zone.zone_code}구역 ${bookcase.bookcase_no}번 책꽂이`,
+                info: `코드 ${escapeHtml(bookcase.bookcase_code)} · 층 ${bookcase.levels.length}개`,
+                fields: [{ name: "name", label: "설명", value: bookcase.bookcase_name || "", placeholder: "예: 공학 일반" }],
+                onSubmit: v => sendJson(`${API_BASE}/structure/bookcases/${encodeURIComponent(bookcase.bookcase_code)}`, "PATCH", v),
+                danger: {
+                    label: "책꽂이 삭제",
+                    disabledReason: blocked.length ? `도서 · 순찰 기록이 있는 층(${blocked.map(l => l.level + "층").join(", ")})이 있어 지울 수 없습니다` : "",
+                    onClick: async () => {
+                        if (!confirm(`${bookcase.bookcase_no}번 책꽂이와 층 ${bookcase.levels.length}개를 지울까요?`)) return false;
+                        await fetchJson(`${API_BASE}/structure/bookcases/${encodeURIComponent(bookcase.bookcase_code)}`, { method: "DELETE" });
+                    },
+                },
+            });
+        }
+
+        async function addLevel(bookcase) {
+            try {
+                await sendJson(`${API_BASE}/structure/bookcases/${encodeURIComponent(bookcase.bookcase_code)}/levels`, "POST", {});
+                await refreshLocations();
+            } catch (e) {
+                alert(`❌ 층 추가 실패: ${e.message}`);
+            }
+        }
+
+        function openEditLevel(bookcase, level) {
+            const isLast = level.level === Math.max(...bookcase.levels.map(l => l.level));
+            const reasons = [];
+            if (!isLast) reasons.push(`맨 위 층(${Math.max(...bookcase.levels.map(l => l.level))}층)부터 지울 수 있습니다`);
+            if (level.book_count) reasons.push(`등록된 도서 ${level.book_count}권`);
+            if (level.session_count) reasons.push(`순찰 기록 ${level.session_count}건`);
+            openFormModal({
+                title: level.location_label,
+                info: `코드 ${escapeHtml(level.shelf_code)} · 도서 ${level.book_count}권 · 순찰 기록 ${level.session_count}건 · 기준 사진 ${level.has_normal_image ? "있음" : "없음"}`
+                    + (level.book_count ? "" : `<div class="mt-1 text-slate-400">도서 목록(정답지)은 도서관 정보 시스템에서 받아옵니다. 도서가 등록되기 전에는 이 층을 분석할 수 없습니다.</div>`),
+                fields: [{ name: "name", label: "층 설명", value: level.shelf_name || "", placeholder: "예: 신착 도서" }],
+                onSubmit: v => sendJson(`${API_BASE}/structure/levels/${encodeURIComponent(level.shelf_code)}`, "PATCH", v),
+                danger: {
+                    label: "층 삭제",
+                    disabledReason: reasons.join(" · "),
+                    onClick: async () => {
+                        if (!confirm(`${level.location_label}을(를) 지울까요?` + (level.has_normal_image ? "\n(이 층의 기준 사진도 함께 지워집니다)" : ""))) return false;
+                        await fetchJson(`${API_BASE}/structure/levels/${encodeURIComponent(level.shelf_code)}`, { method: "DELETE" });
+                    },
+                },
+            });
+            if (reasons.length) {
+                document.getElementById('form-modal-info').innerHTML +=
+                    `<div class="mt-1 text-amber-700"><i class="fa-solid fa-lock"></i> 삭제 불가: ${reasons.map(escapeHtml).join(" · ")}</div>`;
+            }
+        }
+
         // 기준 사진 일괄 갱신 버튼: 전체 구역의 후보 수 표시
         function updateBulkReferenceButton() {
+            document.getElementById('bulk-ref-row').classList.toggle('hidden', !ME.is_admin || Object.keys(shelfIndex).length === 0);   // 관리자만
             const count = Object.values(shelfIndex).filter(x => x.level.reference_update.eligible).length;
             document.getElementById('bulk-ref-btn').disabled = count === 0;
             document.getElementById('bulk-ref-text').innerText = `기준 사진 일괄 갱신 (${count}곳)`;
@@ -852,7 +1180,7 @@
                     <b>${escapeHtml(level.location_label)}</b>은(는) 아직 순찰 기록이 없습니다.
                     ${level.book_count === 0
                         ? `<div class="text-xs mt-2">등록된 도서가 없는 층입니다. 도서 정보가 등록되면 분석할 수 있습니다.</div>`
-                        : (level.normal_images.length ? "" : `<div class="text-xs mt-2 text-violet-600">정상 상태 기준 사진이 없습니다. 왼쪽 <b>정상 상태</b> 탭에서 등록하세요.</div>`)}
+                        : (level.has_normal_image ? "" : `<div class="text-xs mt-2 text-violet-600">정상 상태 기준 사진이 없습니다. ${ME.is_admin ? "왼쪽 <b>정상 상태</b> 탭에서 등록하세요." : "관리자에게 등록을 요청하세요."}</div>`)}
                 </div>`;
             document.getElementById("crop-images-grid").innerHTML =
                 `<div class="col-span-full text-center text-slate-400 py-10 text-sm">표시할 책등 이미지가 없습니다.</div>`;
@@ -867,6 +1195,7 @@
                 });
                 row.action_status = updated.action_status;
                 row.action_time = updated.action_time;
+                row.action_by_name = updated.action_by_name;
                 renderLibrarianDashboard(currentSession);
                 refreshHistory();
                 refreshLocations();
@@ -892,7 +1221,7 @@
                 `<span class="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded ${GROUP_INFO[o.group].badge}">+ ${escapeHtml(o.label)}</span>`
             ).join("");
             const handledBadge = handled
-                ? `<span class="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">${ACTION_LABELS[row.action_status]} · ${formatTime(row.action_time)}</span>`
+                ? `<span class="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">${ACTION_LABELS[row.action_status]}${row.action_by_name ? " · " + escapeHtml(row.action_by_name) : ""} · ${formatTime(row.action_time)}</span>`
                 : "";
 
             const card = document.createElement("div");
@@ -1040,11 +1369,16 @@
         // ===================== 초기화 =====================
         showView('map');
         (async () => {
+            ME = await loadMe();        // 로그인한 사서 (관리자 기능 표시 여부)
+            renderUserBox(ME);
+            document.title = `${ME.library_name} · 서고 모니터링`;
+            renderViewActions();
             await refreshLocations();   // 층 선택 전이므로 알림판에는 '확인이 필요한 층' 목록 표시
+            if (ME.is_admin && locationTree.length === 0) { editMode = true; renderShelfPicker(); }   // 빈 도서관: 바로 구조 만들기
             refreshHistory();
             refreshPatrolStatus();
+            loadLibraryMap();
         })();
-        loadLibraryMap();
         // 새 결과 반영: 서가 상태와 이력만 갱신 (보고 있는 알림판은 바꾸지 않음)
         setInterval(() => { refreshLocations(); refreshHistory(); }, AUTO_REFRESH_MS);
     </script>
