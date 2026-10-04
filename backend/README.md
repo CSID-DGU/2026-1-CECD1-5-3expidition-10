@@ -9,7 +9,7 @@ Vision AI(`ach/`)가 분석한 도서별 인식 결과를 받아 가상 RFID · 
 ## 🔐 로그인 · 도서관 분리 (`auth.py`)
 - 여러 도서관이 한 서버를 함께 씁니다. 모든 데이터는 **도서관(`LIBRARY`)** 에 속하고, 로그인한 사람은 자기 도서관의 데이터만 보고 바꿀 수 있습니다. 다른 도서관의 층 · 세션 · 사진 · 알림을 요청하면 **404**(있는지조차 알려 주지 않음)입니다.
 - **사서 로그인**: `POST /api/auth/login` (`library_id`, `username`, `password`). 성공하면 `lib_session` 쿠키(HttpOnly, 12시간)를 받습니다. 비밀번호는 PBKDF2-SHA256으로 해시해 `APP_USER`에, 로그인 세션은 토큰의 SHA-256만 `AUTH_SESSION`에 저장합니다.
-- **권한**: `ADMIN`(관리자)과 `LIBRARIAN`(일반 사서). 지도 · 기준 사진 · 도서관 구조를 바꾸는 API는 관리자만(아니면 403).
+- **권한**: `ADMIN`(관리자)과 `LIBRARIAN`(일반 사서). 지도 · 기준 사진 · 도서관 구조 · 사서 계정을 바꾸는 API는 관리자만(아니면 403).
 - **로봇**: 로그인 대신 `X-Robot-Key` 헤더로 도서관별 로봇 키를 보냅니다(`LIBRARY.robot_key_hash`에 해시만 저장). 로봇은 사진 전송 · 세션 기록 API만 쓸 수 있고, 대시보드 API는 403입니다.
 - 로그인하지 않으면 API는 401, 화면(`/`, `/dashboard`, `/report`)은 `/login`으로 이동합니다. 화면 스크립트(`common.js`의 `fetchJson`)는 401을 받으면 로그인 화면으로 보냅니다.
 - 계정 · 로봇 키 관리: `python manage_users.py` (사용법은 파일 위쪽 주석과 루트 README)
@@ -188,6 +188,15 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | POST | `/api/auth/logout` | — | 로그아웃 (쿠키 · 세션 삭제) |
 | GET | `/api/auth/me` | 사서 | 로그인한 사용자: `library_id`, `library_name`, `username`, `display_name`, `role`, `is_admin` |
 
+### 사서 계정 관리 (`accounts.py`, 모두 [관리자], 로그인한 도서관의 계정만)
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/users` | 계정 목록 (삭제된 계정 제외, 관리자 먼저). 항목: `user_id`, `username`, `display_name`, `role`, `is_active`, `last_login_at`, `is_me` |
+| POST | `/api/users` | 일반 사서 추가 (201). 본문 `{"username", "display_name", "password"}` — 아이디는 영문 · 숫자 · `_ . -` 3~30자, 비밀번호 8자 이상. 형식 오류 400, 아이디 중복 409 |
+| DELETE | `/api/users/{user_id}` | 일반 사서 삭제. 관리자 계정은 403, 다른 도서관 계정은 404. 로그인 세션을 바로 끊음 |
+
+- 삭제한 사서에게 알림 조치 기록(`ANALYSIS_RESULT.action_by`)이 있으면 행을 지우지 않고 `deleted_at`을 기록하며, 아이디를 `<아이디>#<user_id>`로 바꿔 같은 아이디를 다시 쓸 수 있게 합니다. 이력의 '처리한 사서' 이름은 그대로 표시됩니다(응답 `kept_for_history: true`). 기록이 없으면 행을 지웁니다.
+
 아래 표의 [로봇] · [사서] · [관리자]는 위 '로그인 · 도서관 분리'의 권한 표시입니다.
 
 ### 로봇 순찰 · 일괄 분석
@@ -265,6 +274,7 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | `auth.py` | 비밀번호 해시, 로그인 세션, 로봇 키, 권한 확인(`require_user` · `require_admin` 등) |
 | `manage_users.py` | 새 도서관 만들기, 사서 계정 추가 · 비밀번호 변경 · 사용 중지, 로봇 키 발급 (명령줄) |
 | `structure.py` | 도서관 구조 편집: 구역 · 책꽂이 · 층 추가 · 이름 수정 · 삭제와 삭제 가능 여부 판단 |
+| `accounts.py` | 사서 계정 관리: 목록, 일반 사서 추가 · 삭제 (조치 기록이 있으면 이력용으로 보존) |
 | `pipeline_jobs.py` | 분석 작업 대기열과 실행 (AI 분석 → DB 적재 → 판정), 실패한 세션 정리, 작업별 콜백 |
 | `patrol.py` | 로봇 순찰 사진 수신함: 사진 저장, 일괄 분석 묶음 만들기, 진행 상황 집계, 재시작 복구 |
 | `normal_images.py` | 층별 정상 상태 기준 이미지(DB): 조회 · 교체 · 삭제 · 되돌리기, 분석용 작업 폴더(`.normal_work/`) 준비 |

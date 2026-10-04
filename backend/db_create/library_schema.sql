@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS APP_USER (
     is_active TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0이면 로그인 불가 (퇴사 등)',
     created_at DATETIME NOT NULL,
     last_login_at DATETIME NULL,
+    deleted_at DATETIME NULL COMMENT '삭제한 시각 (조치 기록이 있어 이력용으로 남긴 계정. 아이디는 <아이디>#<user_id>로 바뀜)',
     UNIQUE (library_id, username),
     FOREIGN KEY (library_id) REFERENCES LIBRARY(library_id)
 );

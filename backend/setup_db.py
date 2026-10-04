@@ -55,6 +55,7 @@ ADDED_COLUMNS = [
     ("ANALYSIS_RESULT", "action_time", "DATETIME NULL COMMENT '조치 기록 시각'"),
     ("ANALYSIS_RESULT", "action_by", "INT NULL COMMENT '조치를 기록한 사서 (APP_USER.user_id)'"),
     ("PATROL_PHOTO", "library_id", "VARCHAR(10) NULL COMMENT '도서관 (shelf_id의 도서관과 같음, 도서관별 조회용)'"),
+    ("APP_USER", "deleted_at", "DATETIME NULL COMMENT '삭제한 시각 (조치 기록이 있어 이력용으로 남긴 계정. 아이디는 <아이디>#<user_id>로 바뀜)'"),
 ]
 # 예전 구역/책꽂이/층 테이블에 없던 컬럼 (도서관 구분 이전 구조 → 새 구조)
 LEGACY_SPACE_COLUMNS = [

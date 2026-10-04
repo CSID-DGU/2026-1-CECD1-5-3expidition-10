@@ -37,6 +37,10 @@ function renderUserBox(me) {
             <b class="text-slate-700">${escapeHtml(me.library_name)}</b>
             <span class="text-slate-300">|</span> ${escapeHtml(me.display_name)} ${role}
         </span>
+        ${me.is_admin && typeof openAccountModal === "function" ? `
+        <button onclick="openAccountModal()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
+            <i class="fa-solid fa-users"></i> 사서 계정
+        </button>` : ""}
         <button onclick="logout()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
             <i class="fa-solid fa-right-from-bracket"></i> 로그아웃
         </button>`;

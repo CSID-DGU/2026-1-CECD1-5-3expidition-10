@@ -22,6 +22,8 @@ from patrol import (BatchAlreadyRunning, list_patrol_photos, patrol_status, reco
                     save_patrol_photo, start_batch_analysis)
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
 from spine_archive import PIPELINE_OUTPUT_DIR
+import accounts
+from accounts import AccountError
 import structure
 from structure import StructureError
 
@@ -732,6 +734,50 @@ def edit_level(payload: NameRequest, shelf_code: str = Path(...), ctx: AuthConte
 @app.delete("/api/structure/levels/{shelf_code}")
 def remove_level(shelf_code: str = Path(...), ctx: AuthContext = Depends(require_admin)):
     return run_structure_change(ctx, "층 삭제", structure.delete_level, shelf_code)
+
+
+# ==========================================
+# 👥 사서 계정 관리 (관리자): 자기 도서관의 계정 목록, 일반 사서 추가 · 삭제 (규칙은 accounts.py)
+# ==========================================
+class LibrarianCreateRequest(BaseModel):
+    username: str
+    display_name: str
+    password: str
+
+@app.get("/api/users")
+def get_users(ctx: AuthContext = Depends(require_admin)):
+    conn = require_db()
+    try:
+        users = accounts.list_users(conn, ctx.library_id)
+    finally:
+        conn.close()
+    for u in users:
+        u["is_me"] = u["user_id"] == ctx.user_id
+    return users
+
+@app.post("/api/users", status_code=201)
+def create_user(payload: LibrarianCreateRequest, ctx: AuthContext = Depends(require_admin)):
+    conn = require_db()
+    try:
+        user = accounts.create_librarian(conn, ctx.library_id, payload.username, payload.display_name, payload.password)
+    except AccountError as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+    finally:
+        conn.close()
+    print(f"👥 [사서 계정 추가] {ctx.library_id} / {user['username']} by {ctx.username}")
+    return {"status": "success", **user}
+
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: int = Path(...), ctx: AuthContext = Depends(require_admin)):
+    conn = require_db()
+    try:
+        result = accounts.delete_librarian(conn, ctx.library_id, user_id)
+    except AccountError as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+    finally:
+        conn.close()
+    print(f"👥 [사서 계정 삭제] {ctx.library_id} / {result['username']} by {ctx.username}")
+    return {"status": "success", **result}
 
 
 # ==========================================

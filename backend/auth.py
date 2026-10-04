@@ -17,7 +17,7 @@ from db import get_db_connection
 SESSION_COOKIE = "lib_session"
 SESSION_HOURS = 12
 ROBOT_KEY_HEADER = "X-Robot-Key"
-ROLES = ("ADMIN", "LIBRARIAN")   # ADMIN: 지도 · 기준 사진 설정 가능 / LIBRARIAN: 결과 확인 · 알림 처리 · 일괄 분석
+ROLES = ("ADMIN", "LIBRARIAN")   # ADMIN: 지도 · 기준 사진 · 구조 · 사서 계정 설정 가능 / LIBRARIAN: 결과 확인 · 알림 처리 · 일괄 분석
 PBKDF2_ITERATIONS = 200_000
 
 

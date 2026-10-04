@@ -96,7 +96,7 @@ def main():
 
         if args.command == "list":
             cursor.execute(
-                "SELECT username, display_name, role, is_active, last_login_at FROM APP_USER WHERE library_id = %s ORDER BY username",
+                "SELECT username, display_name, role, is_active, last_login_at FROM APP_USER WHERE library_id = %s AND deleted_at IS NULL ORDER BY username",
                 (library_id,)
             )
             print(f"{library_id} {row[0]}")

@@ -193,6 +193,43 @@
         </form>
     </div>
 
+    <!-- 사서 계정 관리 (관리자) -->
+    <div id="account-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closeAccountModal()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-users text-indigo-500"></i> 사서 계정 <span id="account-library" class="text-sm font-normal text-slate-400"></span></h3>
+                <button type="button" onclick="closeAccountModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="border border-slate-200 rounded-xl overflow-hidden">
+                <table class="w-full text-sm">
+                    <thead class="bg-slate-50 text-xs text-slate-500">
+                        <tr><th class="text-left px-3 py-2">이름</th><th class="text-left px-3 py-2">아이디</th><th class="text-left px-3 py-2">권한</th>
+                            <th class="text-left px-3 py-2">마지막 로그인</th><th class="px-3 py-2"></th></tr>
+                    </thead>
+                    <tbody id="account-rows"></tbody>
+                </table>
+            </div>
+            <form id="account-form" class="border border-indigo-100 bg-indigo-50/40 rounded-xl p-4 flex flex-col gap-3">
+                <div class="text-sm font-bold text-slate-700"><i class="fa-solid fa-user-plus text-indigo-500"></i> 일반 사서 계정 추가</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-semibold text-slate-600">
+                    <label class="flex flex-col gap-1">이름 <input name="display_name" required maxlength="50" placeholder="예: 홍길동"
+                        class="font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"></label>
+                    <label class="flex flex-col gap-1">아이디 <input name="username" required pattern="[A-Za-z0-9_.\-]{3,30}" placeholder="영문 · 숫자 3~30자" autocomplete="off"
+                        class="font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"></label>
+                    <label class="flex flex-col gap-1">비밀번호 <input name="password" type="password" required minlength="8" placeholder="8자 이상" autocomplete="new-password"
+                        class="font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"></label>
+                    <label class="flex flex-col gap-1">비밀번호 확인 <input name="password2" type="password" required minlength="8" autocomplete="new-password"
+                        class="font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"></label>
+                </div>
+                <div id="account-message" class="hidden text-xs rounded-lg px-3 py-2"></div>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] text-slate-400">추가한 아이디 · 비밀번호를 사서에게 전달하세요. 관리자 계정은 manage_users.py로 관리합니다.</span>
+                    <button type="submit" class="shrink-0 text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">추가</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- 라이트박스 모달 -->
     <div id="lightbox" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm" onclick="closeLightbox()">
         <div class="relative max-w-3xl w-full mx-4" onclick="event.stopPropagation()">
@@ -257,7 +294,7 @@
             lb.classList.add('flex');
         }
 
-        document.addEventListener("keydown", e => { if (e.key === "Escape") closeFormModal(); });
+        document.addEventListener("keydown", e => { if (e.key === "Escape") { closeFormModal(); closeAccountModal(); } });
 
         function closeLightbox() {
             const lb = document.getElementById('lightbox');
@@ -799,6 +836,92 @@
               + `<span class="text-slate-400">· 숫자 = 미처리 알림 수</span>`;
             updateBulkReferenceButton();
         }
+
+        // ===================== 사서 계정 관리 (관리자) =====================
+        function accountMessage(text, ok) {
+            const box = document.getElementById('account-message');
+            box.className = "text-xs rounded-lg px-3 py-2 " + (ok ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200");
+            box.innerText = text;
+            box.classList.toggle('hidden', !text);
+        }
+
+        async function refreshAccounts() {
+            const rows = document.getElementById('account-rows');
+            try {
+                const users = await fetchJson(`${API_BASE}/users`);
+                rows.innerHTML = "";
+                users.forEach(u => {
+                    const tr = document.createElement("tr");
+                    tr.className = "border-t border-slate-100";
+                    const role = u.role === "ADMIN"
+                        ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">관리자</span>`
+                        : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">사서</span>`;
+                    tr.innerHTML = `
+                        <td class="px-3 py-2 font-semibold text-slate-700">${escapeHtml(u.display_name)}${u.is_me ? ' <span class="text-[10px] text-slate-400">(나)</span>' : ""}
+                            ${u.is_active ? "" : ' <span class="text-[10px] text-rose-500">로그인 중지</span>'}</td>
+                        <td class="px-3 py-2 text-slate-600">${escapeHtml(u.username)}</td>
+                        <td class="px-3 py-2">${role}</td>
+                        <td class="px-3 py-2 text-xs text-slate-500">${u.last_login_at ? formatTime(u.last_login_at) : "-"}</td>
+                        <td class="px-3 py-2 text-right"></td>`;
+                    if (u.role === "LIBRARIAN") {
+                        const btn = document.createElement("button");
+                        btn.className = "text-xs px-2 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50";
+                        btn.innerHTML = `<i class="fa-solid fa-trash"></i> 삭제`;
+                        btn.addEventListener("click", () => deleteAccount(u));
+                        tr.lastElementChild.appendChild(btn);
+                    }
+                    rows.appendChild(tr);
+                });
+            } catch (e) {
+                rows.innerHTML = `<tr><td colspan="5" class="px-3 py-4 text-sm text-rose-600">계정 목록을 불러오지 못했습니다: ${escapeHtml(e.message)}</td></tr>`;
+            }
+        }
+
+        function openAccountModal() {
+            document.getElementById('account-library').innerText = `${ME.library_name} (${ME.library_id})`;
+            document.getElementById('account-form').reset();
+            accountMessage("");
+            const modal = document.getElementById('account-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            refreshAccounts();
+        }
+
+        function closeAccountModal() {
+            const modal = document.getElementById('account-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function deleteAccount(u) {
+            if (!confirm(`${u.display_name}(${u.username}) 계정을 삭제할까요?\n이 계정으로는 더 이상 로그인할 수 없습니다. 이 사서가 처리한 알림 기록은 그대로 남습니다.`)) return;
+            try {
+                await fetchJson(`${API_BASE}/users/${u.user_id}`, { method: "DELETE" });
+                accountMessage(`${u.display_name}(${u.username}) 계정을 삭제했습니다.`, true);
+                refreshAccounts();
+            } catch (e) {
+                accountMessage(`삭제 실패: ${e.message}`, false);
+            }
+        }
+
+        document.getElementById('account-form').addEventListener("submit", async e => {
+            e.preventDefault();
+            const form = e.target;
+            const v = Object.fromEntries(new FormData(form).entries());
+            if (v.password !== v.password2) { accountMessage("두 비밀번호가 다릅니다.", false); return; }
+            const btn = form.querySelector("button[type=submit]");
+            btn.disabled = true;
+            try {
+                const res = await sendJson(`${API_BASE}/users`, "POST", { username: v.username, display_name: v.display_name, password: v.password });
+                accountMessage(`${res.display_name}(${res.username}) 계정을 추가했습니다. 로그인 정보: 도서관 ID ${ME.library_id} / 아이디 ${res.username}`, true);
+                form.reset();
+                refreshAccounts();
+            } catch (err) {
+                accountMessage(`추가 실패: ${err.message}`, false);
+            } finally {
+                btn.disabled = false;
+            }
+        });
 
         // ===================== 도서관 구조 편집 (관리자) =====================
         function addButton(label, onClick, extra = "") {
