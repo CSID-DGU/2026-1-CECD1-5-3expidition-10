@@ -19,21 +19,23 @@ SCAN_TIME_STR = CURRENT_TIME.strftime('%Y-%m-%d %H:%M:%S')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 💡 [핵심 연동 포인트] ach/JsonTesting.py가 생성하는 결과 파일 경로
-ACH_JSON_PATH = os.path.join(BASE_DIR, "..", "ach", "vision_output", "test_results.json")
+# 판정 테스트용 고정 예시: A구역 1번 책꽂이 3층 사진 1장과, 그 사진을 AI가 분석한 결과 (backend/test_data/)
+# ach/dataset/test · ach/vision_output은 대시보드에서 분석할 때마다 마지막으로 분석한 사진으로 바뀌므로 쓰지 않습니다.
+TEST_DATA_DIR = os.path.join(BASE_DIR, "test_data")
+SAMPLE_PHOTO_PATH = os.path.join(TEST_DATA_DIR, "sample_A-01-3.jpg")
+SAMPLE_JSON_PATH = os.path.join(TEST_DATA_DIR, "sample_A-01-3_results.json")
 
 
 def load_payloads_from_json():
     """
-    Edge AI가 분석한 JSON 결과(test_results.json)를 읽어와서 서버 전송용(Vision, RFID) 데이터로 변환합니다.
+    예시 AI 분석 결과(sample_A-01-3_results.json)를 읽어와서 서버 전송용(Vision, RFID) 데이터로 변환합니다.
     """
-    if not os.path.exists(ACH_JSON_PATH):
-        print(f"❌ [에러] Edge AI 결과 파일({ACH_JSON_PATH})을 찾을 수 없습니다.")
-        print("-> ach 폴더에서 JsonTesting.py를 실행하여 JSON 파일이 정상적으로 생성되었는지 확인하세요.")
+    if not os.path.exists(SAMPLE_JSON_PATH):
+        print(f"❌ [에러] 예시 AI 결과 파일({SAMPLE_JSON_PATH})을 찾을 수 없습니다.")
         return None, None
 
     # JSON 파일 읽기
-    with open(ACH_JSON_PATH, "r", encoding="utf-8") as f:
+    with open(SAMPLE_JSON_PATH, "r", encoding="utf-8") as f:
         edge_data = json.load(f)
 
     test_results = edge_data.get("test_results", [])
@@ -83,10 +85,8 @@ def run_automation_test():
 
     # 1. 세션 시작
     print("\n1️⃣ 서버에 분석 세션을 생성합니다...")
-    # 분석에 쓰인 사진(ach/dataset/test)을 세션 원본 사진으로 보관 → 대시보드 '서가 사진'에 표시
-    test_dir = os.path.join(BASE_DIR, "..", "ach", "dataset", "test")
-    photos = sorted(f for f in os.listdir(test_dir) if f.lower().endswith((".jpg", ".png"))) if os.path.isdir(test_dir) else []
-    image_path = archive_original_image(SESSION_ID, os.path.join(test_dir, photos[0])) if photos else None
+    # 예시 결과를 만든 사진을 세션 원본 사진으로 보관 → 대시보드 '최근 순찰'에 표시
+    image_path = archive_original_image(SESSION_ID, SAMPLE_PHOTO_PATH) or None
     res_start = api.post(f"{BASE_URL}/api/session/start", json={
         "session_id": SESSION_ID, "shelf_id": SHELF_ID, "scan_time": SCAN_TIME_STR, "image_path": image_path
     })

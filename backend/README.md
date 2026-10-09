@@ -285,7 +285,7 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | `spine_archive.py` | 원본 사진·책등 크롭을 세션 보관소로 복사 (서버와 스크립트가 같이 사용) |
 | `setup_db.py` | DB를 최신 구조로 맞춤 (스키마, 추가 컬럼, 가상 데이터, 예전 구조 이전, 시연용 계정 · 기준 이미지) |
 | `reset_db.py` | 세션 데이터, 순찰 사진 수신함, 보관 사진 초기화 |
-| `test_full_pipeline.py` | AI 분석 없이, 이미 만들어진 `test_results.json`을 서버에 보내 판정만 테스트 |
+| `test_full_pipeline.py` | AI 분석 없이, 고정 예시(`test_data/`의 A-01-3 사진과 AI 결과)를 서버에 보내 판정만 테스트 |
 | `docker-compose.yml`, `db_create/` | MySQL 컨테이너와 초기 스키마, 시연용 기준 이미지(`db_create/seed/`) |
 
 ## 🧪 DB 접속 툴 (선택)

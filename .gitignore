@@ -14,3 +14,7 @@ venv/
 # 개인 편집기 설정
 .vs/
 .vscode/
+
+# AI 분석 작업 폴더: 대시보드에서 분석할 때마다 마지막으로 분석한 사진과 결과로 바뀜 (판정 테스트 예시는 backend/test_data/)
+ach/dataset/test/
+ach/vision_output/test_results.json
