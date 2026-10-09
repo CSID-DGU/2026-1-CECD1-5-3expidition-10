@@ -89,3 +89,5 @@ async def extract_features(file: UploadFile = File(...)):
         content=final_encoded.tobytes(),
         media_type="image/jpeg"
     )
+
+# http://localhost:8000/docs
