@@ -10,7 +10,7 @@ from mysql.connector import Error
 from analyzer import (analyze_shelf_session, assess_session_quality, classify_issues,
                       get_master_book_info, get_virtual_rfid_items)
 from auth import (SESSION_COOKIE, SESSION_HOURS, AuthContext, authenticate, context_from_session_token,
-                  create_session, delete_session, optional_auth, require_admin, require_auth, require_user)
+                  create_session, delete_session, optional_auth, require_admin, require_user)
 from config import SPINE_STORE_DIR
 from db import get_db_connection
 from image_check import detect_image_ext
@@ -19,7 +19,7 @@ from locations import (build_location_tree, fetch_shelf_location, fetch_shelf_lo
 from normal_images import (delete_normal_image, get_normal_image_bytes, get_normal_image_info,
                            is_current_normal_image, restore_previous_normal_image, save_normal_image)
 from patrol import (BatchAlreadyRunning, list_patrol_photos, patrol_status, recover_interrupted_photos,
-                    save_patrol_photo, start_batch_analysis)
+                    start_batch_analysis)
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
 from spine_archive import PIPELINE_OUTPUT_DIR
 import accounts
@@ -162,10 +162,10 @@ def get_session_row_or_404(conn, session_id: str, ctx: AuthContext) -> dict:
 
 
 # ==========================================
-# 🤖 로봇 수집 데이터 통신 API (run_master.py 등 · 로봇 키 또는 로그인 필요)
+# 🧪 분석 데이터 직접 적재 API (run_master.py · test_full_pipeline.py 등 테스트 스크립트용, 로그인 필요)
 # ==========================================
 @app.post("/api/session/start")
-def start_session(payload: SessionStartRequest, ctx: AuthContext = Depends(require_auth)):
+def start_session(payload: SessionStartRequest, ctx: AuthContext = Depends(require_user)):
     shelf = get_shelf_or_404(payload.shelf_id, ctx)
     conn = require_db()
     cursor = conn.cursor()
@@ -184,7 +184,7 @@ def start_session(payload: SessionStartRequest, ctx: AuthContext = Depends(requi
         conn.close()
 
 @app.post("/api/rfid/scan")
-def receive_rfid(payload: RfidScanRequest, ctx: AuthContext = Depends(require_auth)):
+def receive_rfid(payload: RfidScanRequest, ctx: AuthContext = Depends(require_user)):
     conn = require_db()
     cursor = conn.cursor()
     try:
@@ -204,7 +204,7 @@ def receive_rfid(payload: RfidScanRequest, ctx: AuthContext = Depends(require_au
         conn.close()
 
 @app.post("/api/vision/scan")
-def receive_vision(payload: VisionScanRequest, ctx: AuthContext = Depends(require_auth)):
+def receive_vision(payload: VisionScanRequest, ctx: AuthContext = Depends(require_user)):
     conn = require_db()
     cursor = conn.cursor()
     try:
@@ -227,7 +227,7 @@ def receive_vision(payload: VisionScanRequest, ctx: AuthContext = Depends(requir
         conn.close()
 
 @app.post("/api/session/{session_id}/analyze")
-def trigger_analyze(session_id: str = Path(...), ctx: AuthContext = Depends(require_auth)):
+def trigger_analyze(session_id: str = Path(...), ctx: AuthContext = Depends(require_user)):
     conn = require_db()
     try:
         row = get_session_row_or_404(conn, session_id, ctx)
@@ -240,7 +240,7 @@ def trigger_analyze(session_id: str = Path(...), ctx: AuthContext = Depends(requ
         conn.close()
 
 @app.get("/api/shelves/{shelf_id}/virtual-rfid")
-def get_shelf_virtual_rfid(shelf_id: str = Path(...), ctx: AuthContext = Depends(require_auth)):
+def get_shelf_virtual_rfid(shelf_id: str = Path(...), ctx: AuthContext = Depends(require_user)):
     """가상 RFID 스캔 결과 (실제 RFID 리더 대신 사용). 응답을 그대로 /api/rfid/scan 의 rfid_items로 보내면 됩니다."""
     get_shelf_or_404(shelf_id, ctx)
     conn = require_db()
@@ -269,10 +269,10 @@ def require_image_ext(file: UploadFile) -> str:
 
 @app.post("/api/pipeline/run", status_code=202)
 def run_full_pipeline_from_ui(file: UploadFile = File(...), shelf_id: str = Form(...),
-                              ctx: AuthContext = Depends(require_auth)):
+                              ctx: AuthContext = Depends(require_user)):
     """
     (즉시 분석 · 테스트용) 사진 1장을 바로 분석 대기열에 넣고 작업 ID를 돌려줍니다.
-    평소 순찰은 /api/patrol/photos 로 수신함에 쌓았다가 /api/patrol/analyze 로 한꺼번에 분석합니다.
+    평소 순찰 사진은 수신함 폴더(patrol_inbox)에 쌓였다가 /api/patrol/analyze 로 한꺼번에 분석합니다.
     진행 상황은 GET /api/jobs/{job_id} 로 확인합니다.
     """
     shelf = require_analyzable_shelf(shelf_id, ctx)
@@ -297,7 +297,7 @@ def run_full_pipeline_from_ui(file: UploadFile = File(...), shelf_id: str = Form
     return pipeline_queue.submit(session_id, shelf_id, image_rel_path)
 
 @app.get("/api/jobs/{job_id}")
-def get_job(job_id: str = Path(...), ctx: AuthContext = Depends(require_auth)):
+def get_job(job_id: str = Path(...), ctx: AuthContext = Depends(require_user)):
     """분석 작업 상태: queued(대기, jobs_ahead=앞선 작업 수) / running / done / failed(error에 사유)"""
     job = pipeline_queue.get(job_id)
     if job is None or not job["shelf_id"].startswith(ctx.library_id + "-"):
@@ -306,7 +306,7 @@ def get_job(job_id: str = Path(...), ctx: AuthContext = Depends(require_auth)):
 
 
 # ==========================================
-# 🤖 로봇 순찰 사진 수신함 → 일괄 분석
+# 📷 순찰 사진 수신함(폴더) → 일괄 분석
 # ==========================================
 @app.on_event("startup")
 def prepare_on_startup():
@@ -315,23 +315,6 @@ def prepare_on_startup():
         recover_interrupted_photos()
     except Exception as e:
         print(f"⚠️ 시작 준비 실패 (DB가 켜져 있는지, setup_db.py를 실행했는지 확인): {e}")
-
-@app.post("/api/patrol/photos", status_code=201)
-def receive_patrol_photo(file: UploadFile = File(...), shelf_id: str = Form(...),
-                         captured_at: Optional[datetime] = Form(None), ctx: AuthContext = Depends(require_auth)):
-    """
-    [로봇 → 서버] 순찰 중 촬영한 사진 1장을 수신함에 저장합니다. 분석은 하지 않습니다. (로봇 키 필요)
-    shelf_id: 촬영한 층 (예: LIB001-A-01-3) / captured_at: 촬영 시각 (ISO 형식, 생략하면 수신 시각)
-    """
-    shelf = require_analyzable_shelf(shelf_id, ctx)
-    ext = require_image_ext(file)
-    conn = require_db()
-    try:
-        photo = save_patrol_photo(conn, file.file, ext, shelf, captured_at)
-    finally:
-        conn.close()
-    print(f"📷 [순찰 사진 수신] #{photo['photo_id']} {shelf['library_id']} {shelf['location_label']}")
-    return {**photo, "location_label": shelf["location_label"]}
 
 @app.get("/api/patrol/status")
 def get_patrol_status(ctx: AuthContext = Depends(require_user)):
@@ -366,7 +349,7 @@ def analyze_patrol_photos(ctx: AuthContext = Depends(require_user)):
     finally:
         conn.close()
     if result["photo_count"] == 0:
-        raise HTTPException(status_code=400, detail="분석할 순찰 사진이 없습니다. (로봇이 보낸 사진이 수신함에 없음)")
+        raise HTTPException(status_code=400, detail="분석할 순찰 사진이 없습니다. (수신함 폴더에 분석할 사진이 없음)")
     return result
 
 
@@ -374,7 +357,7 @@ def analyze_patrol_photos(ctx: AuthContext = Depends(require_user)):
 # 📚 서가 현황 (구역 / 책꽂이 / 층)
 # ==========================================
 @app.get("/api/shelves")
-def get_shelves(ctx: AuthContext = Depends(require_auth)):
+def get_shelves(ctx: AuthContext = Depends(require_user)):
     """도서관의 모든 층(칸) 목록: 구역 → 책꽂이 → 층 순서, 위치 표시 문구와 등록 도서 수 포함"""
     conn = require_db()
     try:
@@ -1071,19 +1054,19 @@ def serve_page(filename: str):
 
 @app.get("/login")
 def serve_login(ctx: Optional[AuthContext] = Depends(optional_auth)):
-    if ctx and not ctx.is_robot:
+    if ctx:
         return RedirectResponse("/dashboard")
     return serve_page("login.html")
 
 @app.get("/")
 @app.get("/dashboard")
 def serve_dashboard(ctx: Optional[AuthContext] = Depends(optional_auth)):
-    if not ctx or ctx.is_robot:
+    if not ctx:
         return RedirectResponse("/login")
     return serve_page("dashboard.html")
 
 @app.get("/report")
 def serve_report(ctx: Optional[AuthContext] = Depends(optional_auth)):
-    if not ctx or ctx.is_robot:
+    if not ctx:
         return RedirectResponse("/login")
     return serve_page("report.html")

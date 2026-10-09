@@ -10,20 +10,18 @@ Vision AI(`ach/`)가 분석한 도서별 인식 결과를 받아 가상 RFID · 
 - 여러 도서관이 한 서버를 함께 씁니다. 모든 데이터는 **도서관(`LIBRARY`)** 에 속하고, 로그인한 사람은 자기 도서관의 데이터만 보고 바꿀 수 있습니다. 다른 도서관의 층 · 세션 · 사진 · 알림을 요청하면 **404**(있는지조차 알려 주지 않음)입니다.
 - **사서 로그인**: `POST /api/auth/login` (`library_id`, `username`, `password`). 성공하면 `lib_session` 쿠키(HttpOnly, 12시간)를 받습니다. 비밀번호는 PBKDF2-SHA256으로 해시해 `APP_USER`에, 로그인 세션은 토큰의 SHA-256만 `AUTH_SESSION`에 저장합니다.
 - **권한**: `ADMIN`(관리자)과 `LIBRARIAN`(일반 사서). 지도 · 기준 사진 · 도서관 구조 · 사서 계정을 바꾸는 API는 관리자만(아니면 403).
-- **로봇**: 로그인 대신 `X-Robot-Key` 헤더로 도서관별 로봇 키를 보냅니다(`LIBRARY.robot_key_hash`에 해시만 저장). 로봇은 사진 전송 · 세션 기록 API만 쓸 수 있고, 대시보드 API는 403입니다.
 - 로그인하지 않으면 API는 401, 화면(`/`, `/dashboard`, `/report`)은 `/login`으로 이동합니다. 화면 스크립트(`common.js`의 `fetchJson`)는 401을 받으면 로그인 화면으로 보냅니다.
-- 계정 · 로봇 키 관리: `python manage_users.py` (사용법은 파일 위쪽 주석과 루트 README)
+- 계정 · 도서관 관리: `python manage_users.py` (사용법은 파일 위쪽 주석과 루트 README)
 
 | 표시 | 뜻 |
 |---|---|
-| 로봇 | 로봇 키 또는 사서 로그인 |
 | 사서 | 사서 로그인 (관리자 포함) |
 | 관리자 | 관리자 로그인 |
 
 ---
 
 ## 🗺️ 도서관 공간 구조
-서가 위치는 **도서관 → 구역 → 책꽂이 → 층**으로 관리합니다. 로봇이 찍는 사진 1장은 **책꽂이 한 층**이고, 분석 세션·정답지(도서 목록)·가상 RFID도 모두 층 단위입니다.
+서가 위치는 **도서관 → 구역 → 책꽂이 → 층**으로 관리합니다. 순찰 사진 1장은 **책꽂이 한 층**이고, 분석 세션·정답지(도서 목록)·가상 RFID도 모두 층 단위입니다.
 
 ID는 도서관끼리 겹치지 않도록 **도서관 ID를 앞에 붙인 전역 ID**이고, 화면에는 도서관 안에서 쓰는 **코드**를 보여 줍니다.
 
@@ -49,12 +47,10 @@ ID는 도서관끼리 겹치지 않도록 **도서관 ID를 앞에 붙인 전역
 ---
 
 ## 🔄 처리 흐름
-**로봇 순찰 → 수신함 → 사서의 일괄 분석 버튼 → 분석 대기열 → 판정 → 확인** 순서입니다.
+**수신함 폴더 → 사서의 일괄 분석 버튼 → 분석 대기열 → 판정 → 확인** 순서입니다. 순찰 사진은 로봇이 수신함 폴더에 넣었다고 가정합니다(로봇은 개발 범위 밖이라 사진을 폴더에 직접 넣음).
 
-0. **사진 수신** (`POST /api/patrol/photos`, 로봇 · `robot_simulator.py`)
-   - 로봇이 층마다 찍은 사진을 `patrol_inbox/<도서관>/<구역>/<책꽂이>/<층 코드>_<촬영시각>_<임의값>.jpg`로 저장하고 `PATROL_PHOTO`에 `WAITING`으로 등록합니다(분석하지 않음).
-   - 로봇 키의 도서관에 없는 층(404), 도서가 없는 층(400), jpg/png가 아닌 파일은 거절합니다.
-   - **직접 넣은 사진 동기화** (`patrol.sync_inbox`, 수신함 현황 조회 · 일괄 분석 때 그 도서관 폴더만 실행): 책꽂이 폴더 안에 층 코드로 시작하는 이름으로 넣은 사진을 `WAITING`으로 등록합니다(촬영 시각 = 파일 수정 시각). 규칙에 맞지 않는 파일은 등록하지 않고 `unrecognized_files`로 이유를 알려 주며, 분석 전인데 파일이 사라진 사진은 등록을 취소합니다. 모든 책꽂이 폴더는 미리 만들어 둡니다.
+0. **수신함 폴더 동기화** (`patrol.sync_inbox`, 수신함 현황 조회 · 일괄 분석 때 그 도서관 폴더만 실행)
+   - `patrol_inbox/<도서관>/<구역>/<책꽂이>/` 폴더에 층 코드로 시작하는 이름(예: `A-01-3.jpg`, `A-01-3_아침.jpg`)으로 들어온 사진을 `PATROL_PHOTO`에 `WAITING`으로 등록합니다(분석하지 않음, 촬영 시각 = 파일 수정 시각). 규칙에 맞지 않는 파일은 등록하지 않고 `unrecognized_files`로 이유를 알려 주며, 분석 전인데 파일이 사라진 사진은 등록을 취소합니다. 모든 책꽂이 폴더는 미리 만들어 둡니다.
 1. **일괄 분석 시작** (`POST /api/patrol/analyze`, 대시보드 버튼)
    - 로그인한 도서관의 `WAITING` · `FAILED` 사진을 **구역 → 책꽂이 번호 → 층 → 촬영 시각** 순서로 하나의 묶음(batch)으로 만듭니다. 그 도서관에서 이미 분석 중인 묶음이 있으면 409. (분석 대기열은 서버 전체에서 하나라 다른 도서관의 묶음과는 차례로 처리됩니다)
    - 사진마다 세션 ID(`<층ID>_<묶음 시각>_<사진ID>`)를 발급하고, 원본을 `spine_store/<세션ID>/original.jpg`로 복사해 분석 대기열에 넣습니다.
@@ -154,8 +150,8 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | `VISION_DATA` | 도서별 AI 인식 결과 (순서, 매칭 도서, 유사도, 외형 상태, 책등 사진 경로) | ✅ |
 | `RFID_DATA` | RFID 스캔 결과 (현재 가상 데이터) | ✅ |
 | `ANALYSIS_RESULT` | 도서별 최종 판정 + 사서 조치 상태(`PENDING` / `RESOLVED` / `FALSE_POSITIVE`), 조치 시각, 조치한 사서(`action_by`) | ✅ |
-| `PATROL_PHOTO` | 로봇 순찰 사진 수신함: 도서관, 촬영한 층, 촬영 시각, 분석 상태, 묶음 ID, 만들어진 세션, 실패 사유 | ✅ |
-| `LIBRARY` | 도서관: 이름, 로봇 키 해시 | ❌ |
+| `PATROL_PHOTO` | 순찰 사진 수신함: 도서관, 촬영한 층, 촬영 시각, 분석 상태, 묶음 ID, 만들어진 세션, 실패 사유 | ✅ |
+| `LIBRARY` | 도서관: 이름 | ❌ |
 | `APP_USER` | 사서 계정: 도서관, 아이디, 비밀번호 해시, 이름, 권한(`ADMIN` / `LIBRARIAN`), 사용 여부 | ❌ |
 | `AUTH_SESSION` | 로그인 세션 (토큰 해시, 만료 시각) | ❌ |
 | `NORMAL_IMAGE` | 층별 정상 상태 기준 이미지 (이미지 바이트, 출처 `UPLOAD` / `PATROL` / `SEED`, 현재 여부 `is_current`, 등록한 사서). 이전 기준은 층마다 10장까지 보관 | ❌ |
@@ -168,12 +164,12 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 - **스키마 파일**: `db_create/init.sql`(세션 테이블), `db_create/library_schema.sql`(도서관·계정·구역·책꽂이·층·도서·기준 이미지·지도 테이블), `db_create/library_data.sql`(가상 데이터), `db_create/patrol_schema.sql`(순찰 사진 수신함). 새 docker 볼륨에서는 이 순서로 자동 실행됩니다.
 - **`python setup_db.py`는 새 DB에도 꼭 실행합니다.** 여러 번 실행해도 안전합니다.
   - 새 테이블 · 컬럼 · 인덱스와 가상 데이터를 추가합니다.
-  - 시연용 계정 · 로봇 키를 만듭니다(이미 있으면 그대로 둠).
+  - 시연용 계정을 만듭니다(이미 있으면 그대로 둠). 예전 DB에 남아 있는 `LIBRARY.robot_key_hash` 컬럼은 지웁니다.
   - `db_create/seed/normal_images/<도서관>/<구역>/<책꽂이>/<층 코드>.jpg`를 기준 이미지가 없는 층의 기준 이미지로 넣습니다.
   - 예전 구조는 자동 이전합니다: 단일 서가(`A-12`) → `A-01-3`, 도서관 구분 없는 ID(`A-01-3`) → `LIB001-A-01-3`(세션 · 수신함 사진 · 수신함 폴더 포함), 예전 `backend/normal_images/` 폴더의 기준 이미지 → DB.
 - **`library_data.sql`과 구조 편집의 관계**: 도서관 · 도서는 실행할 때마다 파일 내용으로 갱신(upsert)하지만, 구역 · 책꽂이 · 층은 **그 도서관에 하나도 없을 때만** 넣습니다. 관리자가 대시보드에서 고친 구조는 `setup_db.py`를 다시 실행해도 되살아나거나 덮어써지지 않습니다.
 - **도서 목록 바꾸기**: `library_data.sql`의 `BOOK_MASTER`를 수정한 뒤 `python setup_db.py`를 실행합니다. (구조는 대시보드에서 편집)
-- **새 도서관 만들기**: `python manage_users.py create-library LIB003 "도서관 이름"` → 첫 관리자 계정 · 로봇 키가 만들어지고, 구조는 관리자가 대시보드에서 만듭니다.
+- **새 도서관 만들기**: `python manage_users.py create-library LIB003 "도서관 이름"` → 첫 관리자 계정이 만들어지고, 구조는 관리자가 대시보드에서 만듭니다.
 - **실제 도서관 시스템 연동**: `analyzer.py`의 `USE_MOCK_ILS = False`로 바꾸면 외부 API에서 서가 정보를 받아옵니다(연동 전).
 - **시각 기준**: 순찰 시각과 조치 시각은 서버(Python)의 로컬 시각으로 기록합니다. MySQL 컨테이너의 `NOW()`는 UTC라서 쓰지 않습니다.
 
@@ -197,17 +193,16 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 
 - 삭제한 사서에게 알림 조치 기록(`ANALYSIS_RESULT.action_by`)이 있으면 행을 지우지 않고 `deleted_at`을 기록하며, 아이디를 `<아이디>#<user_id>`로 바꿔 같은 아이디를 다시 쓸 수 있게 합니다. 이력의 '처리한 사서' 이름은 그대로 표시됩니다(응답 `kept_for_history: true`). 기록이 없으면 행을 지웁니다.
 
-아래 표의 [로봇] · [사서] · [관리자]는 위 '로그인 · 도서관 분리'의 권한 표시입니다.
+아래 표의 [사서] · [관리자]는 위 '로그인 · 도서관 분리'의 권한 표시입니다.
 
-### 로봇 순찰 · 일괄 분석
+### 순찰 사진 수신함 · 일괄 분석
 | 메서드 | 경로 | 설명 |
 |---|---|---|
-| POST | `/api/patrol/photos` | [로봇] 순찰 사진 1장을 수신함에 저장 (201). 폼 필드: `file`(jpg/jpeg/png), `shelf_id`(필수), `captured_at`(ISO, 생략하면 수신 시각). 없는 층 404, 도서 없는 층 400 |
 | GET | `/api/patrol/status` | [사서] 수신함 현황(`analyzable_count`, 구역별 `analyzable_by_zone`, `failed_count`, 등록하지 못한 파일 `unrecognized_files`, `last_received_at`)과 최근 묶음 진행 상황(`latest_batch`: 총·성공·실패·남은 장수, 진행 중 여부, 지금 분석 중인 위치, 실패 사유) |
 | POST | `/api/patrol/analyze` | [사서] 분석 대기 · 실패 사진을 모두 분석 대기열에 넣음 (202). 이미 분석 중이면 409, 사진이 없으면 400 |
-| GET | `/api/patrol/photos?status=&limit=` | [사서] 수신한 순찰 사진 목록 |
-| POST | `/api/pipeline/run` | [로봇] (테스트용) 사진 1장을 수신함 없이 바로 분석 대기열에 넣음 (202). 폼 필드: `file`, `shelf_id`(필수, 예: `LIB001-A-01-3`) |
-| GET | `/api/jobs/{job_id}` | [로봇] 분석 작업 상태: `queued`(`jobs_ahead`=앞선 작업 수) / `running` / `done` / `failed`(`error`) |
+| GET | `/api/patrol/photos?status=&limit=` | [사서] 수신함에 등록된 순찰 사진 목록 |
+| POST | `/api/pipeline/run` | [사서] (테스트용) 사진 1장을 수신함 없이 바로 분석 대기열에 넣음 (202). 폼 필드: `file`, `shelf_id`(필수, 예: `LIB001-A-01-3`) |
+| GET | `/api/jobs/{job_id}` | [사서] 분석 작업 상태: `queued`(`jobs_ahead`=앞선 작업 수) / `running` / `done` / `failed`(`error`) |
 
 ### 관리자 설정 (대시보드에서 사용)
 | 메서드 | 경로 | 설명 |
@@ -240,9 +235,9 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | GET | `/api/dashboard/sessions?limit=&shelf_id=` | 순찰 이력 (세션별 위치, 인식 품질, 미처리 알림 요약). `shelf_id`로 층 필터 |
 | PATCH | `/api/results/{result_id}/action` | 조치 기록. 본문 `{"status": "RESOLVED" \| "FALSE_POSITIVE" \| "PENDING"}`. 응답에 처리한 사서 이름(`action_by_name`) |
 | GET | `/api/reports/daily?date=YYYY-MM-DD` | 일일 리포트(도서관 정보 `library` 포함): 순찰 대상 층(도서 등록된 층)을 구역 → 책꽂이 → 층 트리로, 층마다 그날 마지막 세션의 알림 목록과 전체 집계 (날짜를 생략하면 오늘) |
-| GET | `/api/shelves` | [로봇] 층 목록 (위치 표시 문구, 등록 도서 수 포함) |
+| GET | `/api/shelves` | [사서] 층 목록 (위치 표시 문구, 등록 도서 수 포함) |
 
-### 로봇 · 외부 스크립트용 (`run_master.py`, `test_full_pipeline.py`) — [로봇]
+### 테스트 스크립트용 (`run_master.py`, `test_full_pipeline.py`) — [사서] (스크립트는 시연용 사서 계정으로 로그인)
 | 메서드 | 경로 | 설명 |
 |---|---|---|
 | POST | `/api/session/start` | 세션 생성. `image_path`(선택)에 세션 보관소의 원본 사진 경로를 주면 대시보드 '서가 사진'에 표시 |
@@ -271,12 +266,12 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | 파일 | 역할 |
 |---|---|
 | `main.py` | FastAPI 서버: API 정의, 화면 호스팅 |
-| `auth.py` | 비밀번호 해시, 로그인 세션, 로봇 키, 권한 확인(`require_user` · `require_admin` 등) |
-| `manage_users.py` | 새 도서관 만들기, 사서 계정 추가 · 비밀번호 변경 · 사용 중지, 로봇 키 발급 (명령줄) |
+| `auth.py` | 비밀번호 해시, 로그인 세션, 권한 확인(`require_user` · `require_admin`) |
+| `manage_users.py` | 새 도서관 만들기, 사서 계정 추가 · 비밀번호 변경 · 사용 중지 (명령줄) |
 | `structure.py` | 도서관 구조 편집: 구역 · 책꽂이 · 층 추가 · 이름 수정 · 삭제와 삭제 가능 여부 판단 |
 | `accounts.py` | 사서 계정 관리: 목록, 일반 사서 추가 · 삭제 (조치 기록이 있으면 이력용으로 보존) |
 | `pipeline_jobs.py` | 분석 작업 대기열과 실행 (AI 분석 → DB 적재 → 판정), 실패한 세션 정리, 작업별 콜백 |
-| `patrol.py` | 로봇 순찰 사진 수신함: 사진 저장, 일괄 분석 묶음 만들기, 진행 상황 집계, 재시작 복구 |
+| `patrol.py` | 순찰 사진 수신함: 폴더 동기화, 일괄 분석 묶음 만들기, 진행 상황 집계, 재시작 복구 |
 | `normal_images.py` | 층별 정상 상태 기준 이미지(DB): 조회 · 교체 · 삭제 · 되돌리기, 분석용 작업 폴더(`.normal_work/`) 준비 |
 | `image_check.py` | 업로드 이미지 검사 (확장자가 아니라 파일 내용으로 형식 판단) |
 | `analyzer.py` | 서가 정보 조회, 가상 RFID 생성, 상태 판정, 알림 분류, 인식 품질 평가 |
@@ -285,10 +280,10 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | `dashboard.html` | 사서 대시보드 (순찰 사진 일괄 분석 바, 도서관 지도 / 서가 사진, 서가 선택 미니맵, 확인 필요 목록 · 알림판, 조치 기록, 순찰 이력) |
 | `report.html` | 일일 순찰 리포트 |
 | `static/common.js` | 화면들이 공유하는 알림 그룹 표시 설정, API 호출(`fetchJson`, 401이면 로그인 화면으로), 로그인 사용자 표시 · 로그아웃 |
-| `config.py` | DB 접속 정보, 기본 층 ID(`LIB001-A-01-3`), 시연용 로봇 키(환경변수 `ROBOT_KEY`), 세션 보관소 · 수신함 · 시드 이미지 경로 |
+| `config.py` | DB 접속 정보, 기본 층 ID(`LIB001-A-01-3`), 테스트 스크립트용 시연 계정(`DEMO_LOGIN`, 환경변수 `DEMO_LIBRARY_ID` · `DEMO_USERNAME` · `DEMO_PASSWORD`), 세션 보관소 · 수신함 · 시드 이미지 경로 |
 | `db.py` | DB 연결 |
 | `spine_archive.py` | 원본 사진·책등 크롭을 세션 보관소로 복사 (서버와 스크립트가 같이 사용) |
-| `setup_db.py` | DB를 최신 구조로 맞춤 (스키마, 추가 컬럼, 가상 데이터, 예전 구조 이전, 시연용 계정 · 로봇 키 · 기준 이미지) |
+| `setup_db.py` | DB를 최신 구조로 맞춤 (스키마, 추가 컬럼, 가상 데이터, 예전 구조 이전, 시연용 계정 · 기준 이미지) |
 | `reset_db.py` | 세션 데이터, 순찰 사진 수신함, 보관 사진 초기화 |
 | `test_full_pipeline.py` | AI 분석 없이, 이미 만들어진 `test_results.json`을 서버에 보내 판정만 테스트 |
 | `docker-compose.yml`, `db_create/` | MySQL 컨테이너와 초기 스키마, 시연용 기준 이미지(`db_create/seed/`) |

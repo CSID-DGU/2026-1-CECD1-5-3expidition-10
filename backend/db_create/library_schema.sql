@@ -1,6 +1,6 @@
 -- 도서관 · 계정 · 공간 · 도서 · 기준 이미지 스키마
 --   도서관(LIBRARY) → 구역(ZONE) → 책꽂이(BOOKCASE) → 층(SHELF_INFO) → 도서(BOOK_MASTER)
--- 로봇이 촬영하는 사진 1장 = 책꽂이 1개 층(SHELF_INFO 1행)이며, 분석 세션도 층 단위로 만들어집니다.
+-- 순찰 사진 1장 = 책꽂이 1개 층(SHELF_INFO 1행)이며, 분석 세션도 층 단위로 만들어집니다.
 -- 여러 도서관이 한 DB를 함께 쓰므로 구역 · 책꽂이 · 층 ID 앞에는 도서관 ID가 붙습니다. (예: LIB001-A-01-3)
 -- 화면에는 도서관 안에서의 코드(zone_code 'A', bookcase_code 'A-01', shelf_code 'A-01-3')로 표시합니다.
 -- 세션 데이터와 달리 reset_db.py로 지워지지 않습니다.
@@ -11,8 +11,7 @@ USE library_ai_db;
 -- 1. 도서관
 CREATE TABLE IF NOT EXISTS LIBRARY (
     library_id VARCHAR(10) PRIMARY KEY COMMENT '도서관 ID (로그인 시 입력, 예: LIB001)',
-    library_name VARCHAR(100) NOT NULL COMMENT '도서관 이름',
-    robot_key_hash CHAR(64) NULL COMMENT '로봇이 순찰 사진을 보낼 때 쓰는 키의 SHA-256 (X-Robot-Key 헤더)'
+    library_name VARCHAR(100) NOT NULL COMMENT '도서관 이름'
 );
 
 -- 2. 사서 계정 (도서관마다 따로, 아이디는 도서관 안에서만 고유)

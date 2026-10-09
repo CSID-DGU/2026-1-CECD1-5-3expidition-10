@@ -3,11 +3,9 @@ import json
 import os
 from datetime import datetime
 from spine_archive import archive_original_image, archive_spine_image
-from config import DEFAULT_SHELF_ID, DEMO_ROBOT_KEY
+from config import DEFAULT_SHELF_ID, DEMO_LOGIN
 
-# 서버 API는 로봇 키(X-Robot-Key) 또는 사서 로그인이 필요합니다. 이 스크립트는 로봇 역할이므로 로봇 키를 보냅니다.
-api = requests.Session()
-api.headers["X-Robot-Key"] = DEMO_ROBOT_KEY
+api = requests.Session()   # 로그인 쿠키를 유지
 
 # ---------------------------------------------------------
 # ⚙️ 기본 설정
@@ -77,8 +75,14 @@ def run_automation_test():
     print(f"-> 세션 ID: {SESSION_ID}")
     print("==================================================")
 
+    # 서버 API는 사서 로그인이 필요합니다. 시연용 계정(config.DEMO_LOGIN)으로 로그인해 세션 쿠키를 받습니다.
+    res_login = api.post(f"{BASE_URL}/api/auth/login", json=DEMO_LOGIN)
+    if res_login.status_code != 200:
+        print(f"❌ [로그인 실패] {res_login.status_code} {res_login.text} (setup_db.py를 실행했는지 확인)")
+        return
+
     # 1. 세션 시작
-    print("\n1️⃣ 로봇이 서가에 도착하여 세션을 생성합니다...")
+    print("\n1️⃣ 서버에 분석 세션을 생성합니다...")
     # 분석에 쓰인 사진(ach/dataset/test)을 세션 원본 사진으로 보관 → 대시보드 '서가 사진'에 표시
     test_dir = os.path.join(BASE_DIR, "..", "ach", "dataset", "test")
     photos = sorted(f for f in os.listdir(test_dir) if f.lower().endswith((".jpg", ".png"))) if os.path.isdir(test_dir) else []
@@ -112,4 +116,4 @@ def run_automation_test():
 
 
 if __name__ == "__main__":
-    run_automation_test()
+    run_automation_test()

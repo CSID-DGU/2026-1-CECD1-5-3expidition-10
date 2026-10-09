@@ -1,6 +1,5 @@
 import os
 import shutil
-import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -9,11 +8,11 @@ from db import get_db_connection
 from locations import fetch_shelf_locations, location_label, shelf_code_from_filename, shelf_folder
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
 
-# 로봇 순찰 사진 수신함 (도서관별)
-#  폴더 구조: patrol_inbox/<도서관>/<구역>/<책꽂이>/<층 코드>_<촬영시각>_<임의값>.jpg
-#            (예: LIB001/A/A-01/A-01-3_20261003_093000_1a2b3c.jpg)
-#  - 로봇(API)이 보낸 사진은 서버가 이 구조로 저장하고,
-#  - 사람이 직접 넣은 사진도 '책꽂이 폴더 + 층 코드로 시작하는 파일 이름'이면 자동으로 등록됩니다. (sync_inbox)
+# 순찰 사진 수신함 (도서관별 폴더)
+#  폴더 구조: patrol_inbox/<도서관>/<구역>/<책꽂이>/<층 코드로 시작하는 파일 이름>.jpg
+#            (예: LIB001/A/A-01/A-01-3.jpg, LIB001/A/A-01/A-01-3_20261003_0930.jpg)
+#  - 순찰 사진은 이 폴더에 들어온다고 가정합니다. (사진을 찍어 넣는 로봇은 개발 범위 밖)
+#  - '책꽂이 폴더 + 층 코드로 시작하는 파일 이름'인 사진은 자동으로 등록됩니다. (sync_inbox)
 #  - 현황 · 일괄 분석은 도서관마다 따로 다룹니다. (AI 분석 대기열은 모든 도서관이 함께 씀)
 #  사진 상태: WAITING → QUEUED(분석 순서 대기) → ANALYZING → DONE / FAILED (FAILED는 다음 일괄 분석에서 다시 시도)
 #  일괄 분석은 구역 → 책꽂이 → 층 → 촬영 시각 순서로 진행합니다.
@@ -48,31 +47,6 @@ def ensure_inbox_folders(locations: dict):
         os.makedirs(os.path.join(PATROL_INBOX_DIR, folder), exist_ok=True)
 
 
-def save_patrol_photo(conn, fileobj, ext: str, shelf: dict, captured_at: Optional[datetime]) -> dict:
-    """로봇이 보낸 사진을 수신함의 구역/책꽂이 폴더에 저장하고 PATROL_PHOTO에 WAITING으로 등록합니다."""
-    received = datetime.now()
-    captured = captured_at or received
-    rel_path = f"{shelf_folder(shelf)}/{shelf['shelf_code']}_{captured.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}{ext}"
-    abs_path = os.path.join(PATROL_INBOX_DIR, rel_path)
-    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
-    with open(abs_path, "wb") as f:
-        shutil.copyfileobj(fileobj, f)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """INSERT INTO PATROL_PHOTO (library_id, shelf_id, file_path, captured_at, received_at, status)
-               VALUES (%s, %s, %s, %s, %s, 'WAITING')""",
-            (shelf["library_id"], shelf["shelf_id"], rel_path,
-             captured.strftime('%Y-%m-%d %H:%M:%S'), received.strftime('%Y-%m-%d %H:%M:%S'))
-        )
-        conn.commit()
-        photo_id = cursor.lastrowid
-    finally:
-        cursor.close()
-    return {"photo_id": photo_id, "shelf_id": shelf["shelf_id"], "file_path": rel_path, "status": "WAITING",
-            "captured_at": captured.isoformat(timespec="seconds")}
-
-
 def _classify_inbox_file(rel_path: str, library_id: str, shelves_by_code: dict):
     """수신함 파일(<도서관>/<구역>/<책꽂이>/<파일>) → (shelf_id, None) 또는 (None, 등록할 수 없는 이유)"""
     parts = rel_path.split("/")
@@ -98,7 +72,8 @@ def _classify_inbox_file(rel_path: str, library_id: str, shelves_by_code: dict):
 def sync_inbox(conn, library_id: str, locations: dict) -> list:
     """
     도서관의 수신함 폴더(patrol_inbox/<도서관>/)와 PATROL_PHOTO를 맞춥니다.
-      - 사람이 직접 넣은(아직 등록되지 않은) 사진 → WAITING으로 등록 (촬영 시각 = 파일 수정 시각)
+      - 아직 등록되지 않은 사진 → WAITING으로 등록 (촬영 시각 = 파일 수정 시각)
+        이미 분석이 끝난 사진과 같은 이름이면 새 사진으로 보고 등록 (예전 기록의 경로는 <경로>#<사진 ID>로 바꿈)
       - 분석 전(WAITING/FAILED)인데 파일이 사라진 사진 → 등록 취소
     반환: 규칙에 맞지 않아 등록하지 못한 파일 목록 [{"file_path", "reason"}]
     """
@@ -109,8 +84,12 @@ def sync_inbox(conn, library_id: str, locations: dict) -> list:
     try:
         cursor.execute("SELECT photo_id, file_path, status FROM PATROL_PHOTO WHERE library_id = %s", (library_id,))
         rows = cursor.fetchall()
-        cursor.execute("SELECT file_path FROM PATROL_PHOTO")   # file_path는 모든 도서관에서 고유
-        registered = {r["file_path"] for r in cursor.fetchall()}
+        cursor.execute("SELECT photo_id, file_path, status FROM PATROL_PHOTO")   # file_path는 모든 도서관에서 고유
+        all_rows = cursor.fetchall()
+        # 분석이 끝난(DONE) 사진의 파일은 이미 지워졌으므로, 같은 이름의 파일이 다시 있으면 새로 들어온 사진입니다.
+        # (매번 'A-01-3.jpg'처럼 같은 이름으로 넣는 경우) → 아직 처리 중인 사진만 '등록됨'으로 봅니다.
+        registered = {r["file_path"] for r in all_rows if r["status"] != "DONE"}
+        done_by_path = {r["file_path"]: r["photo_id"] for r in all_rows if r["status"] == "DONE"}
 
         unrecognized = []
         for dirpath, _, filenames in os.walk(library_dir):
@@ -126,6 +105,11 @@ def sync_inbox(conn, library_id: str, locations: dict) -> list:
                     unrecognized.append({"file_path": rel_path, "reason": reason})
                     continue
                 captured = datetime.fromtimestamp(os.path.getmtime(full)).strftime('%Y-%m-%d %H:%M:%S')
+                if rel_path in done_by_path:
+                    # 예전 분석 기록은 남기고 경로만 '<경로>#<사진 ID>'로 바꿔 자리를 비움 (file_path는 UNIQUE)
+                    old_id = done_by_path[rel_path]
+                    cursor.execute("UPDATE PATROL_PHOTO SET file_path = %s WHERE photo_id = %s AND status = 'DONE'",
+                                   (f"{rel_path}#{old_id}", old_id))
                 # file_path는 UNIQUE: 동시에 두 번 동기화돼도 한 번만 등록
                 cursor.execute(
                     """INSERT IGNORE INTO PATROL_PHOTO (library_id, shelf_id, file_path, captured_at, received_at, status)

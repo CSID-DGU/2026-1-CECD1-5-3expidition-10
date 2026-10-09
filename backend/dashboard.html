@@ -29,12 +29,12 @@
 
     <div class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 items-stretch">
 
-        <!-- 로봇 순찰 사진 수신함 → 일괄 분석 -->
+        <!-- 순찰 사진 수신함(폴더) → 일괄 분석 -->
         <div class="lg:col-span-12 bg-white px-5 py-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-x-6 gap-y-3">
             <div class="flex items-center gap-3 min-w-[260px]">
-                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-robot text-lg"></i></div>
+                <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-folder-open text-lg"></i></div>
                 <div>
-                    <div class="text-sm font-bold text-slate-700">로봇 순찰 사진</div>
+                    <div class="text-sm font-bold text-slate-700">순찰 사진 수신함</div>
                     <div id="patrol-summary" class="text-xs text-slate-500">불러오는 중...</div>
                 </div>
             </div>
@@ -252,7 +252,7 @@
     </div>
 
     <script>
-        // 분석 요청은 로봇(run_master.py 등)이 API로 보내므로, 화면은 주기적으로 새 결과를 확인합니다.
+        // 순찰 사진은 수신함 폴더로 들어오므로, 화면은 주기적으로 새 사진 · 결과를 확인합니다.
         const AUTO_REFRESH_MS = 20000;
 
         let currentSession = null;    // 화면에 표시 중인 세션 결과 (/api/dashboard/results 응답)
@@ -561,7 +561,7 @@
             setNormalPhoto(entry ? entry.level : null);
         }
 
-        // ===================== 로봇 순찰 사진 일괄 분석 =====================
+        // ===================== 순찰 사진 일괄 분석 =====================
         function setAnalyzeButton(running, enabled) {
             const btn = document.getElementById('analyze-btn');
             btn.disabled = running || !enabled;
@@ -579,7 +579,7 @@
                 : "";
             document.getElementById('patrol-summary').innerHTML = (st.analyzable_count > 0
                 ? `<b class="text-blue-600">분석 대기 ${st.analyzable_count}장</b> (${byZone})${st.failed_count ? ` · 이전 실패 ${st.failed_count}장 포함` : ""}${lastReceived}`
-                : `새로 받은 순찰 사진이 없습니다${lastReceived}`) + unknownNote;
+                : `수신함 폴더에 새 순찰 사진이 없습니다${lastReceived}`) + unknownNote;
 
             const box = document.getElementById('patrol-progress');
             const b = st.latest_batch;
@@ -1192,7 +1192,7 @@
             }
         }
 
-        // 보고 있는 층에 로봇이 보낸 더 새로운 순찰 결과가 있으면 알림 버튼 표시
+        // 보고 있는 층에 더 새로운 순찰 결과가 있으면 알림 버튼 표시
         function checkNewResult() {
             const btn = document.getElementById('new-result');
             const entry = currentSession && shelfIndex[currentSession.shelf_id];

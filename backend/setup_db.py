@@ -7,8 +7,8 @@ from datetime import datetime
 import mysql.connector
 from mysql.connector import Error
 
-from auth import hash_password, sha256_hex
-from config import BACKEND_DIR, DB_CONFIG, DEMO_ROBOT_KEY, NORMAL_SEED_DIR, PATROL_INBOX_DIR
+from auth import hash_password
+from config import BACKEND_DIR, DB_CONFIG, NORMAL_SEED_DIR, PATROL_INBOX_DIR
 from image_check import detect_image_ext
 
 # DB를 최신 구조로 맞춥니다. 새 DB든 예전 DB든 여러 번 실행해도 안전합니다.
@@ -18,9 +18,9 @@ from image_check import detect_image_ext
 #     - 도서관 구분이 없던 시절의 구역/책꽂이/층 ID(A, A-01, A-01-3) → 도서관 LIB001 소속(LIB001-A, LIB001-A-01, LIB001-A-01-3)
 #       세션 · 판정 · 수신함 사진 기록도 함께 옮김
 #     - BOOK_MASTER 기본 키를 (층, 도서 ID)로 변경 (도서 ID B001~은 층 안에서만 고유)
-#  3) 나중에 추가된 컬럼 보충
+#  3) 나중에 추가된 컬럼 보충, 더 이상 쓰지 않는 컬럼(LIBRARY.robot_key_hash) 삭제
 #  4) 가상 데이터 생성 · 갱신 (db_create/library_data.sql)
-#  5) 시연용 계정 · 로봇 키 (없을 때만 만듦, 기존 비밀번호는 바꾸지 않음)
+#  5) 시연용 계정 (없을 때만 만듦, 기존 비밀번호는 바꾸지 않음)
 #  6) 정상 상태 기준 이미지를 DB로 (기준 이미지가 없는 층만)
 #     - db_create/seed/normal_images/<도서관>/<구역>/<책꽂이>/<층 코드>.jpg
 #     - 예전 파일 보관소 backend/normal_images/<구역>/<책꽂이>/<층 코드>.jpg (LIB001로 간주)
@@ -28,7 +28,7 @@ from image_check import detect_image_ext
 DB_CREATE_DIR = os.path.join(BACKEND_DIR, "db_create")
 SCHEMA_SQL = os.path.join(DB_CREATE_DIR, "library_schema.sql")
 DATA_SQL = os.path.join(DB_CREATE_DIR, "library_data.sql")
-PATROL_SQL = os.path.join(DB_CREATE_DIR, "patrol_schema.sql")   # 로봇 순찰 사진 수신함
+PATROL_SQL = os.path.join(DB_CREATE_DIR, "patrol_schema.sql")   # 순찰 사진 수신함
 LEGACY_NORMAL_DIR = os.path.join(BACKEND_DIR, "normal_images")  # 도서관 구분 전의 기준 이미지 파일 보관소
 
 # 도서관 구분이 생기기 전의 데이터는 모두 이 도서관 소속으로 옮깁니다.
@@ -42,8 +42,6 @@ DEMO_USERS = [
     ("LIB001", "librarian", "lib1234", "김사서", "LIBRARIAN"),
     ("LIB002", "admin", "admin1234", "두번째 관리자", "ADMIN"),
 ]
-# 시연용 로봇 키 (LIBRARY.robot_key_hash가 비어 있을 때만 설정)
-DEMO_ROBOT_KEYS = {"LIB001": DEMO_ROBOT_KEY, "LIB002": "demo-robot-key-LIB002"}
 
 # (테이블, 컬럼, 컬럼 정의) — 예전 DB에 없던 컬럼. init.sql / *_schema.sql의 정의와 같아야 합니다.
 ADDED_COLUMNS = [
@@ -57,6 +55,8 @@ ADDED_COLUMNS = [
     ("PATROL_PHOTO", "library_id", "VARCHAR(10) NULL COMMENT '도서관 (shelf_id의 도서관과 같음, 도서관별 조회용)'"),
     ("APP_USER", "deleted_at", "DATETIME NULL COMMENT '삭제한 시각 (조치 기록이 있어 이력용으로 남긴 계정. 아이디는 <아이디>#<user_id>로 바뀜)'"),
 ]
+# 더 이상 쓰지 않는 컬럼 (로봇 키 인증 제거)
+DROPPED_COLUMNS = [("LIBRARY", "robot_key_hash")]
 # 예전 구역/책꽂이/층 테이블에 없던 컬럼 (도서관 구분 이전 구조 → 새 구조)
 LEGACY_SPACE_COLUMNS = [
     ("ZONE", "library_id", "VARCHAR(10) NULL COMMENT '소속 도서관'"),
@@ -111,6 +111,13 @@ def add_columns(cursor, columns):
         if table_exists(cursor, table) and not column_exists(cursor, table, column):
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
             print(f"  ✔️ {table}.{column} 컬럼 추가")
+
+
+def drop_columns(cursor, columns):
+    for table, column in columns:
+        if table_exists(cursor, table) and column_exists(cursor, table, column):
+            cursor.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+            print(f"  ✔️ {table}.{column} 컬럼 삭제")
 
 
 def migrate_single_shelf(cursor):
@@ -233,7 +240,7 @@ def add_indexes(cursor):
             print(f"  ✔️ {table} 인덱스 {index} 추가")
 
 
-def seed_users_and_keys(cursor):
+def seed_users(cursor):
     now = datetime.now()
     for library_id, username, password, display_name, role in DEMO_USERS:
         cursor.execute("SELECT 1 FROM LIBRARY WHERE library_id = %s", (library_id,))
@@ -247,11 +254,6 @@ def seed_users_and_keys(cursor):
                 (library_id, username, hash_password(password), display_name, role, now)
             )
             print(f"  ✔️ 계정 생성: {library_id} / {username} / {password} ({role})")
-    for library_id, key in DEMO_ROBOT_KEYS.items():
-        cursor.execute("UPDATE LIBRARY SET robot_key_hash = %s WHERE library_id = %s AND robot_key_hash IS NULL",
-                       (sha256_hex(key), library_id))
-        if cursor.rowcount:
-            print(f"  ✔️ 로봇 키 설정: {library_id} / {key}")
 
 
 def _shelf_has_any_normal_image(cursor, shelf_id: str) -> bool:
@@ -307,6 +309,7 @@ def setup_db():
         add_columns(cursor, LEGACY_SPACE_COLUMNS)
         migrate_single_shelf(cursor)
         add_columns(cursor, ADDED_COLUMNS)
+        drop_columns(cursor, DROPPED_COLUMNS)
         migrate_to_libraries(cursor)
         migrate_book_master_key(cursor)
         # 4) 가상 데이터 (예전 구조 이전이 끝난 뒤)
@@ -315,8 +318,8 @@ def setup_db():
         backfill_library_ids(cursor)
         migrate_patrol_inbox_paths(cursor)
         add_indexes(cursor)
-        # 5) 계정 · 로봇 키, 6) 기준 이미지
-        seed_users_and_keys(cursor)
+        # 5) 계정, 6) 기준 이미지
+        seed_users(cursor)
         seed_normal_images(cursor)
         conn.commit()
 

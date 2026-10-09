@@ -107,7 +107,7 @@
 
 - 대시보드는 이제 **로그인**이 필요합니다. 시연용 계정: 도서관 ID `LIB001`, 아이디 `admin`, 비밀번호 `admin1234` (관리자). 일반 사서는 `librarian` / `lib1234`.
 - 층 ID 앞에 도서관 ID가 붙었습니다: `A-01-3` → **`LIB001-A-01-3`**. 화면과 수신함 파일 이름에는 지금처럼 `A-01-3`으로 보입니다.
-- 서버 API를 스크립트로 부를 때는 로봇 키 헤더 `X-Robot-Key: demo-robot-key-LIB001`이 필요합니다. `robot_simulator.py`, `run_master.py`, `backend/test_full_pipeline.py`는 이미 넣어 두었습니다.
+- 서버 API를 스크립트로 부를 때도 사서 로그인이 필요합니다. `run_master.py`, `backend/test_full_pipeline.py`는 시연용 계정(`librarian` / `lib1234`)으로 먼저 로그인합니다.
 - 코드를 받은 뒤에는 `cd backend && python setup_db.py`를 한 번 실행해 주세요(계정 · 기준 이미지 생성, 예전 DB 자동 이전).
 
 ## 6. AI 수정 후 백엔드와 함께 테스트하는 방법
@@ -119,9 +119,9 @@ docker-compose up -d                     # MySQL (처음 한 번)
 python setup_db.py                       # DB 구조 · 가상 데이터 · 계정 · 기준 이미지 준비 (매번 실행해도 안전)
 python -m uvicorn main:app --reload      # 서버
 # 다른 터미널 (루트)
-python robot_simulator.py                # ach/dataset/test 사진을 LIB001-A-01-3 순찰 사진으로 전송
+cp -r LIB001 backend/patrol_inbox/    # 테스트용 순찰 사진 4장(A-01-3, A-02-3, A-03-3, B-01-2)을 수신함에 복사
 ```
-http://127.0.0.1:8000 에서 `LIB001` / `admin` / `admin1234`로 로그인한 뒤 **순찰 사진 일괄 분석**을 누르고, 분석이 끝나면 A구역 1번 책꽂이 3층을 선택해 결과를 확인합니다. 실패하면 순찰 바의 '실패'에 마우스를 올리면 AI 에러 내용이 보입니다.
+http://127.0.0.1:8000 에서 `LIB001` / `admin` / `admin1234`로 로그인한 뒤 **순찰 사진 일괄 분석**을 누르고, 분석이 끝나면 '확인이 필요한 층' 목록이나 서가 선택에서 층을 골라 결과를 확인합니다. 층별 사진 · 도서 수는 루트 README의 '테스트용 순찰 사진' 표를 참고하세요. 실패하면 순찰 바의 '실패'에 마우스를 올리면 AI 에러 내용이 보입니다.
 
 `JsonTesting.py`만 따로 실행해도 됩니다(예전과 동일: `cd ach && python JsonTesting.py`).
 

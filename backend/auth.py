@@ -12,11 +12,9 @@ from db import get_db_connection
 # 로그인 · 권한
 #  - 사서는 도서관 ID + 아이디 + 비밀번호로 로그인하고, 브라우저는 세션 쿠키(HttpOnly)를 받습니다.
 #    세션은 DB(AUTH_SESSION)에 저장되므로 서버를 재시작해도 유지됩니다. 토큰 자체가 아니라 SHA-256만 저장합니다.
-#  - 로봇은 도서관별 로봇 키를 X-Robot-Key 헤더로 보냅니다. (LIBRARY.robot_key_hash)
-#  - 모든 데이터는 로그인한(또는 로봇 키의) 도서관 것만 접근할 수 있습니다.
+#  - 모든 데이터는 로그인한 도서관 것만 접근할 수 있습니다.
 SESSION_COOKIE = "lib_session"
 SESSION_HOURS = 12
-ROBOT_KEY_HEADER = "X-Robot-Key"
 ROLES = ("ADMIN", "LIBRARIAN")   # ADMIN: 지도 · 기준 사진 · 구조 · 사서 계정 설정 가능 / LIBRARIAN: 결과 확인 · 알림 처리 · 일괄 분석
 PBKDF2_ITERATIONS = 200_000
 
@@ -45,14 +43,13 @@ def verify_password(password: str, stored: str) -> bool:
 
 @dataclass
 class AuthContext:
-    """요청한 사람(또는 로봇)과 그 도서관"""
+    """요청한 사서와 그 도서관"""
     library_id: str
     library_name: str
     user_id: Optional[int] = None
     username: Optional[str] = None
     display_name: Optional[str] = None
     role: Optional[str] = None
-    is_robot: bool = False
 
     @property
     def is_admin(self) -> bool:
@@ -61,7 +58,7 @@ class AuthContext:
     def to_dict(self) -> dict:
         return {"library_id": self.library_id, "library_name": self.library_name, "user_id": self.user_id,
                 "username": self.username, "display_name": self.display_name, "role": self.role,
-                "is_admin": self.is_admin, "is_robot": self.is_robot}
+                "is_admin": self.is_admin}
 
 
 def authenticate(conn, library_id: str, username: str, password: str) -> Optional[dict]:
@@ -133,43 +130,21 @@ def context_from_session_token(conn, token: Optional[str]) -> Optional[AuthConte
                        username=row["username"], display_name=row["display_name"], role=row["role"])
 
 
-def context_from_robot_key(conn, key: Optional[str]) -> Optional[AuthContext]:
-    if not key:
-        return None
-    cursor = conn.cursor(dictionary=True)
-    try:
-        cursor.execute("SELECT library_id, library_name FROM LIBRARY WHERE robot_key_hash = %s", (sha256_hex(key),))
-        row = cursor.fetchone()
-    finally:
-        cursor.close()
-    if not row:
-        return None
-    return AuthContext(library_id=row["library_id"], library_name=row["library_name"], is_robot=True)
-
-
 def optional_auth(request: Request) -> Optional[AuthContext]:
-    """로그인한 사서(쿠키) 또는 로봇(키). 둘 다 아니면 None"""
+    """로그인한 사서(쿠키). 로그인하지 않았으면 None"""
     conn = get_db_connection()
     if not conn:
         raise HTTPException(status_code=500, detail="DB 연결 실패")
     try:
-        return (context_from_session_token(conn, request.cookies.get(SESSION_COOKIE))
-                or context_from_robot_key(conn, request.headers.get(ROBOT_KEY_HEADER)))
+        return context_from_session_token(conn, request.cookies.get(SESSION_COOKIE))
     finally:
         conn.close()
 
 
-def require_auth(ctx: Optional[AuthContext] = Depends(optional_auth)) -> AuthContext:
-    """사서 또는 로봇 (로봇이 쓰는 API용)"""
+def require_user(ctx: Optional[AuthContext] = Depends(optional_auth)) -> AuthContext:
+    """로그인한 사서만"""
     if ctx is None:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
-    return ctx
-
-
-def require_user(ctx: AuthContext = Depends(require_auth)) -> AuthContext:
-    """로그인한 사서만 (대시보드 · 리포트용)"""
-    if ctx.is_robot:
-        raise HTTPException(status_code=403, detail="사서 계정으로만 사용할 수 있습니다.")
     return ctx
 
 

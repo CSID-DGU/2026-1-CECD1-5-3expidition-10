@@ -8,7 +8,7 @@ PIPELINE_OUTPUT_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.absp
 
 def archive_original_image(session_id: str, src_path: str) -> str:
     """
-    로봇이 촬영한 원본 사진을 세션 보관소(spine_store/<session_id>/original.<확장자>)로 복사하고,
+    순찰 원본 사진을 세션 보관소(spine_store/<session_id>/original.<확장자>)로 복사하고,
     SHELF_SESSION.image_path에 저장할 상대 경로를 반환합니다. 파일이 없으면 빈 문자열.
     """
     if not src_path or not os.path.exists(src_path):

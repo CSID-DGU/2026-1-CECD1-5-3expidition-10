@@ -56,7 +56,7 @@ def clear_spine_store():
     print(f"  ✔️ spine_store 책등 이미지 세션 폴더 {len(session_dirs)}개 삭제 완료!")
 
 def clear_patrol_inbox():
-    """로봇 순찰 사진 수신함(patrol_inbox/<구역>/<책꽂이>/)의 사진을 모두 삭제합니다. (폴더 구조는 유지)"""
+    """순찰 사진 수신함(patrol_inbox/<구역>/<책꽂이>/)의 사진을 모두 삭제합니다. (폴더 구조는 유지)"""
     if not os.path.isdir(PATROL_INBOX_DIR):
         return
     removed = 0

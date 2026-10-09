@@ -9,18 +9,16 @@ import webbrowser
 from datetime import datetime
 
 # =========================================================
-# ⚙️ 로봇(Edge) 및 서버(Cloud) 환경 설정
+# ⚙️ 서버 환경 설정
 # =========================================================
 BASE_URL = "http://127.0.0.1:8000"
 # 세션별 책등 크롭 보관 로직과 기본 칸 설정은 백엔드와 공유합니다. (backend/spine_archive.py, backend/config.py)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend"))
 from spine_archive import archive_original_image, archive_spine_image
-from config import DEFAULT_SHELF_ID, DEMO_ROBOT_KEY
+from config import DEFAULT_SHELF_ID, DEMO_LOGIN
 
-# 서버 API는 로봇 키(X-Robot-Key) 또는 사서 로그인이 필요합니다. 이 스크립트는 로봇 역할이므로 로봇 키를 보냅니다.
-api = requests.Session()
-api.headers["X-Robot-Key"] = DEMO_ROBOT_KEY
-SHELF_ID = DEFAULT_SHELF_ID   # 로봇이 촬영한 층 (기본: A구역 1번 책꽂이 3층)
+api = requests.Session()   # 로그인 쿠키를 유지
+SHELF_ID = DEFAULT_SHELF_ID   # 분석할 층 (기본: A구역 1번 책꽂이 3층)
 
 ACH_DIR = "ach"
 
@@ -30,14 +28,20 @@ SCAN_TIME_STR = CURRENT_TIME.strftime('%Y-%m-%d %H:%M:%S')
 
 def main():
     print("==================================================")
-    print(f"🤖 [VLM 로봇 가동] 서가: {SHELF_ID} / 세션 ID: {SESSION_ID}")
+    print(f"🧪 [단건 분석 테스트] 서가: {SHELF_ID} / 세션 ID: {SESSION_ID}")
     print("==================================================")
+
+    # 서버 API는 사서 로그인이 필요합니다. 시연용 계정(config.DEMO_LOGIN)으로 로그인해 세션 쿠키를 받습니다.
+    res_login = api.post(f"{BASE_URL}/api/auth/login", json=DEMO_LOGIN)
+    if res_login.status_code != 200:
+        print(f"❌ [로그인 실패] {res_login.status_code} {res_login.text} (setup_db.py를 실행했는지 확인)")
+        return
 
     # ---------------------------------------------------------
     # 1️⃣ 세션 시작
     # ---------------------------------------------------------
     print("\n1️⃣ 서버에 새로운 서고 스캔 세션을 생성합니다...")
-    # 로봇이 촬영한 사진(ach/dataset/test의 첫 이미지)을 세션 원본 사진으로 보관 → 대시보드 '서가 사진'에 표시
+    # 순찰 사진(ach/dataset/test의 첫 이미지)을 세션 원본 사진으로 보관 → 대시보드 '서가 사진'에 표시
     test_dir = os.path.join(ACH_DIR, "dataset", "test")
     photos = sorted(glob.glob(os.path.join(test_dir, "*.jpg")) + glob.glob(os.path.join(test_dir, "*.png")))
     image_path = archive_original_image(SESSION_ID, photos[0]) if photos else None
@@ -147,4 +151,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()

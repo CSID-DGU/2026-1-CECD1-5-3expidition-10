@@ -62,7 +62,7 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
     """
     세션 보관소의 원본 사진(image_rel_path = <session_id>/original.<ext>)으로
     AI 분석 → DB 적재(세션 / 가상 RFID / Vision) → 서가 상태 판정까지 실행합니다.
-    scan_time: 순찰 시각 (로봇이 사진을 찍은 시각). 없으면 분석 시각.
+    scan_time: 순찰 시각 (사진을 찍은 시각). 없으면 분석 시각.
     AI 입력 폴더와 결과 파일을 공유하므로 반드시 한 번에 하나만 실행되어야 합니다. (PipelineJobQueue가 보장)
     """
     # ⓪ 이 층의 정상 상태 기준 이미지를 DB에서 꺼내 둠 (없으면 등록 방법을 알려 주며 실패)

@@ -1,5 +1,5 @@
--- 로봇 순찰 사진 수신함 (사진 파일: backend/patrol_inbox/<도서관>/<구역>/<책꽂이>/<층 코드>_*.jpg)
--- 로봇이 순찰하며 찍은 사진은 바로 분석하지 않고 여기에 쌓아 두었다가,
+-- 순찰 사진 수신함 (사진 파일: backend/patrol_inbox/<도서관>/<구역>/<책꽂이>/<층 코드>*.jpg)
+-- 수신함 폴더에 들어온 순찰 사진은 바로 분석하지 않고 여기에 쌓아 두었다가,
 -- 사서가 대시보드에서 '순찰 사진 일괄 분석'을 누르면 한꺼번에 분석합니다.
 -- 세션 데이터처럼 reset_db.py로 초기화됩니다.
 -- 기존 DB에 적용: python setup_db.py  (새 docker 볼륨에서는 자동 실행)
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS PATROL_PHOTO (
     library_id VARCHAR(10) NULL COMMENT '도서관 (shelf_id의 도서관과 같음, 도서관별 조회용)',
     shelf_id VARCHAR(50) NOT NULL COMMENT '촬영한 층 (SHELF_INFO.shelf_id)',
     file_path VARCHAR(255) NOT NULL COMMENT '수신함 파일 경로 (backend/patrol_inbox 기준, <도서관>/<구역>/<책꽂이>/<파일명>)',
-    captured_at DATETIME NOT NULL COMMENT '로봇이 촬영한 시각 (분석 세션의 순찰 시각이 됨)',
+    captured_at DATETIME NOT NULL COMMENT '촬영 시각 (폴더에 넣은 사진은 파일 수정 시각, 분석 세션의 순찰 시각이 됨)',
     received_at DATETIME NOT NULL COMMENT '서버가 받은 시각',
     status VARCHAR(20) NOT NULL DEFAULT 'WAITING' COMMENT 'WAITING(분석 대기) / QUEUED(분석 순서 대기) / ANALYZING / DONE / FAILED',
     batch_id VARCHAR(40) NULL COMMENT '일괄 분석 묶음 ID',

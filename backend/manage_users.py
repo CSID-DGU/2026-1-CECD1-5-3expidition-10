@@ -2,7 +2,7 @@
 사서 계정 관리 (명령줄)
 
 사용 예)
-  python manage_users.py create-library LIB003 "새 도서관"             # 새 도서관 + 첫 관리자 계정(admin) + 로봇 키
+  python manage_users.py create-library LIB003 "새 도서관"             # 새 도서관 + 첫 관리자 계정(admin)
                                                                      #   구역 · 책꽂이 · 층은 관리자가 대시보드 '구조 편집'에서 만듭니다
   python manage_users.py list LIB001                                  # 도서관의 계정 목록
   python manage_users.py add LIB001 hong "홍길동"                       # 일반 사서 계정 추가 (비밀번호는 입력 받음)
@@ -10,18 +10,16 @@
   python manage_users.py password LIB001 hong                          # 비밀번호 변경
   python manage_users.py disable LIB001 hong                           # 로그인 막기 (퇴사 등, 기록은 남음)
   python manage_users.py enable LIB001 hong                            # 다시 허용
-  python manage_users.py robot-key LIB001                              # 로봇 키 새로 발급 (기존 키는 더 이상 사용 불가)
 """
 import argparse
 import getpass
 import re
-import secrets
 import sys
 from datetime import datetime
 
 import mysql.connector
 
-from auth import hash_password, sha256_hex
+from auth import hash_password
 from config import DB_CONFIG
 
 
@@ -41,10 +39,6 @@ def ask_password() -> str:
         return pw
 
 
-def new_robot_key(library_id: str) -> str:
-    return f"robot-{library_id}-{secrets.token_urlsafe(24)}"
-
-
 def create_library(conn, cursor, library_id: str, args) -> int:
     if not re.match(r"^[A-Z0-9]{2,10}$", library_id):
         print("❌ 도서관 ID는 영문 대문자 · 숫자 2~10자로 입력해 주세요. (예: LIB003)")
@@ -55,16 +49,14 @@ def create_library(conn, cursor, library_id: str, args) -> int:
         return 1
     print(f"첫 관리자 계정: {library_id} / {args.admin_user}")
     password = ask_password()
-    key = new_robot_key(library_id)
-    cursor.execute("INSERT INTO LIBRARY (library_id, library_name, robot_key_hash) VALUES (%s, %s, %s)",
-                   (library_id, args.library_name, sha256_hex(key)))
+    cursor.execute("INSERT INTO LIBRARY (library_id, library_name) VALUES (%s, %s)",
+                   (library_id, args.library_name))
     cursor.execute(
         "INSERT INTO APP_USER (library_id, username, password_hash, display_name, role, created_at) VALUES (%s, %s, %s, %s, 'ADMIN', %s)",
         (library_id, args.admin_user, hash_password(password), args.admin_name, datetime.now()))
     conn.commit()
     print(f"✅ 도서관 생성: {library_id} {args.library_name}")
     print(f"   관리자로 로그인한 뒤 대시보드의 '구조 편집'에서 구역 · 책꽂이 · 층을 만드세요.")
-    print(f"   로봇 키 (다시 볼 수 없으니 로봇 설정에 저장하세요): {key}")
     return 0
 
 
@@ -76,7 +68,6 @@ def main():
     p.add_argument("--admin", action="store_true", help="관리자 권한 (지도 · 기준 사진 · 도서관 구조 설정)")
     for name in ("password", "disable", "enable"):
         p = sub.add_parser(name); p.add_argument("library_id"); p.add_argument("username")
-    p = sub.add_parser("robot-key"); p.add_argument("library_id")
     p = sub.add_parser("create-library"); p.add_argument("library_id"); p.add_argument("library_name")
     p.add_argument("--admin-user", default="admin", help="첫 관리자 아이디 (기본 admin)")
     p.add_argument("--admin-name", default="관리자", help="첫 관리자 이름")
@@ -124,10 +115,6 @@ def main():
             cursor.execute("UPDATE APP_USER SET is_active = %s WHERE library_id = %s AND username = %s",
                            (1 if args.command == "enable" else 0, library_id, args.username))
             print("✅ 완료" if cursor.rowcount else "❌ 계정이 없습니다")
-        elif args.command == "robot-key":
-            key = new_robot_key(library_id)
-            cursor.execute("UPDATE LIBRARY SET robot_key_hash = %s WHERE library_id = %s", (sha256_hex(key), library_id))
-            print(f"✅ 새 로봇 키 (다시 볼 수 없으니 로봇 설정에 저장하세요):\n   {key}")
         conn.commit()
         return 0
     except mysql.connector.IntegrityError:
