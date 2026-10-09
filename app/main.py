@@ -90,4 +90,5 @@ async def extract_features(file: UploadFile = File(...)):
         media_type="image/jpeg"
     )
 
+# uvicorn app.main:app
 # http://localhost:8000/docs
