@@ -4,12 +4,62 @@ import colorsys
 import torch
 import numpy as np
 import cv2
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 from app.config import DEVICE
 from app.models import load_yolo_model, load_resnet_model, resnet_preprocess
 
 yolo_model = load_yolo_model()
 resnet_model = load_resnet_model()
+
+TARGET_SIZE = 1280   # 새 탐지 모델(yolo26l_1280_v1)의 학습 해상도 (KJI 브랜치 656a5c4)
+
+def resize_to_target(image: Image.Image, target: int = TARGET_SIZE):
+    """긴 변이 target이 되도록 비율을 유지하며 리사이즈. (이미지, 적용된 scale) 반환"""
+    image = ImageOps.exif_transpose(image).convert("RGB")  # 폰 사진 회전 보정 + RGB 통일
+    w, h = image.size
+    scale = target / max(w, h)
+    if abs(scale - 1.0) < 1e-3:
+        return image, 1.0
+    new_size = (round(w * scale), round(h * scale))
+    resample = Image.LANCZOS if scale < 1 else Image.BICUBIC  # 축소는 LANCZOS, 확대는 BICUBIC
+    return image.resize(new_size, resample), scale
+
+def mask_nms(polys, confs, shape, iou_thr=0.5, ios_thr=0.8):
+    """
+    폴리곤 마스크 기반 NMS.
+    - iou_thr: 마스크 IoU가 이 값 이상이면 중복으로 간주
+    - ios_thr: 작은 마스크가 큰 마스크에 이 비율 이상 포함되면 중복으로 간주
+               (큰 책등 안에 작은 조각이 중복 검출된 경우 IoU는 낮아서 잡아내기 위함)
+    반환: 살아남은 인덱스 리스트 (confidence 높은 순으로 우선 채택)
+    """
+    h, w = shape
+    order = np.argsort(-np.asarray(confs))
+    masks, areas = {}, {}
+
+    for i in order:
+        m = np.zeros((h, w), dtype=np.uint8)
+        cv2.fillPoly(m, [polys[i].astype(np.int32)], 1)
+        masks[i] = m.astype(bool)
+        areas[i] = masks[i].sum()
+
+    keep = []
+    for i in order:
+        if areas[i] == 0:
+            continue
+        duplicate = False
+        for j in keep:
+            inter = np.logical_and(masks[i], masks[j]).sum()
+            if inter == 0:
+                continue
+            union = areas[i] + areas[j] - inter
+            iou = inter / union
+            ios = inter / min(areas[i], areas[j])
+            if iou >= iou_thr or ios >= ios_thr:
+                duplicate = True
+                break
+        if not duplicate:
+            keep.append(i)
+    return keep
 
 def get_unique_colors(n):
     colors = []
@@ -114,7 +164,9 @@ def get_robust_average_quadrilateral(pts):
     return order_points(np.array(quad_points))
 
 def process_bookshelf_pipeline(image: Image.Image):
-    results = yolo_model(image, conf=0.30, iou=0.3, agnostic_nms=True, verbose=False)[0]
+    # 학습 해상도(1280)에 맞춰 입력 전처리
+    image, _ = resize_to_target(image)
+    results = yolo_model(image, conf=0.30, iou=0.7, agnostic_nms=True, imgsz=TARGET_SIZE, verbose=False)[0]
     
     if results.masks is None or len(results.masks) == 0:
         img_byte_arr = io.BytesIO()
@@ -124,6 +176,12 @@ def process_bookshelf_pipeline(image: Image.Image):
     segments_poly = results.masks.xy
     confs = results.boxes.conf.cpu().numpy()
     cls_ids = results.boxes.cls.cpu().numpy()
+
+    # 마스크 기반 NMS (같은 책등이 겹쳐 여러 번 잡힌 것 제거)
+    keep = mask_nms(segments_poly, confs, (image.height, image.width))
+    segments_poly = [segments_poly[i] for i in keep]
+    confs = confs[keep]
+    cls_ids = cls_ids[keep]
 
     SPINE_CLASS_ID = 0
     valid_spine_data = []

@@ -9,7 +9,7 @@ from collections import Counter
 from typing import Dict, List, Any, Tuple
 
 # 기존 파이프라인 모듈 임포트 (원본 훼손 없음)
-from app.pipeline import process_bookshelf_pipeline
+from app.pipeline import process_bookshelf_pipeline, resize_to_target
 from app.config import DEVICE
 from app.models import load_resnet_model, resnet_preprocess
 
@@ -243,7 +243,8 @@ class BookshelfAnalyzerAPI:
         for img_path in glob.glob(os.path.join(NORMAL_DIR, "*.jpg")) + glob.glob(os.path.join(NORMAL_DIR, "*.png")):
             filename = os.path.basename(img_path)
             try:
-                img_pil = Image.open(img_path).convert("RGB")
+                # 탐지 모델 입력 크기(1280)로 미리 맞춰, 탐지 좌표(box)와 크롭할 이미지의 좌표계를 같게 함
+                img_pil, _ = resize_to_target(Image.open(img_path))
                 extracted_books, _ = process_bookshelf_pipeline(img_pil)
                 
                 extracted_books.sort(key=self._get_min_x_for_sorting)
@@ -274,7 +275,8 @@ class BookshelfAnalyzerAPI:
             return {"status": "error", "message": f"파일을 찾을 수 없습니다: {image_path}"}
 
         try:
-            img_pil = Image.open(image_path).convert("RGB")
+            # 탐지 모델 입력 크기(1280)로 미리 맞춰, 탐지 좌표(box)와 크롭할 이미지의 좌표계를 같게 함
+            img_pil, _ = resize_to_target(Image.open(image_path))
             # 이전 이미지(정상 기준 이미지 포함)의 책등 크롭이 남아 섞이지 않도록 먼저 비웁니다.
             for old_spine in glob.glob(os.path.join(SPINE_OUTPUT_DIR, "adjusted_spine_*.jpg")):
                 os.remove(old_spine)
