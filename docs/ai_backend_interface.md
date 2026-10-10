@@ -7,20 +7,32 @@
 
 ## 1. 백엔드가 AI를 호출하는 방식
 
-분석 요청 1건(= 책꽂이 한 층의 사진 1장)마다 백엔드(`backend/pipeline_jobs.py`)가 다음 순서로 실행합니다. 분석은 한 번에 하나씩만 돌아갑니다.
+### AI 작업 프로세스 (기본, `backend/vision_ai.py` · `backend/ai_worker.py`)
+예전에는 사진 한 장마다 `python JsonTesting.py`를 새로 실행해서, 매번 모델을 다시 불러오고 그 층의 기준 사진도 처음부터 다시 분석했습니다(사진 1장에 약 30~100초).
+지금은 서버가 **AI 작업 프로세스 하나를 띄워 두고 계속 씁니다.**
 
-1. 그 층의 **정상 상태 기준 이미지**를 DB에서 꺼내 `backend/.normal_work/<층 코드>_0.jpg`(예: `A-01-3_0.jpg`) 한 장으로 씁니다. (5절 참고)
-2. `ach/dataset/test/` 폴더를 비우고, 분석할 사진 **1장**을 `ach/dataset/test/uploaded_target.jpg`(또는 `.png`)로 넣습니다.
-3. 아래처럼 `JsonTesting.py`를 실행합니다.
-   ```
-   작업 폴더(cwd): ach/
-   명령:          <서버를 실행한 python> JsonTesting.py
-   환경변수:       NORMAL_DIR=<backend/.normal_work 절대 경로>
-                  PYTHONIOENCODING=utf-8
-   ```
-4. **종료 코드가 0이 아니면 실패**로 처리하고, stderr(없으면 stdout)를 실패 사유로 사서 화면에 보여 줍니다.
-5. `ach/vision_output/test_results.json`을 읽어 `test_results[0].vision_items`를 DB에 저장하고 판정합니다.
-6. 각 항목의 `spine_img_file`을 `ach/pipeline_outputs/`에서 찾아 세션 보관소로 복사합니다(대시보드의 책등 사진).
+1. 서버를 켜면 작업 프로세스가 `ach/`에서 `JsonTesting`을 import하고 `BookshelfAnalyzerAPI()`를 만들어 둡니다(YOLO · ResNet을 이때 한 번만 로드).
+2. 분석 요청 1건(= 책꽂이 한 층의 사진 1장)마다:
+   1. 백엔드가 그 층의 **정상 상태 기준 이미지**를 DB에서 꺼내 `backend/.normal_work/<층 코드>_0.jpg`(예: `A-01-3_0.jpg`) 한 장으로 씁니다. (5절 참고)
+   2. 작업 프로세스가 기준 데이터를 준비합니다. 처음 보는 기준 사진이면 `JsonTesting.NORMAL_DIR`을 그 폴더로 바꾸고 `_build_temp_database()`로 만들고, 결과를 메모리와 `backend/.ai_cache/`(디스크)에 저장합니다. 같은 기준 사진이면 저장해 둔 것을 씁니다.
+   3. `analyze_image_to_dict(<세션 보관소의 원본 사진 경로>)`로 분석하고, 결과를 `ach/vision_output/test_results.json`에도 남깁니다(예전과 같은 형식, 확인용).
+   4. 백엔드가 `vision_items`를 DB에 저장하고 판정합니다. 각 항목의 `spine_img_file`을 `ach/pipeline_outputs/`에서 찾아 세션 보관소로 복사합니다(대시보드의 책등 사진).
+3. 분석이 실패하면(`status`가 `success`가 아니거나 예외) 에러 내용을 사서 화면에 보여 줍니다. 작업 프로세스가 죽거나 10분 안에 응답이 없으면 다음 요청 때 새로 띄웁니다. AI 출력(print)은 `backend/logs/ai_worker.log`에 쌓입니다.
+
+> ⚠️ **AI 코드(`JsonTesting.py`, `app/*.py`)나 모델 파일을 바꾸면 서버를 다시 시작해야 반영됩니다.** 작업 프로세스가 처음 import한 코드를 계속 쓰기 때문입니다. 기준 데이터 캐시는 AI 코드 · 모델 파일이 바뀌면 자동으로 새로 만들어집니다(키에 코드 내용 · 모델 파일 크기와 수정 시각이 들어감).
+>
+> 서버는 더 이상 `ach/dataset/test/`를 비우거나 사진을 넣지 않습니다. 그 폴더는 `JsonTesting.py`를 직접 실행할 때만 씁니다.
+
+### 예전 방식 (`AI_MODE=subprocess`)
+환경변수 `AI_MODE=subprocess`로 서버를 켜면 예전처럼 사진마다 아래처럼 실행합니다. 작업 프로세스 방식에 문제가 있을 때 비교용으로 쓰세요.
+```
+ach/dataset/test/ 를 비우고 분석할 사진 1장을 uploaded_target.jpg(또는 .png)로 넣은 뒤
+작업 폴더(cwd): ach/
+명령:          <서버를 실행한 python> JsonTesting.py
+환경변수:       NORMAL_DIR=<backend/.normal_work 절대 경로>, PYTHONIOENCODING=utf-8
+→ 종료 코드가 0이 아니면 실패, 성공하면 ach/vision_output/test_results.json의 test_results[0].vision_items를 사용
+```
+두 방식의 결과가 같은 것을 테스트 사진 4장(LIB001)으로 확인했습니다(책 ID · 순서 · 외형 상태 · 유사도 · 책등 파일 모두 동일).
 
 > ⚠️ 백엔드 서버와 AI는 **같은 Python 환경**에서 실행됩니다. AI 쪽에 새 패키지가 필요하면 루트의 `requirements.txt`에도 추가해 주세요.
 
@@ -28,11 +40,12 @@
 
 | 항목 | 규칙 |
 |---|---|
-| 입력 사진 | `ach/dataset/test/` 안의 `*.jpg` / `*.png` (백엔드는 항상 1장만 넣음) |
+| 입력 사진 | `analyze_image_to_dict(image_path)`의 사진 경로 (예전 방식에서는 `ach/dataset/test/` 안의 `*.jpg` / `*.png` 1장) |
 | 정상 상태 기준 이미지 폴더 | 환경변수 `NORMAL_DIR`(없으면 `dataset/normal`). 폴더 안의 `*.jpg` / `*.png`를 기준으로 사용 |
 | 결과 파일 | `ach/vision_output/test_results.json` |
 | 책등 크롭 | `ach/pipeline_outputs/` (파일명은 `spine_img_file`로 알려 줌) |
-| 실패 | 종료 코드 0이 아닌 값. 이미지를 못 읽었을 때 `test_results`가 빈 배열이어도 백엔드가 실패로 처리 |
+| 실패 | `analyze_image_to_dict`의 `status`가 `success`가 아니거나 예외 (예전 방식: 종료 코드 0이 아닌 값, `test_results`가 빈 배열) |
+| 작업 프로세스가 쓰는 것 | `BookshelfAnalyzerAPI()`, `_build_temp_database()`, `analyze_image_to_dict()`, 모듈 변수 `NORMAL_DIR`, 속성 `reference_pool` · `engineer.reference_pool`. 이름이나 동작을 바꾸면 `backend/ai_worker.py`도 같이 맞춰야 하니 알려 주세요 |
 
 ### `test_results.json` 형식
 ```json

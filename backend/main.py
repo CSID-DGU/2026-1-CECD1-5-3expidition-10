@@ -22,6 +22,7 @@ from patrol import (BatchAlreadyRunning, list_patrol_photos, patrol_status, reco
                     start_batch_analysis)
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
 from spine_archive import PIPELINE_OUTPUT_DIR
+from vision_ai import warm_up_async
 import accounts
 from accounts import AccountError
 import structure
@@ -315,6 +316,8 @@ def prepare_on_startup():
         recover_interrupted_photos()
     except Exception as e:
         print(f"⚠️ 시작 준비 실패 (DB가 켜져 있는지, setup_db.py를 실행했는지 확인): {e}")
+    # AI 작업 프로세스를 미리 띄워 모델을 불러 둠 (첫 분석 대기 시간 단축, 백그라운드)
+    warm_up_async()
 
 @app.get("/api/patrol/status")
 def get_patrol_status(ctx: AuthContext = Depends(require_user)):

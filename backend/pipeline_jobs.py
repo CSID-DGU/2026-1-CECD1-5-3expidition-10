@@ -1,11 +1,8 @@
 import os
-import sys
-import json
 import uuid
 import queue
 import shutil
 import threading
-import subprocess
 from collections import OrderedDict
 from datetime import datetime
 from typing import Optional
@@ -16,11 +13,7 @@ from db import get_db_connection
 from locations import fetch_shelf_location
 from normal_images import prepare_normal_work_dir
 from spine_archive import archive_spine_image
-
-BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-ACH_DIR = os.path.normpath(os.path.join(BACKEND_DIR, "..", "ach"))
-TEST_DIR = os.path.join(ACH_DIR, "dataset", "test")                       # JsonTesting.py가 분석하는 입력 폴더
-RESULT_JSON_PATH = os.path.join(ACH_DIR, "vision_output", "test_results.json")
+from vision_ai import run_vision_ai   # AI 분석 호출 (작업 프로세스를 띄워 두고 재사용, vision_ai.py)
 
 # JsonTesting.py는 *.jpg / *.png 만 읽으므로 그 외 확장자는 맞춰서 저장합니다.
 ALLOWED_IMAGE_EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png"}
@@ -28,42 +21,12 @@ ALLOWED_IMAGE_EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png"}
 MAX_KEPT_JOBS = 100   # 메모리에 보관할 최근 작업 수
 
 
-def run_vision_ai(normal_dir: str) -> list:
-    """
-    ach/JsonTesting.py를 실행해 TEST_DIR의 이미지를 분석하고 vision_items를 반환합니다.
-    normal_dir: 비교 기준으로 쓸 정상 상태 이미지 폴더 (JsonTesting.py의 NORMAL_DIR 환경변수로 전달)
-    """
-    # 서버를 실행한 Python으로 그대로 실행 (AI 패키지가 설치된 환경이어야 함)
-    # 파이프로 연결된 자식 프로세스는 Windows 기본값(cp949)으로 출력하여 이모지 print에서 죽으므로 UTF-8로 고정합니다.
-    result = subprocess.run(
-        [sys.executable, "JsonTesting.py"],
-        cwd=ACH_DIR,
-        capture_output=True,
-        text=True,
-        encoding='utf-8',
-        errors='replace',
-        env={**os.environ, "PYTHONIOENCODING": "utf-8", "NORMAL_DIR": normal_dir}
-    )
-    if result.returncode != 0:
-        error_log = result.stderr if result.stderr else result.stdout
-        print(f"\n❌ [Edge AI 엔진 에러] ❌\n{error_log}\n")
-        raise RuntimeError(f"AI 엔진 내부 에러 발생:\n{error_log}")
-
-    if not os.path.exists(RESULT_JSON_PATH):
-        raise FileNotFoundError(f"AI 분석은 끝났으나 결과 파일({RESULT_JSON_PATH})이 생성되지 않았습니다.")
-    with open(RESULT_JSON_PATH, "r", encoding="utf-8") as f:
-        test_results = json.load(f).get("test_results", [])
-    if not test_results:
-        raise ValueError("AI 분석 결과가 비어 있습니다. (이미지를 읽지 못했거나 분석에 실패)")
-    return test_results[0].get("vision_items", [])
-
-
 def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: str, scan_time: Optional[datetime] = None):
     """
     세션 보관소의 원본 사진(image_rel_path = <session_id>/original.<ext>)으로
     AI 분석 → DB 적재(세션 / 가상 RFID / Vision) → 서가 상태 판정까지 실행합니다.
     scan_time: 순찰 시각 (사진을 찍은 시각). 없으면 분석 시각.
-    AI 입력 폴더와 결과 파일을 공유하므로 반드시 한 번에 하나만 실행되어야 합니다. (PipelineJobQueue가 보장)
+    AI 작업 폴더(ach/pipeline_outputs)와 결과 파일을 공유하므로 반드시 한 번에 하나만 실행되어야 합니다. (PipelineJobQueue가 보장)
     """
     # ⓪ 이 층의 정상 상태 기준 이미지를 DB에서 꺼내 둠 (없으면 등록 방법을 알려 주며 실패)
     conn = get_db_connection()
@@ -77,18 +40,11 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
     finally:
         conn.close()
 
-    # ① AI 입력 폴더를 이번 사진 하나로 교체
-    if os.path.exists(TEST_DIR):
-        shutil.rmtree(TEST_DIR)
-    os.makedirs(TEST_DIR, exist_ok=True)
-    ext = os.path.splitext(image_rel_path)[1]
-    shutil.copy2(os.path.join(SPINE_STORE_DIR, image_rel_path), os.path.join(TEST_DIR, f"uploaded_target{ext}"))
-
-    # ② AI 분석
+    # ① AI 분석 (세션 보관소의 원본 사진을 그대로 분석)
     print(f"\n▶️ [엔진 가동] 세션 {session_id} ({loc['location_label']}): Edge AI 분석 시작 (YOLO & ResNet)...")
-    ai_vision_items = run_vision_ai(normal_dir)
+    ai_vision_items = run_vision_ai(os.path.join(SPINE_STORE_DIR, image_rel_path), normal_dir)
 
-    # ③ DB 적재 + 판정
+    # ② DB 적재 + 판정
     conn = get_db_connection()
     if not conn:
         raise RuntimeError("DB 연결 실패")

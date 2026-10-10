@@ -36,13 +36,14 @@ CECD/
 │   ├── app/                  #   탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
 │   ├── model/                #   YOLO 가중치 (yolo11m_seg_v5.pt)
 │   ├── dataset/normal/       #   (예전) 정상 상태 기준 이미지 — 서버는 DB에 저장된 층별 기준 이미지를 사용
-│   ├── dataset/test/         #   분석할 이미지 (분석 요청이 오면 자동 교체)
+│   ├── dataset/test/         #   JsonTesting.py를 직접 실행할 때의 입력 이미지 (서버는 건드리지 않음)
 │   ├── JsonTesting.py        #   정상 이미지와 비교해 도서별 상태를 판별하고 JSON으로 출력
 │   ├── pipeline_outputs/     #   책등 크롭 작업 폴더 (분석마다 덮어씀)
 │   └── vision_output/test_results.json  # 분석 결과
 ├── backend/                  # 백엔드 · 대시보드 파트 (자세한 내용은 backend/README.md)
 │   ├── main.py               #   FastAPI 서버 (API + 화면 호스팅)
 │   ├── pipeline_jobs.py      #   분석 작업 대기열 (AI 분석 → DB 적재 → 판정)
+│   ├── vision_ai.py, ai_worker.py  # AI 작업 프로세스 (모델을 한 번만 불러 두고 재사용)
 │   ├── patrol.py             #   순찰 사진 수신함(폴더) · 일괄 분석
 │   ├── analyzer.py           #   서가 상태 판정 로직
 │   ├── locations.py          #   구역 / 책꽂이 / 층 위치 조회
