@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-MakeResult.py (v3) - 서가 상태 판정: '책 단위 분류' 대신 '정상 사진과의 전역 매칭'
+MakeResult.py (v4) - 서가 상태 판정: '책 단위 분류' 대신 '정상 사진과의 전역 매칭'
 
 핵심 아이디어
   1) 정상 사진의 책들을 '슬롯'(왼쪽부터 0번, 1번 ...)으로 등록한다.
@@ -60,8 +60,18 @@ class CFG:
     W_GLOBAL, W_STRIP, W_PROF = 0.45, 0.35, 0.20
     HYP_PRIOR = {0: 0.0, 180: 0.02, 90: 0.03, 270: 0.03}   # 자세 가설 사전비용(정상 우선)
     # --- 판정 ---
+    DUMP_DETECTIONS = True       # 검출 결과를 DUMP_DIR에 저장(튜닝용). 판정에는 영향 없음
+    DUMP_DIR = "detections_dump"
+    TREND_ANCHORS = 2            # 추세선 기준점: 선반 양끝에서 각각 몇 권
+    TREND_MAX_RES = 4.0          # 기준점이 직선에서 벗어나도 되는 최대 각도
+    TREND_MAX_SLOPE = 0.015      # 추세선 기울기 상한(도/픽셀)
+    PAPER_T_NOMATCH = 0.28       # 슬롯과 외형이 전혀 안 맞는 영역은 더 낮은 종이면 점수도 인정
+    LSD_MIN_LEN = 60              # 기울기 측정에 쓰는 세로 선분 최소 길이(px)
+    LSD_MIN_TOTAL = 150           # 책 하나에서 선분 길이 합이 이 이하면 quad 각도로 대체
     TILT_DEG = 8.0               # 기준 대비 기울어짐 임계(도)
     TILT_STRONG_DEG = 16.0       # 이 이상 기울면 이웃과 함께 기울어도 개별로 이상 처리(연쇄 기울어짐 정리 예외)
+    GAP_LEAN_MAX_DEG = 25.0      # 빈자리(엎어진/없어진 책 자리)로 기댄 책은 이 각도 미만이면 부수 효과로 보고 정상 처리
+    GAP_ROI_MIN, GAP_ROI_MAX = 0.5, 1.5   # 이웃 사이 빈틈 폭 / 예측 책 폭 비율이 이 범위일 때만 빈틈을 ROI로 쓴다
     LYING_DEG = 60.0             # 이 이상 누우면 '엎어짐/누움'
     PAPER_T = 0.40               # 종이면 점수 임계
     SIFT_MIN_INLIERS = 8
@@ -382,7 +392,73 @@ def warp_spine(rgb: np.ndarray, quad: np.ndarray) -> Optional[np.ndarray]:
         return None
 
 
-def make_qbook(book: Dict[str, Any], rgb: np.ndarray, idx: int) -> Dict[str, Any]:
+# ------------------------------------------------------------------------
+# 기울기 측정: YOLO quad 각도 대신 '사진 픽셀의 세로 경계선'을 직접 잰다 (LSD 선분의 길이 가중 중앙값)
+#  - quad는 검은 벽 옆이나 이웃과 붙은 책에서 각도가 ±10° 흔들린다(실측: 멀쩡한 책 +10~15°, 12° 기운 책 -3°).
+#  - 책등의 긴 세로 경계/글자 획은 책과 함께 기울고, 이웃/배경 경계도 같은 방향이라 중앙값이 안정적이다.
+# ------------------------------------------------------------------------
+def dump_books(books: List[Dict[str, Any]], name: Optional[str]):
+    """검출 결과(박스/quad/폴리곤)를 JSON으로 저장한다. 판정에는 쓰지 않으며, 오프라인에서 같은 입력으로 결과를 재현·튜닝하기 위한 용도."""
+    if not CFG.DUMP_DETECTIONS or not name:
+        return
+    try:
+        os.makedirs(CFG.DUMP_DIR, exist_ok=True)
+        rows = []
+        for b in books:
+            poly = b.get("polygon")
+            rows.append({"book_index": b.get("book_index"), "box": b.get("box"),
+                         "refined_quadrilateral": b.get("refined_quadrilateral"),
+                         "polygon": None if poly is None else np.round(np.array(poly, float), 1).tolist()})
+        with open(os.path.join(CFG.DUMP_DIR, os.path.splitext(name)[0] + ".json"), "w", encoding="utf-8") as f:
+            json.dump(rows, f, ensure_ascii=False, default=_to_py)
+    except Exception as e:                                      # 덤프 실패가 판정을 막으면 안 된다
+        print(f"(검출 덤프 저장 실패: {e})")
+
+
+def detect_vertical_segments(rgb: np.ndarray) -> np.ndarray:
+    """거의 세로인 긴 선분 [(중점x, 중점y, 길이, 각도)]. 각도 0=수직, +는 아래쪽이 오른쪽으로 쏠림."""
+    try:
+        g = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        g = cv2.createCLAHE(2.0, (8, 8)).apply(g)
+        L = cv2.createLineSegmentDetector(cv2.LSD_REFINE_STD).detect(g)[0]
+    except Exception:
+        return np.zeros((0, 4), np.float32)
+    if L is None or len(L) == 0:
+        return np.zeros((0, 4), np.float32)
+    L = np.asarray(L, np.float32).reshape(-1, 4)
+    dx, dy = L[:, 2] - L[:, 0], L[:, 3] - L[:, 1]
+    ln = np.hypot(dx, dy)
+    ang = np.degrees(np.arctan2(dx, dy))
+    ang = np.where(ang > 90, ang - 180, np.where(ang < -90, ang + 180, ang))
+    keep = (ln >= CFG.LSD_MIN_LEN) & (np.abs(ang) <= 35.0)
+    return np.stack([(L[:, 0] + L[:, 2]) / 2, (L[:, 1] + L[:, 3]) / 2, ln, ang], axis=1)[keep].astype(np.float32)
+
+
+def lsd_angle(segs: Optional[np.ndarray], quad: Optional[np.ndarray], box: Dict[str, Any], hw: Tuple[int, int]):
+    """책 영역 안 선분들의 (길이 가중 중앙값 각도, 총 길이). 선분이 부족하면 None."""
+    if segs is None or len(segs) == 0:
+        return None
+    H, W = hw
+    mask = np.zeros((H, W), np.uint8)
+    if quad is not None:
+        cv2.fillConvexPoly(mask, np.int32(np.round(quad)), 255)
+    else:
+        mask[box["y1"]:box["y2"], box["x1"]:box["x2"]] = 255
+    mask = cv2.dilate(mask, np.ones((3, 9), np.uint8))
+    xs = np.clip(segs[:, 0].astype(int), 0, W - 1)
+    ys = np.clip(segs[:, 1].astype(int), 0, H - 1)
+    sel = segs[mask[ys, xs] > 0]
+    bh = max(box["y2"] - box["y1"], 1)
+    sel = sel[sel[:, 2] >= 0.15 * bh]
+    if len(sel) == 0 or float(sel[:, 2].sum()) < CFG.LSD_MIN_TOTAL:
+        return None
+    o = np.argsort(sel[:, 3])
+    cw = np.cumsum(sel[o, 2])
+    a = float(sel[o, 3][np.searchsorted(cw, cw[-1] / 2.0)])
+    return a, float(cw[-1])
+
+
+def make_qbook(book: Dict[str, Any], rgb: np.ndarray, idx: int, segs: Optional[np.ndarray] = None) -> Dict[str, Any]:
     H, W = rgb.shape[:2]
     box = _clip_box(book["box"], W, H)
     quad = _as_quad(book.get("refined_quadrilateral"))
@@ -398,6 +474,7 @@ def make_qbook(book: Dict[str, Any], rgb: np.ndarray, idx: int) -> Dict[str, Any
         "idx": idx if bi is None else bi, "box": box, "crop": crop, "w": w, "h": h, "quad": quad,
         "cx": cx, "ub": ub, "cy": (box["y1"] + box["y2"]) / 2.0,
         "axis": book_axis(book), "raw": book, "desc": {}, "sift": None,
+        "lsd": lsd_angle(segs, quad, box, (H, W)) if segs is not None else None,
     }
 
 
@@ -457,7 +534,9 @@ def build_normal_reference_pool() -> Dict[str, Any]:
     img = prepare_image(Image.open(path).convert("RGB"))        # 파이프라인과 같은 좌표계
     rgb = np.array(img)
     books, _ = process_bookshelf_pipeline(img)
-    qbs = dedupe_books([make_qbook(b, rgb, i) for i, b in enumerate(books)])
+    dump_books(books, os.path.basename(path))
+    segs = detect_vertical_segments(rgb)
+    qbs = dedupe_books([make_qbook(b, rgb, i, segs) for i, b in enumerate(books)])
     qbs.sort(key=lambda q: q["cx"])
     if len(qbs) < 3:
         print("❌ 기준 사진에서 책이 3권 미만 검출되어 중단합니다.")
@@ -476,7 +555,7 @@ def build_normal_reference_pool() -> Dict[str, Any]:
         slots.append({
             "slot": n, "ref_id": f"ref_{os.path.basename(path)}_slot_{n}", "book_index": q["idx"], "box": q["box"],
             "u": q["ub"], "quad": q["quad"], "w": float(q["w"]), "h": float(q["h"]), "y2": float(q["box"]["y2"]),
-            "axis": q["axis"], "desc": d0, "M1": float(m1), "M2": float(m2),
+            "axis": q["axis"], "lsd": q["lsd"], "desc": d0, "M1": float(m1), "M2": float(m2),
             "sift": sift_extract(q["crop"]), "edge": edge_energy(q["crop"]), "crop": q["crop"],
         })
 
@@ -608,6 +687,31 @@ def fit_axis_model(ds: List[Tuple[float, float]]) -> Tuple[float, float]:
     return c0, 0.0
 
 
+def fit_tilt_trend(items: List[Tuple[float, float]]) -> Tuple[float, float, str]:
+    """(x, d) 목록에서 카메라 각도 추세 off(x)=a+b*x 를 구한다. d = 질의 선분각 - 기준 선분각.
+    책 몇 권이 기울면 이웃이 연쇄로 따라 기울어서(도미노) 전체 중앙값이 오염된다(실제 210803/210814).
+    그래서 선반 양끝 두 권씩(벽에 기대 있어 대개 수직)을 기준점으로 직선을 잡는다.
+    기준점들이 한 직선으로 설명되지 않거나 기울기가 비현실적이면 전체 중앙값(상수)으로 되돌아간다."""
+    if not items:
+        return 0.0, 0.0, "none"
+    it = sorted(items)
+    xs = np.array([p[0] for p in it], float)
+    ds = np.array([p[1] for p in it], float)
+    med, _ = fit_axis_model([(0.0, v) for v in ds])
+    if len(it) < 6:
+        return float(med), 0.0, "median"
+    k = CFG.TREND_ANCHORS
+    ax = np.r_[xs[:k], xs[-k:]]
+    ad = np.r_[ds[:k], ds[-k:]]
+    if ax.max() - ax.min() < 200:
+        return float(med), 0.0, "median"
+    b, a = np.polyfit(ax, ad, 1)
+    res = np.abs(ad - (a + b * ax)).max()
+    if res <= CFG.TREND_MAX_RES and abs(b) <= CFG.TREND_MAX_SLOPE:
+        return float(a), float(b), "ends"
+    return float(med), 0.0, "median"
+
+
 def decide_state(q, slot, raw_scores, sift, ctx, partial: bool = False) -> Dict[str, Any]:
     """raw_scores: {h: score}. sift: sift_pose 결과(없으면 None). ctx: 프레임/롤/통계."""
     meta = ctx["meta"]
@@ -626,7 +730,14 @@ def decide_state(q, slot, raw_scores, sift, ctx, partial: bool = False) -> Dict[
     theta_rel = None
     if sift and sift.get("reliable"):
         theta_rel = _wrap360(sift["theta"] - ctx["roll"])
+    tilt_quad = tilt_geo                      # 엎어짐(누움) 판정은 quad 각도(큰 각도 범위)를 그대로 쓴다
+    if q.get("lsd") and slot.get("lsd"):      # 기울어짐은 픽셀 선분 각도로 잰다(quad보다 훨씬 안정적)
+        ta, tb = ctx.get("lsd_trend", (0.0, 0.0))
+        tilt_signed = _wrap180(q["lsd"][0] - slot["lsd"][0] - (ta + tb * q["ub"]))
+        tilt_geo = abs(tilt_signed)
+        ev["tilt_src"] = "lsd"
     ev["tilt_geo"] = None if tilt_geo is None else round(tilt_geo, 2)
+    ev["tilt_quad"] = None if tilt_quad is None else round(tilt_quad, 2)
     ev["tilt_signed"] = None if tilt_signed is None else round(tilt_signed, 2)
     ev["sift_theta"] = None if theta_rel is None else round(theta_rel, 2)
     ev["sift_inliers"] = 0 if not sift else int(sift["inliers"])
@@ -637,7 +748,7 @@ def decide_state(q, slot, raw_scores, sift, ctx, partial: bool = False) -> Dict[
     sc_scale = ctx["q_stats"]["med_h"] / max(meta["med_h"], 1.0)
     above = (ctx["q_stats"]["med_y2"] - q["box"]["y2"]) / max(slot["h"] * sc_scale, 1.0)
     h90 = max(raw_scores.get(90, -9), raw_scores.get(270, -9)) - raw_scores.get(0, -9)
-    strong = (tilt_geo is not None and tilt_geo >= CFG.LYING_DEG) or aspect_rel >= 3.0
+    strong = (tilt_quad is not None and tilt_quad >= CFG.LYING_DEG) or aspect_rel >= 3.0
     weak = [h90 > 0.06 and best_h in (90, 270),
             above > 0.35 and aspect_rel > 1.8,
             theta_rel is not None and 60.0 <= abs(theta_rel) <= 120.0]
@@ -648,7 +759,7 @@ def decide_state(q, slot, raw_scores, sift, ctx, partial: bool = False) -> Dict[
     # --- 종이면 ---
     ps = paper_side_score(q["crop"])
     ev["paper_score"] = round(ps, 3)
-    if ps >= CFG.PAPER_T and (best_sc < meta["tau_ok"] or ps >= 0.7):
+    if (ps >= CFG.PAPER_T and (best_sc < meta["tau_ok"] or ps >= 0.7)) or (ps >= CFG.PAPER_T_NOMATCH and best_sc < 0.15):
         return {"state": "abnormal_paper", "conf": float(_clip(ps, 0.5, 0.99)), "ev": ev, "flags": flags}
 
     # --- 위아래 뒤집힘: 세 증거(스트립, 프로파일, SIFT 회전각) ---
@@ -711,8 +822,9 @@ def roi_for_slot(slot, a, b, ctx, W, H) -> Dict[str, int]:
     return _clip_box({"x1": cx - half, "x2": cx + half, "y1": y_top, "y2": y_bot}, W, H)
 
 
-def recover_slot(rgb, slot, a, b, ctx, emb) -> Dict[str, Any]:
-    """YOLO가 놓친 슬롯 복구: (1) 예측 ROI를 확대해 재검출 (2) 실패하면 ROI 크롭을 자세 가설로 직접 판정"""
+def recover_slot(rgb, slot, a, b, ctx, emb, left_box=None, right_box=None) -> Dict[str, Any]:
+    """YOLO가 놓친 슬롯 복구: (1) 예측 ROI를 확대해 재검출 (2) 실패하면 ROI 크롭을 자세 가설로 직접 판정
+    left_box/right_box: 바로 옆 슬롯에 매칭된 책의 박스. 둘 다 있으면 그 사이 빈틈이 이 책의 실제 위치다."""
     H, W = rgb.shape[:2]
     meta = ctx["meta"]
     pq = predict_quad(slot, a, b, ctx)
@@ -721,6 +833,14 @@ def recover_slot(rgb, slot, a, b, ctx, emb) -> Dict[str, Any]:
         roi = _clip_box({"x1": px1, "y1": py1, "x2": px2, "y2": py2}, W, H)
     else:
         roi = roi_for_slot(slot, a, b, ctx, W, H)
+    gap_used = False
+    if left_box is not None and right_box is not None:
+        gx1, gx2 = left_box["x2"], right_box["x1"]
+        wpred = max(roi["x2"] - roi["x1"], 1.0)
+        if CFG.GAP_ROI_MIN * wpred <= gx2 - gx1 <= CFG.GAP_ROI_MAX * wpred:
+            roi = _clip_box({"x1": gx1, "x2": gx2, "y1": roi["y1"], "y2": roi["y2"]}, W, H)
+            gap_used = True
+            pq = None            # 예측 quad는 위치가 어긋나 있으므로 버리고 빈틈 박스 그대로 크롭한다
     source, q = "recovered_roi", None
     if CFG.REDETECT_MISSING:
         try:
@@ -767,12 +887,15 @@ def recover_slot(rgb, slot, a, b, ctx, emb) -> Dict[str, Any]:
     ps = paper_side_score(crop)
     ratio = edge_energy(crop) / max(slot["edge"], 1e-3)
     ev = {"best_hyp": best_h, "best_score": round(raw[best_h], 4), "paper_score": round(ps, 3), "edge_ratio": round(ratio, 3)}
+    if gap_used:
+        ev["roi"] = "neighbor_gap"
     if raw[best_h] - CFG.HYP_PRIOR[best_h] >= meta["tau_floor"]:
         res = decide_state(q, slot, raw, pose, ctx)
         res.update({"source": source, "box": box})
         res["flags"] = res["flags"] + ["recovered"]
         return res
-    if ps >= CFG.PAPER_T:
+    # 여기까지 왔다는 것은 어떤 자세 가설로도 슬롯과 외형이 안 맞는다는 뜻 -> 종이면 임계를 낮춰 적용
+    if ps >= CFG.PAPER_T_NOMATCH:
         return {"state": "abnormal_paper", "conf": float(_clip(ps, 0.5, 0.99)), "source": source, "box": box, "ev": ev, "flags": ["recovered"]}
     if ratio < CFG.ABSENT_EDGE_RATIO:
         return {"state": "absent", "conf": float(_clip(1.0 - ratio, 0.5, 0.99)), "source": source, "box": box, "ev": ev, "flags": []}
@@ -837,7 +960,19 @@ def suppress_domino(slot_res: Dict[int, Dict[str, Any]]):
             cur = []
     if cur:
         runs.append(cur)
+    gap_states = ("abnormal_stack", "absent")
     for run in runs:
+        # 빈자리(엎어진/없어진 책 자리)로 기대어 기운 책은 그 이상 상태의 부수 효과이므로 개별 이상으로 보지 않는다.
+        # 부호 +: 윗부분이 왼쪽으로 쏠림(왼쪽으로 쓰러짐), -: 오른쪽.
+        sg = 1 if run[0][1] > 0 else -1
+        edge_sn = min(sn for sn, _ in run) if sg > 0 else max(sn for sn, _ in run)
+        nb = edge_sn - 1 if sg > 0 else edge_sn + 1
+        if nb in slot_res and slot_res[nb]["state"] in gap_states:
+            for sn, t in run:
+                r = slot_res[sn]
+                if r["state"] == "abnormal_tilted" and abs(t) < CFG.GAP_LEAN_MAX_DEG:
+                    r["state"], r["conf"] = "normal", 0.6
+                    r["flags"] = r["flags"] + ["leaning_into_gap"]
         if len(run) < 2:
             continue
         mx = max(abs(t) for _, t in run)
@@ -851,7 +986,7 @@ def suppress_domino(slot_res: Dict[int, Dict[str, Any]]):
 # ------------------------------------------------------------------------
 # 메인: 한 장 분석
 # ------------------------------------------------------------------------
-def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any]) -> Dict[str, Any]:
+def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any], name: Optional[str] = None) -> Dict[str, Any]:
     pool = normal_reference_pool
     slots, meta = pool["slots"], pool["meta"]
     N = len(slots)
@@ -861,10 +996,13 @@ def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any]) 
     H, W = rgb.shape[:2]
 
     books, _ = process_bookshelf_pipeline(query_image)
-    qbs = dedupe_books([make_qbook(b, rgb, i) for i, b in enumerate(books)])
+    dump_books(books, name)
+    segs = detect_vertical_segments(rgb)
+    ctx_segs = segs
+    qbs = dedupe_books([make_qbook(b, rgb, i, segs) for i, b in enumerate(books)])
     qbs.sort(key=lambda q: q["cx"])
     q_stats = standing_stats(qbs) if qbs else {"med_axis": None, "med_y2": meta["med_y2"], "med_h": meta["med_h"]}
-    ctx = {"meta": meta, "q_stats": q_stats, "roll": 0.0, "W": W, "axis_fit": (0.0, 0.0)}
+    ctx = {"meta": meta, "q_stats": q_stats, "roll": 0.0, "W": W, "axis_fit": (0.0, 0.0), "lsd_trend": (0.0, 0.0), "lsd_trend_mode": "none", "segs": ctx_segs}
 
     # (1) 서술자 + 점수행렬 (90/270은 필요한 박스에만)
     for q in qbs:
@@ -948,6 +1086,15 @@ def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any]) 
         if source[i] == "appearance" and qbs[i]["axis"] is not None and slots[j]["axis"] is not None:
             ds.append((qbs[i]["cx"] / W, _wrap180(qbs[i]["axis"] - slots[j]["axis"])))
     ctx["axis_fit"] = fit_axis_model(ds)
+    dl = []
+    for i, j in matched_q.items():
+        if source[i] != "appearance" or not (qbs[i].get("lsd") and slots[j].get("lsd")):
+            continue
+        asp = (qbs[i]["w"] / max(qbs[i]["h"], 1)) / max(slots[j]["w"] / max(slots[j]["h"], 1), 1e-3)
+        if asp < 1.8:                                   # 누운 책은 추세 추정에서 뺀다
+            dl.append((qbs[i]["ub"], _wrap180(qbs[i]["lsd"][0] - slots[j]["lsd"][0])))
+    ta, tb, tmode = fit_tilt_trend(dl)
+    ctx["lsd_trend"], ctx["lsd_trend_mode"] = (ta, tb), tmode
 
     # (6) 상태 판정
     slot_res: Dict[int, Dict[str, Any]] = {}
@@ -973,7 +1120,11 @@ def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any]) 
     for j in range(N):
         if j in matched_s:
             continue
-        r = recover_slot(rgb, slots[j], a, b, ctx, emb)
+        slot_to_q = {slots[jj]["slot"]: qbs[ii] for ii, jj in matched_q.items()}
+        sn = slots[j]["slot"]
+        lq, rq = slot_to_q.get(sn - 1), slot_to_q.get(sn + 1)
+        r = recover_slot(rgb, slots[j], a, b, ctx, emb,
+                         lq["box"] if lq is not None else None, rq["box"] if rq is not None else None)
         r.update({"book_index": None, "match_score": float(r["ev"].get("best_score", 0.0)), "qi": None})
         r["ub"] = (r["box"]["x1"] + r["box"]["x2"]) / 2.0 if r.get("source") == "redetected" else a * slots[j]["u"] + b
         slot_res[slots[j]["slot"]] = r
@@ -1037,7 +1188,7 @@ def describe_findings(analysis: Dict[str, Any]) -> str:
 def analyze_target_image(query_image_path: str, actual_scenario: Optional[str] = None, reference_pool: Optional[Dict[str, Any]] = None) -> dict:
     """한 장 분석(백엔드 연동용). 이미지 단위 예측은 하지 않고 책(슬롯)별 결과만 돌려준다.
     actual_scenario는 호환을 위해 남겨 둔 인자이며 판정에는 쓰지 않는다."""
-    analysis = makeResult(Image.open(query_image_path).convert("RGB"), reference_pool)
+    analysis = makeResult(Image.open(query_image_path).convert("RGB"), reference_pool, os.path.basename(query_image_path))
     summary = analysis["summary"]
     return {
         "파일명": os.path.basename(query_image_path),
@@ -1112,12 +1263,12 @@ def run_test_folder_to_json(reference_pool: Dict[str, Any], test_dir: str = "tes
     print(f"총 {len(files)}개의 테스트 이미지를 분석합니다...\n")
     final = {"reference_file": reference_pool["meta"]["file"], "test_results": []}
     report_rows = []
-    n_files = n_files_ok = n_books = n_books_ok = n_abn = n_abn_ok = n_fp = 0
+    n_files = n_files_ok = n_books = n_books_ok = n_abn = n_abn_ok = n_fp = n_miss = n_type = n_ord = 0
     for path in files:
         fn = os.path.basename(path)
         print(f"🔍 분석 중: {fn}")
         try:
-            an = makeResult(Image.open(path).convert("RGB"), reference_pool)
+            an = makeResult(Image.open(path).convert("RGB"), reference_pool, fn)
             sm = an["summary"]
             print(f"   ├─ 슬롯 {sm['total_slots']} | 검출 {sm['total_books']} | 정상 {sm['normal_count']} | 이상 {sm['abnormal_count']} | 누락 {sm['absent_count']}")
             shown = False
@@ -1141,8 +1292,14 @@ def run_test_folder_to_json(reference_pool: Dict[str, Any], test_dir: str = "tes
                     if row["truth"] != "normal":
                         n_abn += 1
                         n_abn_ok += int(row["ok"])
+                        if not row["ok"]:
+                            if row["pred"] in ("normal", "unknown", "absent"):
+                                n_miss += 1          # 이상인데 정상/판정불가/누락으로 본 경우
+                            else:
+                                n_type += 1          # 이상은 맞췄지만 유형이 틀린 경우
                     elif not row["ok"]:
                         n_fp += 1
+                n_ord += len(sm["order_issues"])
                 report_rows.extend(sc["rows"])
                 if sc["ok"] and not sm["order_issues"]:
                     print("   └─ 📌 정답 비교: ✅ 전부 일치\n")
@@ -1169,15 +1326,17 @@ def run_test_folder_to_json(reference_pool: Dict[str, Any], test_dir: str = "tes
         print(f"📊 정답 비교 요약 (정답표가 있는 {n_files}장)")
         print(f"   이미지 단위 완전 일치: {n_files_ok}/{n_files}")
         print(f"   책 단위 정확도      : {n_books_ok}/{n_books} ({n_books_ok / max(n_books, 1) * 100:.1f}%)")
-        print(f"   이상 책 맞힘        : {n_abn_ok}/{n_abn}")
-        print(f"   정상 책을 이상으로 오판: {n_fp}건")
+        print(f"   이상 책 맞힘        : {n_abn_ok}/{n_abn}  (틀린 {n_abn - n_abn_ok}권 = 놓침 {n_miss} + 유형 오분류 {n_type})")
+        print(f"   정상 책을 이상으로 오판: {n_fp}건   (정답이 정상인 책을 정상이 아닌 것으로 예측한 모든 경우, unknown 포함)")
+        print(f"   순서 오탐           : {n_ord}건   (책 단위 정확도에는 포함되지 않음)")
+        print(f"   확인: 책 단위 오류 {n_books - n_books_ok}권 = 놓침 {n_miss} + 유형 오분류 {n_type} + 오판 {n_fp}")
         print("   책별 상세는 'book_level_report.csv'에 저장되었습니다.")
         print("========================================================")
     print(f"\n✅ 테스트 폴더 분석 완료! 결과가 '{output_json}' 파일로 저장되었습니다.")
 
 
 if __name__ == "__main__":
-    print("💡 서가 이상 탐지 시스템 v3 (전역 매칭 + 누락 복구 + LIS 순서) 가동을 시작합니다.")
+    print("💡 서가 이상 탐지 시스템 v4 (전역 매칭 + 누락 복구 + LIS 순서) 가동을 시작합니다.")
     pool = build_normal_reference_pool()
     if pool:
         run_test_folder_to_json(pool, test_dir="test", output_json="test_results.json")
