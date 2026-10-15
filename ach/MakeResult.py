@@ -14,7 +14,6 @@ MakeResult.py (v4) - 서가 상태 판정: '책 단위 분류' 대신 '정상 �
 임계값은 정상 사진 한 장에서 자동 캘리브레이션한다.
 """
 import os
-import glob
 import json
 import math
 from typing import Dict, List, Any, Tuple, Optional
@@ -40,6 +39,8 @@ from app.models import load_resnet_model, resnet_preprocess
 # ------------------------------------------------------------------------
 DATASET_DIR = "dataset"
 NORMAL_DIR = os.path.join(DATASET_DIR, "normal")
+# 테스트 사진 폴더 후보(우선순위 순). 이미지가 들어 있는 첫 폴더 하나만 사용하고, 나머지는 사용하지 않았다고 알려 준다.
+TEST_DIRS = [os.path.join(DATASET_DIR, "test"), "test"]
 NORMAL_FILE = None   # 기준 사진 파일명을 고정하고 싶으면 "xxx.jpg". None이면 normal 폴더의 정렬상 첫 파일.
 
 KR = {
@@ -65,6 +66,8 @@ class CFG:
     TREND_ANCHORS = 2            # 추세선 기준점: 선반 양끝에서 각각 몇 권
     TREND_MAX_RES = 4.0          # 기준점이 직선에서 벗어나도 되는 최대 각도
     TREND_MAX_SLOPE = 0.015      # 추세선 기울기 상한(도/픽셀)
+    SHELF_MIN_SCORE = 0.30       # 서가 식별: 이 비율 미만으로 맞으면 '등록된 서가가 아님'으로 판정 보류
+    SHELF_MARGIN = 0.10          # 서가 식별: 1등과 2등 점수 차가 이보다 작으면 '식별 불확실'로 표시
     PAPER_T_NOMATCH = 0.28       # 슬롯과 외형이 전혀 안 맞는 영역은 더 낮은 종이면 점수도 인정
     LSD_MIN_LEN = 60              # 기울기 측정에 쓰는 세로 선분 최소 길이(px)
     LSD_MIN_TOTAL = 150           # 책 하나에서 선분 길이 합이 이 이하면 quad 각도로 대체
@@ -517,19 +520,27 @@ def _jitter(rgb: np.ndarray, rng: np.random.RandomState) -> np.ndarray:
     return out
 
 
-def build_normal_reference_pool() -> Dict[str, Any]:
-    print("\n========================================================")
-    print("🚀 [1단계] 정상 사진 -> 슬롯 기준 구조 + 자동 캘리브레이션")
-    print("========================================================")
-    files = sorted(glob.glob(os.path.join(NORMAL_DIR, "*.jpg")) + glob.glob(os.path.join(NORMAL_DIR, "*.png")))
-    if NORMAL_FILE:
-        files = [f for f in files if os.path.basename(f) == NORMAL_FILE]
-    if not files:
-        print("⚠️ [경고] normal 폴더에 기준점 이미지 파일이 존재하지 않습니다!")
-        return {}
-    path = files[0]
-    if len(files) > 1:
-        print(f"ℹ️ normal 폴더에 {len(files)}장이 있습니다. 슬롯 순서는 한 장만 기준이 되므로 '{os.path.basename(path)}'을 사용합니다.")
+IMG_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
+
+
+def list_images(folder: str) -> List[str]:
+    """폴더의 이미지 파일 목록(확장자 대소문자 무시). 이미지가 아닌 파일은 이름을 알려 주고 건너뛴다."""
+    if not os.path.isdir(folder):
+        return []
+    imgs, skipped = [], []
+    for fn in sorted(os.listdir(folder)):
+        full = os.path.join(folder, fn)
+        if not os.path.isfile(full) or fn.startswith("."):
+            continue
+        (imgs if fn.lower().endswith(IMG_EXTS) else skipped).append(full)
+    if skipped:
+        print(f"⚠️ '{folder}'에서 이미지가 아닌 파일 {len(skipped)}개를 건너뜁니다(지원 확장자: {', '.join(IMG_EXTS)}): "
+              + ", ".join(os.path.basename(x) for x in skipped[:8]) + (" ..." if len(skipped) > 8 else ""))
+    return imgs
+
+
+def build_reference_for_file(path: str) -> Dict[str, Any]:
+    """정상 사진 1장 -> 슬롯 구조 + 자동 캘리브레이션 (서가 하나분)"""
     emb = get_embedder()
     img = prepare_image(Image.open(path).convert("RGB"))        # 파이프라인과 같은 좌표계
     rgb = np.array(img)
@@ -539,7 +550,7 @@ def build_normal_reference_pool() -> Dict[str, Any]:
     qbs = dedupe_books([make_qbook(b, rgb, i, segs) for i, b in enumerate(books)])
     qbs.sort(key=lambda q: q["cx"])
     if len(qbs) < 3:
-        print("❌ 기준 사진에서 책이 3권 미만 검출되어 중단합니다.")
+        print(f"❌ 기준 사진 {os.path.basename(path)}에서 책이 3권 미만 검출되어 건너뜁니다.")
         return {}
 
     raws = [describe_raw(emb, q["crop"], (0, 180)) for q in qbs]
@@ -593,6 +604,92 @@ def build_normal_reference_pool() -> Dict[str, Any]:
     print(f"   위아래 구분이 어려운 슬롯(대칭 책등): {amb if amb else '없음'}\n")
     return {"slots": slots, "meta": meta}
 
+
+
+def build_normal_reference_pool() -> Dict[str, Any]:
+    """normal 폴더의 사진마다 서가 하나로 등록한다. 한 장이면 그 서가 하나, 여러 장이면 서가 여러 개(자동 식별)."""
+    print("\n========================================================")
+    print("🚀 [1단계] 정상 사진 -> 슬롯 기준 구조 + 자동 캘리브레이션")
+    print("========================================================")
+    files = list_images(NORMAL_DIR)
+    if NORMAL_FILE:
+        files = [f for f in files if os.path.basename(f) == NORMAL_FILE]
+    if not files:
+        print("⚠️ [경고] normal 폴더에 기준점 이미지 파일이 존재하지 않습니다!")
+        return {}
+    if len(files) > 1:
+        print(f"ℹ️ normal 폴더에 {len(files)}장이 있어 서가 {len(files)}개로 등록합니다. 판정할 사진마다 가장 닮은 서가를 자동으로 고릅니다.\n")
+    pools = [p for p in (build_reference_for_file(f) for f in files) if p]
+    if not pools:
+        return {}
+    if len(pools) == 1:
+        return pools[0]
+    worst = report_shelf_overlap(pools)
+    # 서가 판정 보류 기준: 서로 다른 서가끼리 우연히 나오는 일치율(worst)보다 확실히 높아야 '등록된 서가'로 인정
+    shelf_min = max(CFG.SHELF_MIN_SCORE, worst + 0.05)
+    print(f"ℹ️ 서가 인정 최소 일치율: {shelf_min:.2f}\n")
+    return {"pools": pools, "shelf_min": shelf_min, "meta": {"file": ", ".join(p["meta"]["file"] for p in pools)}}
+
+
+# ------------------------------------------------------------------------
+# 서가 식별 (normal 사진이 여러 장일 때): 어느 정상 사진의 서가인지 자동 판별
+# ------------------------------------------------------------------------
+def shelf_scores(emb: Embedder, crops: List[np.ndarray], pools: List[Dict[str, Any]]):
+    """crops의 책들이 각 서가 슬롯과 얼마나 일대일로 맞는지. 점수 = 맞은 책 수 / max(슬롯 수, 책 수)"""
+    raws = [describe_raw(emb, c, (0, 180)) for c in crops]
+    out = []
+    for pool in pools:
+        meta, slots = pool["meta"], pool["slots"]
+        descs = [{h: finalize_desc(r[h], meta["mu_g"], meta["mu_s"]) for h in (0, 180)} for r in raws]
+        S = np.full((len(crops), len(slots)), -9.0)
+        for i, dd in enumerate(descs):
+            for j, sl in enumerate(slots):
+                S[i, j] = max(pair_score(d, sl["desc"])[0] - CFG.HYP_PRIOR[h] for h, d in dd.items())
+        pairs = assign_with_dummies(1.0 - S, (1.0 - meta["tau_floor"]) / 2.0)
+        hits = [float(S[i, j]) for i, j in pairs if S[i, j] >= meta["tau_floor"]]
+        out.append({"score": len(hits) / max(len(slots), len(crops), 1), "hits": len(hits),
+                    "mean_sim": float(np.mean(hits)) if hits else 0.0, "descs": descs})
+    return out
+
+
+def identify_shelf(emb: Embedder, qbs, pools: List[Dict[str, Any]], min_score: Optional[float] = None):
+    """검출된 책들로 서가를 고른다. 반환: (선택된 pool 또는 None, 정보 dict, 선택된 서가 기준 서술자 목록)"""
+    info = {"scores": {}, "file": None, "confident": False, "reason": None}
+    if not qbs:
+        info["reason"] = "no_books"
+        return None, info, None
+    sc = shelf_scores(emb, [q["crop"] for q in qbs], pools)
+    for p, r in zip(pools, sc):
+        info["scores"][p["meta"]["file"]] = round(r["score"], 3)
+    order = sorted(range(len(pools)), key=lambda k: (sc[k]["score"], sc[k]["mean_sim"]), reverse=True)
+    best = order[0]
+    second = sc[order[1]]["score"] if len(order) > 1 else 0.0
+    info["file"] = pools[best]["meta"]["file"]
+    if sc[best]["score"] < (CFG.SHELF_MIN_SCORE if min_score is None else min_score):
+        info["reason"] = "no_matching_shelf"
+        return None, info, None
+    info["confident"] = (sc[best]["score"] - second) >= CFG.SHELF_MARGIN
+    if not info["confident"]:
+        info["reason"] = "ambiguous_shelf"
+    return pools[best], info, sc[best]["descs"]
+
+
+def report_shelf_overlap(pools: List[Dict[str, Any]]) -> float:
+    """등록한 서가끼리 서로 너무 닮았는지 확인한다(같은 서가를 두 번 넣었을 때 식별이 불가능하므로 경고)."""
+    emb = get_embedder()
+    print("🔎 서가 간 구분 가능성 점검 (한 서가의 책을 다른 서가에 대 봤을 때 일치율)")
+    worst = 0.0
+    for i, a in enumerate(pools):
+        others = [p for k, p in enumerate(pools) if k != i]
+        sc = shelf_scores(emb, [s["crop"] for s in a["slots"]], others)
+        for p, r in zip(others, sc):
+            worst = max(worst, r["score"])
+            flag = "  ⚠️ 너무 닮음" if r["score"] >= CFG.SHELF_MIN_SCORE else ""
+            print(f"   {a['meta']['file']} -> {p['meta']['file']}: {r['score']:.2f}{flag}")
+    if worst >= CFG.SHELF_MIN_SCORE:
+        print("   ⚠️ 닮은 서가가 있습니다. 같은 서가를 두 번 넣은 것이 아니라면 서가 식별이 흔들릴 수 있습니다.")
+    print()
+    return worst
 
 # ------------------------------------------------------------------------
 # 전역 매칭
@@ -988,8 +1085,6 @@ def suppress_domino(slot_res: Dict[int, Dict[str, Any]]):
 # ------------------------------------------------------------------------
 def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any], name: Optional[str] = None) -> Dict[str, Any]:
     pool = normal_reference_pool
-    slots, meta = pool["slots"], pool["meta"]
-    N = len(slots)
     emb = get_embedder()
     query_image = prepare_image(query_image.convert("RGB"))     # 파이프라인과 같은 좌표계(긴 변 1280)
     rgb = np.array(query_image)
@@ -1001,6 +1096,22 @@ def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any], 
     ctx_segs = segs
     qbs = dedupe_books([make_qbook(b, rgb, i, segs) for i, b in enumerate(books)])
     qbs.sort(key=lambda q: q["cx"])
+
+    # (0) 서가 식별: normal 사진이 여러 장이면 가장 닮은 서가를 자동으로 고른다(라벨·사람 개입 없음)
+    shelf_info = None
+    if "pools" in pool:
+        pool, shelf_info, pre = identify_shelf(emb, qbs, pool["pools"], pool.get("shelf_min"))
+        if pool is None:
+            return {"summary": {"total_slots": 0, "total_books": len(qbs), "normal_count": 0, "abnormal_count": 0, "absent_count": 0,
+                                "normal_indices": [], "abnormal_details": [], "order_ok": True, "order_issues": [], "found_order": [],
+                                "extra_boxes": [], "frame": None, "invariant_ok": True, "shelf": shelf_info, "shelf_unknown": True},
+                    "results": []}
+        for q, dd in zip(qbs, pre):
+            q["desc"].update(dd)
+    slots, meta = pool["slots"], pool["meta"]
+    N = len(slots)
+    if shelf_info is None:
+        shelf_info = {"file": meta["file"], "confident": True, "reason": None, "scores": {}}
     q_stats = standing_stats(qbs) if qbs else {"med_axis": None, "med_y2": meta["med_y2"], "med_h": meta["med_h"]}
     ctx = {"meta": meta, "q_stats": q_stats, "roll": 0.0, "W": W, "axis_fit": (0.0, 0.0), "lsd_trend": (0.0, 0.0), "lsd_trend_mode": "none", "segs": ctx_segs}
 
@@ -1169,7 +1280,7 @@ def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any], 
             "normal_indices": normal_idx, "abnormal_details": abnormal_details,
             "order_ok": order["ok"], "order_issues": order["issues"], "found_order": order["found_order"],
             "extra_boxes": extras, "frame": {"scale": a, "offset": b, "roll_deg": ctx["roll"]},
-            "invariant_ok": (len([r for r in results]) == N),
+            "invariant_ok": (len([r for r in results]) == N), "shelf": shelf_info,
         },
         "results": results,
     }
@@ -1205,6 +1316,9 @@ def analyze_target_image(query_image_path: str, actual_scenario: Optional[str] =
 # [평가 전용] 정답표. 예측에는 절대 쓰이지 않고, 예측이 끝난 뒤 비교에만 쓰인다.
 # 번호는 정상 사진의 왼쪽부터 0번. 값은 upside / stack / paper / tilted. 괄호로 묶으면 둘 다 정답으로 인정한다.
 # ------------------------------------------------------------------------
+# 서가 식별 채점용(선택). {"테스트 사진 파일명": "그 서가의 정상 사진 파일명"}. 비워 두면 식별 채점을 건너뛴다. 예측에는 쓰지 않는다.
+SHELF_TRUTH: Dict[str, str] = {}
+
 GROUND_TRUTH: Dict[str, Dict[int, Any]] = {
     "20260522_203503.jpg": {},
     "20260522_203708.jpg": {3: "upside", 5: "upside", 9: "upside"},
@@ -1249,27 +1363,58 @@ def score_against_truth(filename: str, analysis: Dict[str, Any]) -> Optional[Dic
 # ------------------------------------------------------------------------
 # test 폴더 대량 분석 -> JSON (+ 정답표가 있는 파일은 책 단위 비교)
 # ------------------------------------------------------------------------
-def run_test_folder_to_json(reference_pool: Dict[str, Any], test_dir: str = "test", output_json: str = "test_results.json"):
+def run_test_folder_to_json(reference_pool: Dict[str, Any], test_dir: Any = None, output_json: str = "test_results.json"):
     print("\n========================================================")
-    print(f"📁 [테스트 폴더 분석] '{test_dir}' 폴더 내 이미지 분석 (번호는 정상 사진 왼쪽부터 0번)")
+    print("📁 [테스트 폴더 분석] (번호는 정상 사진 왼쪽부터 0번)")
     print("========================================================")
-    if not os.path.exists(test_dir):
-        print(f"⚠️ '{test_dir}' 폴더가 존재하지 않습니다. 테스트 JSON 추출을 건너뜁니다.")
-        return
-    files = sorted(glob.glob(os.path.join(test_dir, "*.jpg")) + glob.glob(os.path.join(test_dir, "*.png")))
+    dirs = [test_dir] if isinstance(test_dir, str) else list(test_dir or TEST_DIRS)
+    print(f"현재 작업 위치: {os.path.abspath(os.getcwd())}")
+    files, used = [], None
+    for d in dirs:
+        if not os.path.isdir(d):
+            print(f"   - {d}: 폴더 없음")
+            continue
+        imgs = list_images(d)
+        if used is None and imgs:
+            used, files = d, imgs
+            print(f"   - {d}: 이미지 {len(imgs)}장 ({os.path.abspath(d)})  ← 이 폴더를 사용")
+        else:
+            print(f"   - {d}: 이미지 {len(imgs)}장 ({os.path.abspath(d)})" + ("  (사용 안 함: 앞 순서 폴더가 이미 선택됨)" if imgs else ""))
     if not files:
-        print(f"⚠️ '{test_dir}' 폴더에 분석할 이미지(jpg, png)가 없습니다.")
+        print(f"⚠️ 분석할 이미지({', '.join(IMG_EXTS)})가 없습니다. 읽은 폴더: {dirs}")
         return
     print(f"총 {len(files)}개의 테스트 이미지를 분석합니다...\n")
     final = {"reference_file": reference_pool["meta"]["file"], "test_results": []}
     report_rows = []
     n_files = n_files_ok = n_books = n_books_ok = n_abn = n_abn_ok = n_fp = n_miss = n_type = n_ord = 0
+    n_shelf = n_shelf_truth = n_shelf_ok = 0
+    overview = []
     for path in files:
         fn = os.path.basename(path)
         print(f"🔍 분석 중: {fn}")
         try:
             an = makeResult(Image.open(path).convert("RGB"), reference_pool, fn)
             sm = an["summary"]
+            sh = sm.get("shelf") or {}
+            if "pools" in reference_pool:
+                n_shelf += 1
+                scs = ", ".join(f"{k} {v:.2f}" for k, v in sh.get("scores", {}).items())
+                if sm.get("shelf_unknown"):
+                    print(f"   ├─ 🗄️ 서가 식별 실패 ({sh.get('reason')}) | {scs}")
+                    print("   └─ ⏭️ 등록된 서가와 맞지 않아 판정을 건너뜁니다.\n")
+                    final["test_results"].append({"filename": fn, "shelf": sh, "summary": sm, "slots": [], "truth_check": None})
+                    overview.append({"file": fn, "shelf": "(식별 실패)", "books": sm["total_books"], "abn": "판정 건너뜀", "truth": "-"})
+                    if fn in SHELF_TRUTH:
+                        n_shelf_truth += 1
+                    continue
+                mark = "" if sh.get("confident") else " ⚠️ 불확실"
+                ok_txt = ""
+                if fn in SHELF_TRUTH:
+                    n_shelf_truth += 1
+                    good = SHELF_TRUTH[fn] == sh.get("file")
+                    n_shelf_ok += int(good)
+                    ok_txt = " ✅" if good else f" ❌ (정답 {SHELF_TRUTH[fn]})"
+                print(f"   ├─ 🗄️ 서가: {sh.get('file')}{mark}{ok_txt} | {scs}")
             print(f"   ├─ 슬롯 {sm['total_slots']} | 검출 {sm['total_books']} | 정상 {sm['normal_count']} | 이상 {sm['abnormal_count']} | 누락 {sm['absent_count']}")
             shown = False
             for r in an["results"]:
@@ -1311,17 +1456,37 @@ def run_test_folder_to_json(reference_pool: Dict[str, Any], test_dir: str = "tes
                         print(f"           근거 {ev}")
                     print()
             else:
-                print()
-            final["test_results"].append({"filename": fn, "summary": sm, "slots": an["results"],
+                print("   └─ 🔎 분류만 표시 (정답표 없음: 채점·결과표에는 넣지 않음)\n")
+            abn = [f"{r['slot']}번 {KR.get(r['state'], r['state'])}" for r in an["results"] if r["state"] != "normal"]
+            abn += [f"{i['slot']}번 순서이상" for i in sm["order_issues"]]
+            overview.append({"file": fn, "shelf": sh.get("file") or "-", "books": sm["total_books"], "abn": ", ".join(abn) or "없음",
+                             "truth": "정답 없음" if sc is None else ("✅ 일치" if sc["ok"] and not sm["order_issues"] else "❌ 불일치")})
+            final["test_results"].append({"filename": fn, "shelf": sh or None, "summary": sm, "slots": an["results"],
                                           "truth_check": None if sc is None else {"ok": sc["ok"], "wrong_slots": [w[0]["slot"] for w in sc["wrong"]]}})
         except Exception as e:
             import traceback
             print(f"❌ {fn} 분석 중 오류 발생: {e}")
             traceback.print_exc()
+            overview.append({"file": fn, "shelf": "-", "books": "-", "abn": f"오류: {e}", "truth": "-"})
     with open(output_json, "w", encoding="utf-8") as f:
         json.dump(final, f, ensure_ascii=False, indent=4, default=_to_py)
-    if n_files:
+    scored = [o for o in overview if o["truth"] in ("✅ 일치", "❌ 불일치")]
+    plain = [o for o in overview if o not in scored]
+    print("========================================================")
+    print(f"📋 분석한 사진 {len(overview)}장 = 정답 채점 {len(scored)}장 + 분류만 {len(plain)}장")
+    if scored:
+        print(f"\n [정답 채점 대상 {len(scored)}장]")
+        for o in scored:
+            print(f"   {o['file']} | 서가 {o['shelf']} | 검출 {o['books']} | 이상: {o['abn']} | {o['truth']}")
+    if plain:
+        print(f"\n [분류만 표시 {len(plain)}장 - 정답표 없음]")
+        for o in plain:
+            print(f"   {o['file']} | 서가 {o['shelf']} | 검출 {o['books']} | 이상: {o['abn']}")
+    if n_shelf_truth:
+        print(f"🗄️ 서가 식별 정확도: {n_shelf_ok}/{n_shelf_truth}")
+    if report_rows:
         pd.DataFrame(report_rows).to_csv("book_level_report.csv", index=False, encoding="utf-8-sig")
+    if n_files:
         print("========================================================")
         print(f"📊 정답 비교 요약 (정답표가 있는 {n_files}장)")
         print(f"   이미지 단위 완전 일치: {n_files_ok}/{n_files}")
@@ -1339,6 +1504,6 @@ if __name__ == "__main__":
     print("💡 서가 이상 탐지 시스템 v4 (전역 매칭 + 누락 복구 + LIS 순서) 가동을 시작합니다.")
     pool = build_normal_reference_pool()
     if pool:
-        run_test_folder_to_json(pool, test_dir="test", output_json="test_results.json")
+        run_test_folder_to_json(pool, output_json="test_results.json")
     else:
         print("❌ 정상(Normal) 참조 데이터를 생성하지 못해 분석을 중단합니다.")
