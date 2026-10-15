@@ -1,18 +1,18 @@
 import io
 import os
-import glob
 import json
-import cv2
-import numpy as np
-from fastapi import FastAPI, File, UploadFile
+import logging
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
-# 작성하신 파이프라인 함수 가져오기
-from app.pipeline import process_bookshelf_affine_pipeline
+from app.config import OUTPUT_DIR
+from app.pipeline import process_bookshelf_perspective_pipeline
+
+logger = logging.getLogger("bookshelf")
+
 app = FastAPI(title="Bookshelf Feature Extractor API")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,74 +21,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-OUTPUT_DIR = "./pipeline_outputs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+MAX_UPLOAD_BYTES = 20 * 1024 * 1024   # 20MB
 
-@app.post(
-    "/extract-features",
-    responses={200: {"content": {"image/jpeg": {}}}}
-)
-async def extract_features(file: UploadFile = File(...)):
-    # 1. 파일 읽기 및 PIL 이미지 변환
-    image_bytes = await file.read()
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    
-    # 2. 모듈화된 파이프라인 가동 
-    extracted_book_metadata, visualized_image_bytes = process_bookshelf_affine_pipeline(image)
 
-    # 3. [요청 반영] 폴리곤 정보 제외 처리 (피처 벡터 전체 원본은 100% 온전하게 유지)
-    book_data = []
-    for book in extracted_book_metadata:
-        book_data.append(book)
+# async 를 제거한 일반 def: FastAPI가 스레드풀에서 실행하므로
+# YOLO/ResNet 추론 중에도 서버 이벤트 루프가 멈추지 않는다.
+@app.post("/extract-features", responses={200: {"content": {"image/jpeg": {}}}})
+def extract_features(file: UploadFile = File(...)):
+    # 1. 파일 읽기 + 입력 검증
+    image_bytes = file.file.read(MAX_UPLOAD_BYTES + 1)
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="빈 파일입니다.")
+    if len(image_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="파일이 너무 큽니다. (최대 20MB)")
 
-    # ====================================================================
-    # 💡 기존에 저장된 이전 JSON 파일들 싹 다 지우기
-    # ====================================================================
-    existing_files = glob.glob(os.path.join(OUTPUT_DIR, "*.json"))
-    for f_path in existing_files:
-        try:
-            os.remove(f_path)
-        except Exception as e:
-            print(f"[⚠️ 파일 삭제 실패] {f_path} : {e}")
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        image.load()   # 손상된 파일은 여기서 예외 발생
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
+        raise HTTPException(status_code=400, detail="이미지 파일이 아니거나 손상된 파일입니다.")
+    # convert("RGB")는 pipeline의 resize_to_target에서 EXIF 회전 보정 후 수행한다.
 
-    # ====================================================================
-    # 💡 원래 경로에 현재 최신 피처 데이터 딱 1개만 새로 저장
-    # ====================================================================
-    base_filename = "extracted_bookshelf_features"
-    json_output_path = os.path.join(OUTPUT_DIR, f"{base_filename}.json")
-    
-    with open(json_output_path, "w", encoding="utf-8") as f:
-        json.dump({"books": book_data}, f, indent=4, ensure_ascii=False)
-        
-    print(f"[🎯 파일 갱신 완료] 기존 데이터 삭제 후 새 파일 저장됨: {json_output_path}")
+    # 2. 파이프라인 실행
+    try:
+        books, visualized_jpeg = process_bookshelf_perspective_pipeline(image)
+    except Exception:
+        logger.exception("파이프라인 처리 실패")
+        raise HTTPException(status_code=500, detail="이미지 처리 중 오류가 발생했습니다.")
 
-    # 4. 받아온 이미지 바이트를 OpenCV 이미지로 변환하여 리사이징 준비
-    nparr = np.frombuffer(visualized_image_bytes, np.uint8)
-    output_image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    # 3. 결과 JSON 저장 (폴더 초기화는 pipeline이 요청 시작 시 수행)
+    json_path = os.path.join(OUTPUT_DIR, "extracted_bookshelf_features.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump({"books": books}, f, indent=4, ensure_ascii=False)
+    logger.info("피처 JSON 저장: %s (%d권)", json_path, len(books))
 
-    # [안전장치] Failed to fetch 터지는 것 방지 (이미지 축소)
-    max_pixel = 1280
-    h, w = output_image.shape[:2]
-    if max(h, w) > max_pixel:
-        scale = max_pixel / max(h, w)
-        output_image = cv2.resize(
-            output_image, 
-            (int(w * scale), int(h * scale)), 
-            interpolation=cv2.INTER_AREA
-        )
-
-    # 5. 리사이징된 객체 탐지 결과 이미지를 다시 JPEG 바이너리로 인코딩
-    _, final_encoded = cv2.imencode(
-        ".jpg", 
-        output_image, 
-        [int(cv2.IMWRITE_JPEG_QUALITY), 85]
-    )
-
-    # 6. 본문에는 오직 이미지 바이너리만 리턴 (스웨거 상단 이미지 뷰어 활성화)
-    return Response(
-        content=final_encoded.tobytes(),
-        media_type="image/jpeg"
-    )
+    # 4. pipeline이 한 번만 인코딩한 JPEG를 그대로 반환 (재압축 없음)
+    return Response(content=visualized_jpeg, media_type="image/jpeg")
 
 # uvicorn app.main:app
 # http://localhost:8000/docs
