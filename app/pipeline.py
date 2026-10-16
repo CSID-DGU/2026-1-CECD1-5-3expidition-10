@@ -280,11 +280,12 @@ def _quad_from_vertical_mask(m):
         m_top = m_bot
     elif m_bot is None:
         m_bot = m_top
+
     # 두 기울기가 지나치게 다르면 불안정한 피팅으로 보고 평균(평행) 사용
-    if abs(m_top - m_bot) > 0.7:
+    if abs(m_top - m_bot) > 1.5:
         m_top = m_bot = (m_top + m_bot) / 2.0
-    m_top = float(np.clip(m_top, -0.4, 0.4))
-    m_bot = float(np.clip(m_bot, -0.4, 0.4))
+    m_top = float(np.clip(m_top, -0.8, 0.8))
+    m_bot = float(np.clip(m_bot, -0.8, 0.8))
 
     # 위치: 윤곽 median 대신 마스크 전체를 감싸는 극값 (잘림 방지)
     ct = float(np.min(ys - m_top * xs))
