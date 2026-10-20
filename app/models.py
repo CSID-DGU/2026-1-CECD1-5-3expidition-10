@@ -19,7 +19,7 @@ _to_tensor = transforms.Compose([
 
 # [1] 책 탐지용 YOLO 모델
 def load_yolo_model():
-    model = YOLO("model/yolo26l_1280_v2.pt")
+    model = YOLO("model/yolo26l_1280_v3.pt")
     return model
 
 # [2] 특징 추출용 ResNet18 모델

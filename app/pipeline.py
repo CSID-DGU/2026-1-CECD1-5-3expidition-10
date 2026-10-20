@@ -12,7 +12,7 @@ from app.config import DEVICE, OUTPUT_DIR
 yolo_model = load_yolo_model()
 resnet_model = load_resnet_model()
 
-TARGET_SIZE = 1280
+TARGET_SIZE = 1280   # YOLO 학습 해상도 (1280x1280)
 JPEG_QUALITY = 85
 MAX_WARP_SIDE = 2048    # 투시변환 결과의 긴 변 상한
 
@@ -268,11 +268,16 @@ def _quad_from_vertical_mask(m):
     top = mid & (cy < yc)
     bot = mid & (cy >= yc)
 
+    # 책등 폭 W를 구해 얇을수록 기울기를 덜 믿는다
+    W = float(np.median(w[ok])) if ok.any() else 0.0
+    min_pts = max(8, int(0.5 * W))                      # 폭에 비해 점이 적으면 기울기 추정 안 함
+    slope_lim = float(np.clip(W / 100.0, 0.15, 0.8)) 
+
     # 위/아래 변 기울기를 각각 따로 추정 -> 사다리꼴 허용 (4점 투시변환을 쓰므로 안전)
     m_top = m_bot = None
-    if top.sum() >= 8:
+    if top.sum() >= min_pts:
         m_top = _fit_slope_y_of_x(cx[top], cy[top])
-    if bot.sum() >= 8:
+    if bot.sum() >= min_pts:
         m_bot = _fit_slope_y_of_x(cx[bot], cy[bot])
     if m_top is None and m_bot is None:
         m_top = m_bot = 0.0
@@ -284,8 +289,8 @@ def _quad_from_vertical_mask(m):
     # 두 기울기가 지나치게 다르면 불안정한 피팅으로 보고 평균(평행) 사용
     if abs(m_top - m_bot) > 1.5:
         m_top = m_bot = (m_top + m_bot) / 2.0
-    m_top = float(np.clip(m_top, -0.8, 0.8))
-    m_bot = float(np.clip(m_bot, -0.8, 0.8))
+    m_top = float(np.clip(m_top, -slope_lim, slope_lim))   # 위쪽은 음수, 아래쪽은 양수 허용 (좌상→우하 기준)
+    m_bot = float(np.clip(m_bot, -slope_lim, slope_lim))   # 위쪽은 음수, 아래쪽은 양수 허용 (좌상→우하 기준)
 
     # 위치: 윤곽 median 대신 마스크 전체를 감싸는 극값 (잘림 방지)
     ct = float(np.min(ys - m_top * xs))
@@ -335,7 +340,7 @@ def extract_spine_quad_perspective(pts, mask_np, fallback_fn=None):
 
     # --- 안전 검사: 마스크와 면적/변 길이가 크게 어긋나면 기존 방식으로 대체 ----------
     qarea = cv2.contourArea(quad)
-    if qarea <= 0 or not (0.8 <= qarea / area <= 1.6):
+    if qarea <= 0 or not (0.8 <= qarea / area <= 1.25):
         return fallback()
 
     # 긴 축 방향으로 마스크를 충분히 덮는지 / 과하게 넘치지 않는지 확인
@@ -345,7 +350,7 @@ def extract_spine_quad_perspective(pts, mask_np, fallback_fn=None):
     m_len = m_max - m_min + 1
     q_min, q_max = float(quad[:, ax].min()), float(quad[:, ax].max())
     covered = max(0.0, min(q_max, m_max) - max(q_min, m_min))
-    if covered / m_len < 0.9 or (q_max - q_min) > m_len * 1.25:
+    if covered / m_len < 0.9 or (q_max - q_min) > m_len * 1.08:
         return fallback()
     return quad
 
@@ -469,6 +474,7 @@ def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: f
         x1, y1, x2, y2 = data["box"]
         current_conf = data["confidence"]
         refined_quad = data["refined_quadrilateral"]
+        print(f"[spine {idx}] confidence={current_conf:.3f}  lying={data['lying']}  tilt={spine_tilt_deg(refined_quad):.1f}deg")
         
         # 투시변환 크기 및 매핑 계산
         base_w, base_h = quad_size(refined_quad)
