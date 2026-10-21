@@ -1,18 +1,18 @@
 """
 AI 분석 작업 프로세스 (서버가 자식 프로세스로 띄워 계속 살려 둠, vision_ai.py가 관리)
 
-예전에는 사진 한 장마다 `python JsonTesting.py`를 새로 실행해서, 매번
-  라이브러리 · YOLO · ResNet을 다시 불러오고(약 6~20초) 그 층의 기준 사진도 처음부터 다시 분석했습니다(약 15~25초).
 이 프로세스는
   - 모델을 처음 한 번만 불러오고,
   - 층별 기준 사진의 분석 결과(reference pool)를 기억해 둡니다. 메모리(최근 CACHE_SIZE개 층)와 디스크(.ai_cache/)에
     저장하므로 서버를 다시 켜도, 층이 많아도 다시 분석하지 않습니다.
     키 = 기준 사진 내용(SHA-256) + AI 코드 · 모델 파일 지문 → 기준 사진이나 AI 코드 · 모델이 바뀌면 자동으로 새로 분석합니다.
-분석 자체는 ach/JsonTesting.py의 BookshelfAnalyzerAPI를 그대로 사용합니다. (AI 코드는 수정하지 않음)
+분석 자체는 ach/MakeResult.py(v4)를 그대로 사용합니다. (AI 코드는 수정하지 않음)
+  - 기준 사진 등록: MakeResult.build_normal_reference_pool()  (MakeResult.NORMAL_DIR 폴더의 사진 사용)
+  - 사진 분석:     MakeResult.analyze_image_to_dict(image_path, pool)
 
 통신: 표준 입력으로 요청 한 줄(JSON), 표준 출력으로 응답 한 줄(JSON, 앞에 PROTOCOL_PREFIX).
   요청 {"image_path": 분석할 사진 절대 경로, "normal_dir": 그 층의 기준 사진 폴더}
-  응답 {"ok": true, "result": analyze_image_to_dict 결과, "timing": {...}, "reference_cached": bool}
+  응답 {"ok": true, "result": analyze_image_to_dict 결과, "timing": {...}, "reference_cached": "memory"/"disk"/null}
        {"ok": false, "error": 에러 내용}
 AI 코드의 print 출력은 표준 에러(서버가 로그 파일로 보냄)로 보냅니다. 표준 입력이 닫히면(서버 종료) 끝납니다.
 """
@@ -32,6 +32,7 @@ RESULT_JSON_PATH = os.path.join(ACH_DIR, "vision_output", "test_results.json")
 CACHE_SIZE = int(os.getenv("AI_REFERENCE_CACHE", "8"))   # 메모리에 기억해 둘 층(기준 사진) 수
 DISK_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".ai_cache")   # 디스크 캐시 (git 제외)
 DISK_CACHE_KEEP = int(os.getenv("AI_REFERENCE_DISK_CACHE", "300"))                       # 디스크에 남길 최대 개수
+AI_ENTRY_FILES = ["MakeResult.py", "JsonTesting.py"]   # 지문에 넣을 AI 진입 파일 (있는 것만)
 
 _proto = None   # 응답 전용 통로 (setup_channels)
 
@@ -51,9 +52,10 @@ def send(message: dict):
 
 
 def ai_fingerprint() -> str:
-    """AI 코드(JsonTesting.py, app/*.py) 내용과 모델 파일(크기 · 수정 시각)의 지문. 바뀌면 캐시를 쓰지 않음"""
+    """AI 코드(MakeResult.py, app/*.py) 내용과 모델 파일(크기 · 수정 시각)의 지문. 바뀌면 캐시를 쓰지 않음"""
     digest = hashlib.sha256()
-    for path in sorted([os.path.join(ACH_DIR, "JsonTesting.py")] + glob.glob(os.path.join(ACH_DIR, "app", "*.py"))):
+    entries = [os.path.join(ACH_DIR, n) for n in AI_ENTRY_FILES if os.path.exists(os.path.join(ACH_DIR, n))]
+    for path in sorted(entries + glob.glob(os.path.join(ACH_DIR, "app", "*.py"))):
         with open(path, "rb") as f:
             digest.update(os.path.basename(path).encode() + f.read())
     for path in sorted(glob.glob(os.path.join(ACH_DIR, "model", "*.pt"))):
@@ -73,21 +75,6 @@ def reference_key(normal_dir: str, fingerprint: str) -> str:
     return digest.hexdigest()
 
 
-def compact_pool(pool: dict) -> dict:
-    """기준 데이터의 리스트를 numpy 배열로 바꿔 메모리를 줄입니다. (JsonTesting은 np.array(...)로 감싸서 쓰므로 결과는 같음)"""
-    import numpy as np
-    out = {}
-    for ref_id, ref in pool.items():
-        ref = dict(ref)
-        for key in ("global_feature", "top_feature", "bottom_feature"):
-            if key in ref:
-                ref[key] = np.array(ref[key])
-        if "cv_image_array" in ref:
-            ref["cv_image_array"] = np.array(ref["cv_image_array"], dtype=np.uint8)
-        out[ref_id] = ref
-    return out
-
-
 def load_disk_cache(key: str):
     path = os.path.join(DISK_CACHE_DIR, key + ".pkl")
     try:
@@ -95,7 +82,7 @@ def load_disk_cache(key: str):
             pool = pickle.load(f)
         os.utime(path)                       # 최근 사용 표시 (오래된 것부터 정리)
         return pool
-    except (OSError, pickle.UnpicklingError, EOFError):
+    except (OSError, pickle.UnpicklingError, EOFError, AttributeError, ImportError):
         return None
 
 
@@ -109,18 +96,17 @@ def save_disk_cache(key: str, pool: dict):
         files = sorted(glob.glob(os.path.join(DISK_CACHE_DIR, "*.pkl")), key=os.path.getmtime)
         for old in files[:-DISK_CACHE_KEEP]:
             os.remove(old)
-    except OSError as e:
+    except Exception as e:   # pickle 실패 포함 — 캐시 못 써도 분석은 계속
         print(f"⚠️ 기준 데이터 디스크 캐시 저장 실패: {e}")
 
 
 def main():
     started = time.perf_counter()
-    os.chdir(ACH_DIR)                       # JsonTesting · app 모듈은 ach/ 기준 상대 경로를 씀
+    os.chdir(ACH_DIR)                       # MakeResult · app 모듈은 ach/ 기준 상대 경로를 씀
     sys.path.insert(0, ACH_DIR)
-    os.environ["NORMAL_DIR"] = os.path.join(ACH_DIR, "__no_reference__")   # 시작할 때는 기준 데이터 없이 초기화
-    import JsonTesting
-    api = JsonTesting.BookshelfAnalyzerAPI()   # YOLO(app.pipeline import 시) · ResNet 로드
-    cache = OrderedDict()                      # reference_key → reference pool (메모리)
+    import MakeResult                        # YOLO(app.pipeline import 시) 로드
+    MakeResult.get_embedder()                # ResNet 로드 (첫 요청이 아니라 지금)
+    cache = OrderedDict()                    # reference_key → reference pool (메모리)
     fingerprint = ai_fingerprint()
     send({"type": "ready", "load_seconds": round(time.perf_counter() - started, 1), "pid": os.getpid(),
           "ai_fingerprint": fingerprint})
@@ -139,20 +125,17 @@ def main():
                 pool = load_disk_cache(key)
                 cached = "disk" if pool is not None else None
                 if pool is None:
-                    JsonTesting.NORMAL_DIR = req["normal_dir"]
-                    pool = api._build_temp_database()
+                    MakeResult.NORMAL_DIR = req["normal_dir"]
+                    pool = MakeResult.build_normal_reference_pool()
                     if not pool:
                         raise RuntimeError("정상 상태 기준 사진에서 책을 찾지 못했습니다. (기준 사진을 확인하세요)")
-                    pool = compact_pool(pool)
                     save_disk_cache(key, pool)
                 cache[key] = pool
                 while len(cache) > CACHE_SIZE:
                     cache.popitem(last=False)
             pool = cache[key]
-            api.reference_pool = pool
-            api.engineer.reference_pool = pool
             t1 = time.perf_counter()
-            result = api.analyze_image_to_dict(req["image_path"])
+            result = MakeResult.analyze_image_to_dict(req["image_path"], pool)
             t2 = time.perf_counter()
             if result.get("status") != "success":
                 raise RuntimeError(f"AI 분석 실패: {result.get('message')}")

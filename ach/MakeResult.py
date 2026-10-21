@@ -14,6 +14,8 @@ MakeResult.py (v4) - 서가 상태 판정: '책 단위 분류' 대신 '정상 �
 임계값은 정상 사진 한 장에서 자동 캘리브레이션한다.
 """
 import os
+import io
+import contextlib
 import json
 import math
 from typing import Dict, List, Any, Tuple, Optional
@@ -25,14 +27,52 @@ import torch
 from PIL import Image
 from scipy.optimize import linear_sum_assignment
 
-# 기존 파이프라인 및 설정 모듈 임포트 (기존과 동일)
-from app.pipeline import process_bookshelf_pipeline
+# 파이프라인 / 설정 / 모델 임포트
+# 파이프라인 함수 이름이 process_bookshelf_perspective_pipeline으로 바뀌었다(예전 이름도 있으면 그대로 지원).
+# 새 파이프라인의 책 항목은 {book_index, quad, tilt_deg, feature_vector}뿐이라 이 코드가 읽는 box / refined_quadrilateral / polygon이 없다.
+# 그래서 아래 process_bookshelf_pipeline 어댑터가 호출 결과에 그 키를 채워 준다(나머지 코드는 이 이름 그대로 쓴다).
+try:
+    from app.pipeline import process_bookshelf_perspective_pipeline as _pipeline_fn
+except ImportError:
+    from app.pipeline import process_bookshelf_pipeline as _pipeline_fn
 try:
     from app.pipeline import resize_to_target      # 파이프라인이 내부에서 쓰는 리사이즈(긴 변 1280 + EXIF 보정)
 except Exception:
     resize_to_target = None
 from app.config import DEVICE
+try:
+    from app.config import OUTPUT_DIR as _PIPELINE_OUTPUT_DIR      # 파이프라인이 책등 크롭을 저장하는 절대 경로
+except Exception:
+    _PIPELINE_OUTPUT_DIR = os.path.join(".", "pipeline_outputs")
 from app.models import load_resnet_model, resnet_preprocess
+
+
+def _fill_book_keys(b: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """새 파이프라인 항목(quad만 있음) -> 이 코드가 읽는 키(box, refined_quadrilateral, polygon)를 채운 항목"""
+    b = dict(b)
+    quad = b.get("refined_quadrilateral", b.get("quad"))
+    if quad is None and b.get("box") is None:
+        return None
+    if quad is not None:
+        b.setdefault("refined_quadrilateral", quad)
+        b.setdefault("polygon", quad)                       # 마스크 폴리곤은 더 이상 없으므로 quad로 대신한다(quad가 없을 때만 쓰는 보조값)
+        if b.get("box") is None:
+            q = np.asarray(quad, float).reshape(-1, 2)
+            b["box"] = {"x1": int(np.floor(q[:, 0].min())), "y1": int(np.floor(q[:, 1].min())),
+                        "x2": int(np.ceil(q[:, 0].max())), "y2": int(np.ceil(q[:, 1].max()))}
+    elif isinstance(b["box"], (tuple, list)):
+        b["box"] = dict(zip(("x1", "y1", "x2", "y2"), (int(v) for v in b["box"])))
+    return b
+
+
+PIPELINE_CONF = None   # None이면 파이프라인 기본값(새 파이프라인은 0.1). 가짜 박스가 많이 잡히면 0.30처럼 올린다(예전 파이프라인은 0.30이었다).
+
+
+def process_bookshelf_pipeline(image):
+    """파이프라인 호출 + 반환 형식 맞춤. (책 목록, 시각화 JPEG 바이트)"""
+    with contextlib.redirect_stdout(io.StringIO()):     # 파이프라인이 책마다 찍는 '[spine N] ...' 줄이 콘솔에 섞이지 않게 막는다
+        books, jpeg = _pipeline_fn(image) if PIPELINE_CONF is None else _pipeline_fn(image, conf_threshold=PIPELINE_CONF)
+    return [fb for fb in (_fill_book_keys(b) for b in books) if fb is not None], jpeg
 
 # ------------------------------------------------------------------------
 # 경로 / 시나리오
@@ -149,6 +189,10 @@ def prepare_image(pil: Image.Image) -> Image.Image:
         return resize_to_target(pil)[0]
     from PIL import ImageOps
     return ImageOps.exif_transpose(pil).convert("RGB")
+
+
+def _quad_list(quad) -> Optional[list]:
+    return None if quad is None else np.round(np.asarray(quad, float), 1).tolist()
 
 
 def _to_py(o):
@@ -1221,8 +1265,13 @@ def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any], 
             r["flags"] = r["flags"] + ["matched_by_position"]
             if r["state"] == "normal":
                 p = poses[i]
-                if p and p["reliable"] and p["inliers"] >= CFG.SIFT_ID_MIN:
+                n_in = int(p["inliers"]) if p else 0
+                if p and p["reliable"] and n_in >= CFG.SIFT_ID_MIN:
                     r["flags"] = r["flags"] + ["identity_by_sift"]
+                elif n_in >= CFG.SIFT_MIN_INLIERS or r["match_score"] >= meta["tau_neg"]:
+                    # 신원 증거는 약하지만 (a) 위치 소거로 남은 단 하나의 자리이고 (b) 이상 증거(종이/기울기/뒤집힘/누움)가 하나도 없으며
+                    # (c) 키포인트가 일부 맞거나 외형이 타책 최고 유사도 이상이면 정상으로 둔다
+                    r["flags"] = r["flags"] + ["identity_weak"]
                 else:                       # 외형도 키포인트도 확인되지 않은 '정상'은 믿지 않는다
                     r["state"], r["conf"] = "unknown", 0.3
         slot_res[s["slot"]] = r
@@ -1259,14 +1308,18 @@ def makeResult(query_image: Image.Image, normal_reference_pool: Dict[str, Any], 
 
     # (9) 정리
     used_q = set(matched_q.keys())
-    extras = [{"book_index": q["idx"], "box": q["box"]} for i, q in enumerate(qbs) if i not in used_q]
+    extras = [{"book_index": q["idx"], "box": q["box"], "ub": q["ub"], "quad": _quad_list(q["quad"])}
+              for i, q in enumerate(qbs) if i not in used_q]
     results, abnormal_details, normal_idx = [], [], []
     for sn in sorted(slot_res):
         r = slot_res[sn]
         sl = slots[sn]
         results.append({"book_index": r["book_index"], "slot": sn, "box": r["box"], "state": r["state"],
                         "matched_ref_id": sl["ref_id"], "match_similarity": r["match_score"], "state_conf": r["conf"],
-                        "source": r["source"], "flags": r["flags"], "evidence": r["ev"]})
+                        "source": r["source"], "flags": r["flags"], "evidence": r["ev"],
+                        # 출력용: 사진 속 책 밑단 x / 이 슬롯의 제자리 x / 책등 quad(크롭 저장용)
+                        "ub": r["ub"], "home_ub": a * sl["u"] + b,
+                        "quad": _quad_list(qbs[r["qi"]]["quad"]) if r.get("qi") is not None else None})
         if r["state"] == "normal" and "order_misplaced" not in r["flags"]:
             normal_idx.append(sn)
         elif r["state"] != "normal":
@@ -1310,6 +1363,132 @@ def analyze_target_image(query_image_path: str, actual_scenario: Optional[str] =
         "세부 검출 내역": describe_findings(analysis),
         "책별 결과": analysis["results"],
     }
+
+
+# ------------------------------------------------------------------------
+# [백엔드 연동] 출력 형식 = 기존 AI 출력(analyze_image_to_dict)과 같은 모양
+#   backend(vision_ai.py -> pipeline_jobs.py)는 result["status"]와 result["vision_items"]의 아래 5개 키만 읽어 VISION_DATA에 넣는다.
+#     sequence_order(사진 속 왼쪽부터 1,2,3..) / book_id(BOOK_MASTER의 B001..) / confidence_score(0~1, 0.5 미만이면 '미확인')
+#     visual_status(normal / abnormal_upside / abnormal_stack / abnormal_paper / abnormal_tilted) / spine_img_file(책등 크롭 파일명)
+#   그 밖의 키(debug, analysis, shelf)는 백엔드가 읽지 않는다. 진단용으로만 남긴다.
+# ------------------------------------------------------------------------
+BACKEND_BOOK_ID_FMT = "B{:03d}"      # 정상 사진의 슬롯 n(왼쪽부터 0번) -> BOOK_MASTER.book_id. 0번 -> B001
+BACKEND_SEQ_START = 1                # sequence_order 시작 번호 (원본 JSON에 맞춰 0 또는 1)
+BACKEND_MIN_CONF = 0.5               # backend/analyzer.py의 MIN_MATCH_CONFIDENCE와 같아야 한다
+SPINE_OUT_DIR = _PIPELINE_OUTPUT_DIR   # 책등 크롭 저장 폴더 (파이프라인과 같은 폴더. backend/spine_archive.py가 여기서 복사해 간다)
+ORDER_STACK_AT_HOME = True           # 위에 얹힌 책은 제자리 순서로 번호를 매겨 analyzer가 '오배열'로 이중 알림하지 않게 한다
+VISUAL_STATUS = {"normal": "normal", "abnormal_upside": "abnormal_upside", "abnormal_stack": "abnormal_stack",
+                 "abnormal_paper": "abnormal_paper", "abnormal_tilted": "abnormal_tilted",
+                 "unknown": "normal"}   # 판정불가는 이상으로 단정하지 않는다. '미확인' 알림은 낮은 confidence로 만든다. absent는 아예 내보내지 않는다.
+
+
+def _chosen_pool(reference_pool: Dict[str, Any], shelf: Optional[Dict[str, Any]]):
+    if "pools" not in reference_pool:
+        return reference_pool
+    for p in reference_pool["pools"]:
+        if p["meta"]["file"] == (shelf or {}).get("file"):
+            return p
+    return None
+
+
+def _backend_confidence(r: Dict[str, Any], floor: float) -> float:
+    """내부 유사도를 backend가 쓰는 0~1 점수로 옮긴다. 내부 매칭 하한(tau_floor)이 0.5가 되도록 이어 붙인 단조 변환이라,
+    '내가 같은 책으로 인정한 것'은 0.5 이상, 인정하지 못한 것(unknown)은 0.5 미만으로 나온다."""
+    s = float(r.get("match_similarity") or 0.0)
+    if r["state"] == "unknown":                  # (쌓임으로 추정된 슬롯은 state가 이미 abnormal_stack으로 바뀌어 있으므로 여기에 오지 않는다)
+        return round(float(_clip(s, 0.0, BACKEND_MIN_CONF - 0.05)), 3)
+    conf = BACKEND_MIN_CONF + (1.0 - BACKEND_MIN_CONF) * _clip((s - floor) / max(1.0 - floor, 1e-6), 0.0, 1.0)
+    if r["source"] != "appearance":              # SIFT / 위치 / 누락 복구로 확인한 책은 외형 점수가 낮아도 인정된 것이다
+        conf = max(conf, BACKEND_MIN_CONF + 0.05)
+    return round(float(conf), 3)
+
+
+def _write_spine(rgb: np.ndarray, quad: Optional[list], box: Dict[str, Any], file_name: str) -> str:
+    """책등 크롭을 파이프라인과 같은 폴더에 저장하고 파일명을 돌려준다(실패하면 빈 문자열).
+    누락 복구의 ROI 재검출도 같은 폴더에 adjusted_spine_<번호>.jpg를 쓰므로, 분석이 끝난 뒤 여기서 다시 써서 원래 책의 크롭으로 바로잡는다."""
+    H, W = rgb.shape[:2]
+    crop = None
+    q = _as_quad(quad) if quad else None
+    if q is not None:
+        crop = warp_spine(rgb, q)
+    if crop is None:
+        bx = _clip_box(box, W, H)
+        crop = rgb[bx["y1"]:bx["y2"], bx["x1"]:bx["x2"]]
+    if crop is None or crop.size == 0:
+        return ""
+    try:
+        os.makedirs(SPINE_OUT_DIR, exist_ok=True)
+        cv2.imwrite(os.path.join(SPINE_OUT_DIR, file_name), cv2.cvtColor(crop, cv2.COLOR_RGB2BGR))
+        return file_name
+    except Exception:
+        return ""
+
+
+def build_backend_result(query_image: Image.Image, analysis: Dict[str, Any], reference_pool: Dict[str, Any],
+                         name: str, save_crops: bool = True) -> Dict[str, Any]:
+    """makeResult 결과 -> 기존 AI 출력 형식. 책(또는 검출은 됐으나 슬롯에 못 맞춘 박스) 하나가 vision_item 하나다."""
+    sm = analysis["summary"]
+    shelf = sm.get("shelf")
+    if sm.get("shelf_unknown"):
+        return {"status": "error", "filename": name, "vision_items": [], "shelf": shelf,
+                "message": f"등록된 서가와 맞지 않는 사진입니다 ({(shelf or {}).get('reason')})"}
+    pool = _chosen_pool(reference_pool, shelf)
+    floor = float(pool["meta"]["tau_floor"]) if pool else 0.3
+
+    rows = []
+    for r in analysis["results"]:
+        if r["state"] == "absent":
+            continue                             # 서가에서 사라진 책: vision에 없어야 analyzer가 '누락 / 인식 실패'로 판정한다
+        slot = r["slot"]
+        cx = (r["box"]["x1"] + r["box"]["x2"]) / 2.0
+        x = r["home_ub"] if (ORDER_STACK_AT_HOME and r["state"] == "abnormal_stack") else (r["ub"] if r.get("ub") is not None else cx)
+        rows.append({
+            "book_id": "UNKNOWN" if r["state"] == "unknown" else BACKEND_BOOK_ID_FMT.format(slot + 1),
+            "confidence_score": _backend_confidence(r, floor),
+            "visual_status": VISUAL_STATUS.get(r["state"], "normal"),
+            "x": x, "tie": slot, "quad": r.get("quad"), "box": r["box"],
+            "file": f"adjusted_spine_{r['book_index']}.jpg" if r["book_index"] is not None else f"recovered_spine_slot{slot}.jpg",
+            "debug": {"slot": slot, "state": r["state"], "source": r["source"], "flags": r["flags"],
+                      "match_similarity": r["match_similarity"], "box": r["box"],
+                      "inferred": "inferred_from_missing" in r["flags"]},
+        })
+    for k, e in enumerate(sm["extra_boxes"]):    # 검출은 됐지만 어느 슬롯에도 맞지 않은 박스 -> 미확인 도서
+        cx = (e["box"]["x1"] + e["box"]["x2"]) / 2.0
+        rows.append({
+            "book_id": "UNKNOWN", "confidence_score": 0.0, "visual_status": "normal",
+            "x": e.get("ub") if e.get("ub") is not None else cx, "tie": 1000 + k, "quad": e.get("quad"), "box": e["box"],
+            "file": f"adjusted_spine_{e['book_index']}.jpg",
+            "debug": {"slot": None, "state": "unmatched_box", "source": None, "flags": [], "match_similarity": None,
+                      "box": e["box"], "inferred": False},
+        })
+    rows.sort(key=lambda t: (t["x"], t["tie"]))          # 사진 속 왼쪽 -> 오른쪽
+
+    rgb = np.array(prepare_image(query_image.convert("RGB"))) if save_crops else None
+    items = []
+    for k, t in enumerate(rows):
+        items.append({
+            "sequence_order": BACKEND_SEQ_START + k,
+            "book_id": t["book_id"],
+            "confidence_score": t["confidence_score"],
+            "visual_status": t["visual_status"],
+            "spine_img_file": _write_spine(rgb, t["quad"], t["box"], t["file"]) if save_crops else t["file"],
+            "debug": t["debug"],
+        })
+    result = {"status": "success", "filename": name, "vision_items": items, "shelf": shelf,
+              "analysis": {"summary": sm, "slots": analysis["results"]}}
+    return json.loads(json.dumps(result, ensure_ascii=False, default=_to_py))   # numpy 값을 순수 파이썬 값으로
+
+
+def analyze_image_to_dict(image_path: str, reference_pool: Dict[str, Any], save_crops: bool = True) -> Dict[str, Any]:
+    """사진 1장 -> 기존 AI 출력 형식 dict (backend의 ai_worker가 부르던 analyze_image_to_dict와 같은 역할)"""
+    name = os.path.basename(image_path)
+    try:
+        img = Image.open(image_path).convert("RGB")
+        return build_backend_result(img, makeResult(img, reference_pool, name), reference_pool, name, save_crops)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"status": "error", "filename": name, "vision_items": [], "message": str(e)}
 
 
 # ------------------------------------------------------------------------
@@ -1393,16 +1572,18 @@ def run_test_folder_to_json(reference_pool: Dict[str, Any], test_dir: Any = None
         fn = os.path.basename(path)
         print(f"🔍 분석 중: {fn}")
         try:
-            an = makeResult(Image.open(path).convert("RGB"), reference_pool, fn)
+            img = Image.open(path).convert("RGB")
+            an = makeResult(img, reference_pool, fn)
             sm = an["summary"]
             sh = sm.get("shelf") or {}
+            backend = build_backend_result(img, an, reference_pool, fn)     # 기존 AI 출력 형식 (vision_items 포함)
             if "pools" in reference_pool:
                 n_shelf += 1
                 scs = ", ".join(f"{k} {v:.2f}" for k, v in sh.get("scores", {}).items())
                 if sm.get("shelf_unknown"):
                     print(f"   ├─ 🗄️ 서가 식별 실패 ({sh.get('reason')}) | {scs}")
                     print("   └─ ⏭️ 등록된 서가와 맞지 않아 판정을 건너뜁니다.\n")
-                    final["test_results"].append({"filename": fn, "shelf": sh, "summary": sm, "slots": [], "truth_check": None})
+                    final["test_results"].append({**backend, "truth_check": None})
                     overview.append({"file": fn, "shelf": "(식별 실패)", "books": sm["total_books"], "abn": "판정 건너뜀", "truth": "-"})
                     if fn in SHELF_TRUTH:
                         n_shelf_truth += 1
@@ -1461,7 +1642,7 @@ def run_test_folder_to_json(reference_pool: Dict[str, Any], test_dir: Any = None
             abn += [f"{i['slot']}번 순서이상" for i in sm["order_issues"]]
             overview.append({"file": fn, "shelf": sh.get("file") or "-", "books": sm["total_books"], "abn": ", ".join(abn) or "없음",
                              "truth": "정답 없음" if sc is None else ("✅ 일치" if sc["ok"] and not sm["order_issues"] else "❌ 불일치")})
-            final["test_results"].append({"filename": fn, "shelf": sh or None, "summary": sm, "slots": an["results"],
+            final["test_results"].append({**backend,
                                           "truth_check": None if sc is None else {"ok": sc["ok"], "wrong_slots": [w[0]["slot"] for w in sc["wrong"]]}})
         except Exception as e:
             import traceback
