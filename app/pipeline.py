@@ -355,7 +355,7 @@ def extract_spine_quad_perspective(pts, mask_np, fallback_fn=None):
     return quad
 
 
-def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: float = 0.1):
+def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: float = 0.2):
     reset_output_dir()
     
     # 🎯 0. 학습 해상도(1280)에 맞춰 입력 전처리
