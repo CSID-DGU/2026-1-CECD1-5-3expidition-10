@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인 · 지능형 서고 관리</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex items-center justify-center p-4">
+
+    <main class="w-full max-w-sm">
+        <div class="text-center mb-6">
+            <div class="w-14 h-14 mx-auto rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-200">
+                <i class="fa-solid fa-robot text-2xl"></i>
+            </div>
+            <h1 class="text-xl font-bold text-slate-800 mt-3">지능형 서고 모니터링</h1>
+            <p class="text-sm text-slate-500 mt-1">사서 계정으로 로그인하세요</p>
+        </div>
+
+        <form id="login-form" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col gap-4" novalidate>
+            <label class="flex flex-col gap-1.5 text-sm font-semibold text-slate-600">
+                도서관 ID
+                <input id="library-id" name="library_id" autocomplete="organization" required placeholder="예: LIB001"
+                       class="border border-slate-200 rounded-lg px-3 py-2 text-base font-normal uppercase focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </label>
+            <label class="flex flex-col gap-1.5 text-sm font-semibold text-slate-600">
+                아이디
+                <input id="username" name="username" autocomplete="username" required
+                       class="border border-slate-200 rounded-lg px-3 py-2 text-base font-normal focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </label>
+            <label class="flex flex-col gap-1.5 text-sm font-semibold text-slate-600">
+                비밀번호
+                <input id="password" name="password" type="password" autocomplete="current-password" required
+                       class="border border-slate-200 rounded-lg px-3 py-2 text-base font-normal focus:outline-none focus:ring-2 focus:ring-blue-400">
+            </label>
+
+            <div id="login-error" class="hidden text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2" role="alert"></div>
+
+            <button id="login-btn" type="submit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl shadow-lg shadow-blue-200 flex items-center justify-center gap-2 disabled:bg-slate-400 disabled:shadow-none">
+                <i class="fa-solid fa-right-to-bracket"></i> 로그인
+            </button>
+        </form>
+        <p class="text-xs text-slate-400 text-center mt-4">계정이 없거나 비밀번호를 잊었다면 도서관 관리자에게 문의하세요.</p>
+    </main>
+
+    <script>
+        const LIBRARY_KEY = "lastLibraryId";   // 마지막으로 입력한 도서관 ID (이 브라우저에만 저장)
+        const form = document.getElementById("login-form");
+        const errorBox = document.getElementById("login-error");
+
+        try {
+            const saved = localStorage.getItem(LIBRARY_KEY);
+            if (saved) document.getElementById("library-id").value = saved;
+        } catch (e) { /* 저장소를 쓸 수 없는 환경이면 무시 */ }
+        (document.getElementById("library-id").value ? document.getElementById("username") : document.getElementById("library-id")).focus();
+
+        function showError(message) {
+            errorBox.textContent = message;
+            errorBox.classList.remove("hidden");
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            errorBox.classList.add("hidden");
+            const libraryId = document.getElementById("library-id").value.trim().toUpperCase();
+            const username = document.getElementById("username").value.trim();
+            const password = document.getElementById("password").value;
+            if (!libraryId || !username || !password) {
+                showError("도서관 ID, 아이디, 비밀번호를 모두 입력해 주세요.");
+                return;
+            }
+            const btn = document.getElementById("login-btn");
+            btn.disabled = true;
+            try {
+                const res = await fetch("/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "same-origin",
+                    body: JSON.stringify({ library_id: libraryId, username, password }),
+                });
+                const body = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    showError(body.detail || "로그인에 실패했습니다.");
+                    document.getElementById("password").select();
+                    return;
+                }
+                try { localStorage.setItem(LIBRARY_KEY, libraryId); } catch (e) { /* 무시 */ }
+                location.href = "/dashboard";
+            } catch (e) {
+                showError("서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
