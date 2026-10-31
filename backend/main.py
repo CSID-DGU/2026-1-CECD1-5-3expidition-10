@@ -7,22 +7,24 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from mysql.connector import Error
-from analyzer import (analyze_shelf_session, assess_session_quality, classify_issues,
-                      get_master_book_info, get_virtual_rfid_items)
-from auth import (SESSION_COOKIE, SESSION_HOURS, AuthContext, authenticate, context_from_session_token,
-                  create_session, delete_session, optional_auth, require_admin, require_user)
-from config import SPINE_STORE_DIR
+from analyzer import (analyze_shelf_session, assess_session_quality, classify_issues, find_unknown_book_candidates,
+                      get_master_book_info, get_virtual_rfid_items, get_vision_id_map, vision_book_id_to_reg_no,
+                      RFID_INSERT_SQL)
+from auth import (SESSION_COOKIE, SESSION_HOURS, AuthContext, authenticate, clear_login_failures, client_ip,
+                  context_from_session_token, create_session, delete_session, login_retry_seconds, optional_auth,
+                  record_login_failure, require_admin, require_user)
+from config import COOKIE_SECURE, SPINE_STORE_DIR
 from db import get_db_connection
 from image_check import detect_image_ext
 from locations import (build_location_tree, fetch_shelf_location, fetch_shelf_locations, fetch_space_skeleton,
                        location_label)
 from normal_images import (delete_normal_image, get_normal_image_bytes, get_normal_image_info,
                            is_current_normal_image, restore_previous_normal_image, save_normal_image)
-from patrol import (BatchAlreadyRunning, list_patrol_photos, patrol_status, recover_interrupted_photos,
-                    start_batch_analysis)
+from patrol import (BatchAlreadyRunning, PhotoRejected, attach_rfid_tags, list_patrol_photos, patrol_status,
+                    recover_interrupted_photos, start_batch_analysis)
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
 from spine_archive import PIPELINE_OUTPUT_DIR
-from vision_ai import warm_up_async
+from vision_ai import prepare_reference_async, warm_up_async
 import accounts
 from accounts import AccountError
 import structure
@@ -40,8 +42,17 @@ os.makedirs(SPINE_STORE_DIR, exist_ok=True)
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 
+class RevalidatedStaticFiles(StaticFiles):
+    """브라우저가 옛 파일을 그대로 쓰지 않도록, 쓰기 전에 바뀌었는지 서버에 확인하게 합니다."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # 화면이 공유하는 스크립트 (static/common.js) — 로그인 전에도 필요하므로 공개
-app.mount("/assets", StaticFiles(directory=os.path.join(BACKEND_DIR, "static")), name="assets")
+app.mount("/assets", RevalidatedStaticFiles(directory=os.path.join(BACKEND_DIR, "static")), name="assets")
 
 # 사서가 알림에 대해 기록할 수 있는 조치 상태
 ACTION_STATUSES = {"PENDING", "RESOLVED", "FALSE_POSITIVE"}   # 미처리 / 처리 완료 / 오탐
@@ -70,7 +81,7 @@ class SessionStartRequest(BaseModel):
 
 class VisionItem(BaseModel):
     vision_id: str
-    book_id: Optional[str] = None
+    book_id: Optional[str] = None   # AI 결과 그대로(B00n) 또는 등록번호. 서버가 등록번호로 바꿔 저장
     sequence_order: int
     confidence_score: Optional[float] = 0.0
     spine_img_path: Optional[str] = ""
@@ -81,10 +92,8 @@ class VisionScanRequest(BaseModel):
     vision_items: List[VisionItem]
 
 class RfidItem(BaseModel):
-    rfid_uid: str
-    book_id: str
-    title: str
-    rssi: float
+    reg_no: str                     # 태그에 기록된 등록번호
+    rssi: Optional[float] = None
 
 class RfidScanRequest(BaseModel):
     session_id: str
@@ -98,20 +107,28 @@ class ActionUpdateRequest(BaseModel):
 # 🔐 로그인
 # ==========================================
 @app.post("/api/auth/login")
-def login(payload: LoginRequest):
-    """도서관 ID + 아이디 + 비밀번호로 로그인하고 세션 쿠키를 받습니다."""
+def login(payload: LoginRequest, request: Request):
+    """도서관 ID + 아이디 + 비밀번호로 로그인하고 세션 쿠키를 받습니다. 같은 IP에서 5분에 5번 실패하면 잠시 막습니다."""
+    ip = client_ip(request)
+    retry = login_retry_seconds(ip)
+    if retry:
+        raise HTTPException(status_code=429, detail=f"로그인 실패가 많아 잠시 막았습니다. {retry // 60 + 1}분 뒤 다시 시도해 주세요.",
+                            headers={"Retry-After": str(retry)})
     conn = require_db()
     try:
         user = authenticate(conn, payload.library_id, payload.username, payload.password)
         if user is None:
+            record_login_failure(ip)
             raise HTTPException(status_code=401, detail="도서관 ID, 아이디 또는 비밀번호가 올바르지 않습니다.")
+        clear_login_failures(ip)
         token = create_session(conn, user["user_id"])
         ctx = context_from_session_token(conn, token)
     finally:
         conn.close()
     print(f"🔐 [로그인] {ctx.library_id} / {ctx.username} ({ctx.role})")
     response = JSONResponse(ctx.to_dict())
-    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_HOURS * 3600, httponly=True, samesite="lax")
+    response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_HOURS * 3600, httponly=True, samesite="lax",
+                        secure=COOKIE_SECURE)
     return response
 
 @app.post("/api/auth/logout")
@@ -124,8 +141,35 @@ def logout(request: Request):
         finally:
             conn.close()
     response = JSONResponse({"status": "success"})
-    response.delete_cookie(SESSION_COOKIE)
+    response.delete_cookie(SESSION_COOKIE, httponly=True, samesite="lax", secure=COOKIE_SECURE)
     return response
+
+class OwnPasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@app.post("/api/auth/password")
+def change_own_password(payload: OwnPasswordRequest, request: Request, ctx: AuthContext = Depends(require_user)):
+    """로그인한 사람의 비밀번호 변경. 현재 비밀번호를 5분에 5번 틀리면 잠시 막습니다. 다른 기기의 로그인은 끊어집니다."""
+    key = f"password:{client_ip(request)}"
+    retry = login_retry_seconds(key)
+    if retry:
+        raise HTTPException(status_code=429, detail=f"비밀번호 확인 실패가 많아 잠시 막았습니다. {retry // 60 + 1}분 뒤 다시 시도해 주세요.",
+                            headers={"Retry-After": str(retry)})
+    conn = require_db()
+    try:
+        changed = accounts.change_own_password(conn, ctx.user_id, payload.current_password, payload.new_password,
+                                               request.cookies.get(SESSION_COOKIE))
+    except AccountError as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+    finally:
+        conn.close()
+    if not changed:
+        record_login_failure(key)
+        raise HTTPException(status_code=400, detail="현재 비밀번호가 올바르지 않습니다.")
+    clear_login_failures(key)
+    print(f"🔑 [비밀번호 변경] {ctx.library_id} / {ctx.username}")
+    return {"status": "success"}
 
 @app.get("/api/auth/me")
 def get_me(ctx: AuthContext = Depends(require_user)):
@@ -151,7 +195,7 @@ def get_session_row_or_404(conn, session_id: str, ctx: AuthContext) -> dict:
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(
-            "SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION WHERE session_id = %s AND library_id = %s",
+            "SELECT session_id, library_id, shelf_id, scan_time, image_path, rfid_source FROM SHELF_SESSION WHERE session_id = %s AND library_id = %s",
             (session_id, ctx.library_id)
         )
         row = cursor.fetchone()
@@ -163,7 +207,7 @@ def get_session_row_or_404(conn, session_id: str, ctx: AuthContext) -> dict:
 
 
 # ==========================================
-# 🧪 분석 데이터 직접 적재 API (run_master.py · test_full_pipeline.py 등 테스트 스크립트용, 로그인 필요)
+# 🧪 분석 데이터 직접 적재 API (test_full_pipeline.py 등 테스트 스크립트용, 로그인 필요)
 # ==========================================
 @app.post("/api/session/start")
 def start_session(payload: SessionStartRequest, ctx: AuthContext = Depends(require_user)):
@@ -191,12 +235,10 @@ def receive_rfid(payload: RfidScanRequest, ctx: AuthContext = Depends(require_us
     try:
         get_session_row_or_404(conn, payload.session_id, ctx)
         for item in payload.rfid_items:
-            cursor.execute(
-                "INSERT INTO RFID_DATA (session_id, rfid_uid, book_id, title, rssi) VALUES (%s, %s, %s, %s, %s)",
-                (payload.session_id, item.rfid_uid, item.book_id, item.title, item.rssi)
-            )
+            cursor.execute(RFID_INSERT_SQL, (payload.session_id, item.reg_no, item.rssi))
         conn.commit()
-        return {"status": "success", "inserted_rfid_count": len(payload.rfid_items)}
+        # 같은 태그가 여러 번 와도 한 건으로 저장되므로, 저장된 건수는 서로 다른 등록번호 수입니다.
+        return {"status": "success", "inserted_rfid_count": len({item.reg_no for item in payload.rfid_items})}
     except Error as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"RFID 적재 에러: {e}")
@@ -209,14 +251,15 @@ def receive_vision(payload: VisionScanRequest, ctx: AuthContext = Depends(requir
     conn = require_db()
     cursor = conn.cursor()
     try:
-        get_session_row_or_404(conn, payload.session_id, ctx)
+        session = get_session_row_or_404(conn, payload.session_id, ctx)
+        order_map = get_vision_id_map(session["shelf_id"], conn)   # AI의 B00n → 등록번호
         for item in payload.vision_items:
             cursor.execute(
                 """INSERT INTO VISION_DATA
-                   (vision_id, session_id, book_id, sequence_order, confidence_score, spine_img_path, visual_status)
+                   (vision_id, session_id, reg_no, sequence_order, confidence_score, spine_img_path, visual_status)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (item.vision_id, payload.session_id, item.book_id, item.sequence_order,
-                 item.confidence_score, item.spine_img_path, item.visual_status)
+                (item.vision_id, payload.session_id, vision_book_id_to_reg_no(item.book_id, order_map, item.visual_status),
+                 item.sequence_order, item.confidence_score, item.spine_img_path, item.visual_status)
             )
         conn.commit()
         return {"status": "success", "inserted_vision_count": len(payload.vision_items)}
@@ -273,7 +316,7 @@ def run_full_pipeline_from_ui(file: UploadFile = File(...), shelf_id: str = Form
                               ctx: AuthContext = Depends(require_user)):
     """
     (즉시 분석 · 테스트용) 사진 1장을 바로 분석 대기열에 넣고 작업 ID를 돌려줍니다.
-    평소 순찰 사진은 수신함 폴더(patrol_inbox)에 쌓였다가 /api/patrol/analyze 로 한꺼번에 분석합니다.
+    평소 순찰 사진은 수신함(PATROL_PHOTO)에 쌓였다가 /api/patrol/analyze 로 한꺼번에 분석합니다.
     진행 상황은 GET /api/jobs/{job_id} 로 확인합니다.
     """
     shelf = require_analyzable_shelf(shelf_id, ctx)
@@ -307,7 +350,7 @@ def get_job(job_id: str = Path(...), ctx: AuthContext = Depends(require_user)):
 
 
 # ==========================================
-# 📷 순찰 사진 수신함(폴더) → 일괄 분석
+# 📷 순찰 사진 수신함(PATROL_PHOTO) → 일괄 분석
 # ==========================================
 @app.on_event("startup")
 def prepare_on_startup():
@@ -338,6 +381,23 @@ def get_patrol_photos(status: Optional[str] = None, limit: int = Query(100, ge=1
     finally:
         conn.close()
 
+class PhotoRfidRequest(BaseModel):
+    rfid_items: List[RfidItem]
+
+@app.post("/api/patrol/photos/{photo_id}/rfid")
+def set_patrol_photo_rfid(payload: PhotoRfidRequest, photo_id: int = Path(...), ctx: AuthContext = Depends(require_user)):
+    """분석 전(대기 · 실패) 순찰 사진에 RFID 리더값을 붙입니다. 빈 목록은 '리더가 읽은 태그 없음'으로 저장합니다."""
+    conn = require_db()
+    try:
+        attached = attach_rfid_tags(conn, ctx.library_id, photo_id, [item.model_dump() for item in payload.rfid_items])
+    except PhotoRejected as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        conn.close()
+    if not attached:
+        raise HTTPException(status_code=404, detail="분석 전 순찰 사진을 찾을 수 없습니다.")
+    return {"status": "success", "rfid_count": len({item.reg_no for item in payload.rfid_items})}
+
 @app.post("/api/patrol/analyze", status_code=202)
 def analyze_patrol_photos(ctx: AuthContext = Depends(require_user)):
     """
@@ -352,7 +412,7 @@ def analyze_patrol_photos(ctx: AuthContext = Depends(require_user)):
     finally:
         conn.close()
     if result["photo_count"] == 0:
-        raise HTTPException(status_code=400, detail="분석할 순찰 사진이 없습니다. (수신함 폴더에 분석할 사진이 없음)")
+        raise HTTPException(status_code=400, detail="분석할 순찰 사진이 없습니다. (수신함에 분석할 사진이 없음)")
     return result
 
 
@@ -389,7 +449,7 @@ def reference_update_check(conn, loc: dict, latest: Optional[dict]) -> dict:
     """
     최근 순찰 사진을 이 층의 정상 상태 기준 사진으로 써도 되는지 판정합니다. (일괄 갱신 대상 = eligible)
       - 도서가 등록되어 있고, 최근 순찰에 원본 사진이 있으며, 인식 신뢰도가 정상
-      - 대출 중인 도서가 없음 (순찰 당시 판정의 '대출 중' + 현재 대출 상태)
+      - 미비치(대출 중 등) 도서가 없음 (순찰 당시 판정의 '미비치' + 현재 자료상태)
       - 문제가 없던 순찰: 알림이 없거나 전부 '오탐'. '처리 완료' 알림이 있으면 정리 전 사진이므로 제외
     latest: load_session_detail() 결과 (results 포함)
     """
@@ -403,9 +463,9 @@ def reference_update_check(conn, loc: dict, latest: Optional[dict]) -> dict:
         reasons.append("최근 순찰에 원본 사진이 없습니다")
     if not latest["quality"]["is_reliable"]:
         reasons.append("최근 순찰의 인식 신뢰도가 낮습니다")
-    loaned_then = sum(1 for r in latest["results"] if (r["final_status"] or "").startswith("대출 중"))
+    loaned_then = sum(1 for r in latest["results"] if (r["final_status"] or "").startswith("미비치"))
     if loaned_then or loc["loaned_count"]:
-        reasons.append(f"대출 중인 도서가 있습니다 (순찰 당시 {loaned_then}권 · 현재 {loc['loaned_count']}권)")
+        reasons.append(f"미비치(대출 중 등) 도서가 있습니다 (순찰 당시 {loaned_then}권 · 현재 {loc['loaned_count']}권)")
     real_issues = [r for r in latest["results"] if r["issues"] and r["action_status"] != "FALSE_POSITIVE"]
     if real_issues:
         reasons.append(f"최근 순찰에서 문제가 {len(real_issues)}건 발견되었습니다 (처리 완료 포함 — 정리 전 사진)")
@@ -421,7 +481,7 @@ def build_level_states(conn, library_id: str) -> dict:
     locations = fetch_shelf_locations(conn, library_id)
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        """SELECT s.session_id, s.shelf_id, s.scan_time, s.image_path
+        """SELECT s.session_id, s.library_id, s.shelf_id, s.scan_time, s.image_path, s.rfid_source
            FROM SHELF_SESSION s
            JOIN (SELECT shelf_id, MAX(scan_time) AS last_time FROM SHELF_SESSION
                  WHERE library_id = %s GROUP BY shelf_id) last
@@ -501,7 +561,7 @@ async def upload_normal_image(shelf_id: str = Path(...), file: UploadFile = File
     data, _ = await read_checked_image(file, ("JPEG", "PNG"))
     conn = require_db()
     try:
-        save_normal_image(conn, shelf_id, data, "UPLOAD", user_id=ctx.user_id)
+        prepare_reference_async(save_normal_image(conn, shelf_id, data, "UPLOAD", user_id=ctx.user_id)["image_id"])
         print(f"🖼️ [기준 사진 교체] {shelf['library_id']} {shelf['location_label']} by {ctx.username}")
         return normal_image_response(conn, shelf)
     finally:
@@ -526,9 +586,10 @@ def set_normal_image_from_session(payload: NormalFromSessionRequest, shelf_id: s
         with open(src, "rb") as f:
             data = f.read()
         try:
-            save_normal_image(conn, shelf_id, data, "PATROL", user_id=ctx.user_id, session_id=payload.session_id)
+            image = save_normal_image(conn, shelf_id, data, "PATROL", user_id=ctx.user_id, session_id=payload.session_id)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        prepare_reference_async(image["image_id"])
         print(f"🖼️ [기준 사진 지정] {shelf['library_id']} {shelf['location_label']} ← 순찰 {payload.session_id}")
         return normal_image_response(conn, shelf)
     finally:
@@ -540,8 +601,10 @@ def restore_normal_image(shelf_id: str = Path(...), ctx: AuthContext = Depends(r
     shelf = get_shelf_or_404(shelf_id, ctx)
     conn = require_db()
     try:
-        if restore_previous_normal_image(conn, shelf_id) is None:
+        image = restore_previous_normal_image(conn, shelf_id)
+        if image is None:
             raise HTTPException(status_code=404, detail="되돌릴 이전 기준 사진이 없습니다.")
+        prepare_reference_async(image["image_id"])
         print(f"↩️ [기준 사진 되돌리기] {shelf['library_id']} {shelf['location_label']}")
         return normal_image_response(conn, shelf)
     finally:
@@ -590,7 +653,8 @@ def bulk_update_normal_images(payload: BulkReferenceUpdateRequest, ctx: AuthCont
                 latest = loc["latest_session"]
                 with open(os.path.join(SPINE_STORE_DIR, latest["image_path"]), "rb") as f:
                     data = f.read()
-                save_normal_image(conn, loc["shelf_id"], data, "PATROL", user_id=ctx.user_id, session_id=latest["session_id"])
+                image = save_normal_image(conn, loc["shelf_id"], data, "PATROL", user_id=ctx.user_id, session_id=latest["session_id"])
+                prepare_reference_async(image["image_id"])
                 updated.append(entry)
             print(f"🖼️ [기준 사진 일괄 갱신] {ctx.library_id} {len(updated)}곳 by {ctx.username}")
         return {"dry_run": payload.dry_run, "targets": [e for _, e in targets], "updated": updated, "skipped": skipped}
@@ -753,6 +817,22 @@ def create_user(payload: LibrarianCreateRequest, ctx: AuthContext = Depends(requ
     print(f"👥 [사서 계정 추가] {ctx.library_id} / {user['username']} by {ctx.username}")
     return {"status": "success", **user}
 
+class PasswordChangeRequest(BaseModel):
+    password: str
+
+@app.post("/api/users/{user_id}/password")
+def change_user_password(payload: PasswordChangeRequest, user_id: int = Path(...), ctx: AuthContext = Depends(require_admin)):
+    """[관리자] 같은 도서관 일반 사서의 비밀번호를 바꿉니다. 그 사서의 기존 로그인은 끊어집니다."""
+    conn = require_db()
+    try:
+        result = accounts.set_librarian_password(conn, ctx.library_id, user_id, payload.password)
+    except AccountError as e:
+        raise HTTPException(status_code=e.status, detail=e.message)
+    finally:
+        conn.close()
+    print(f"👥 [사서 비밀번호 변경] {ctx.library_id} / {result['username']} by {ctx.username}")
+    return {"status": "success", **result}
+
 @app.delete("/api/users/{user_id}")
 def delete_user(user_id: int = Path(...), ctx: AuthContext = Depends(require_admin)):
     conn = require_db()
@@ -788,13 +868,13 @@ def get_session_file(session_id: str = Path(...), filename: str = Path(...), ctx
 # 🖥️ 세션 결과 조회 (대시보드 / 일일 리포트 공용)
 # ==========================================
 # analyzer는 인식된 책(vision row)마다 current_order = sequence_order인 결과를 1건씩,
-# Vision에 없는 책(누락/인식 실패/대출 중)은 current_order = -1로 기록합니다.
-# 같은 책으로 중복 매칭되거나 미확인(UNKNOWN)인 경우 book_id가 겹치므로 순서 번호로 조인합니다.
-# 도서 ID(B001~)는 층 안에서만 고유하므로 서명은 세션의 층(shelf_id)으로 찾습니다.
+# Vision에 없는 책(누락/인식 실패/미비치/RFID로만 읽힌 책)은 current_order = -1로 기록합니다.
+# 같은 책으로 중복 매칭되거나 미확인(UNKNOWN)인 경우 reg_no가 겹치므로 순서 번호로 조인합니다.
+# reg_no는 등록번호(REG_NO)이며 도서관 안에서만 고유하므로 서명은 세션의 도서관으로 찾습니다. (다른 층 도서도 서명 표시)
 RESULTS_QUERY = """
     SELECT
         r.result_id,
-        r.book_id,
+        r.reg_no,
         b.title,
         r.current_order AS sequence_order,
         IFNULL(v.visual_status, 'normal') AS visual_status,
@@ -806,10 +886,11 @@ RESULTS_QUERY = """
     FROM ANALYSIS_RESULT r
     LEFT JOIN VISION_DATA v
         ON r.session_id = v.session_id AND r.current_order = v.sequence_order
-    LEFT JOIN BOOK_MASTER b ON b.shelf_id = %s AND r.book_id = b.book_id
+    LEFT JOIN BO_BOOK_TBL bk ON bk.library_id = %s AND bk.REG_NO = r.reg_no
+    LEFT JOIN IDX_BO_TBL b ON b.REC_KEY = bk.SPECIES_KEY
     LEFT JOIN APP_USER u ON r.action_by = u.user_id
     WHERE r.session_id = %s
-    ORDER BY r.current_order ASC, r.book_id ASC
+    ORDER BY r.current_order ASC, r.reg_no ASC
 """
 
 
@@ -839,17 +920,21 @@ def load_session_detail(conn, session: dict, master_cache: dict, locations: dict
     sid, shelf_id = session["session_id"], session["shelf_id"]
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute(RESULTS_QUERY, (shelf_id, sid))
+        cursor.execute(RESULTS_QUERY, (session["library_id"], sid))
         results = cursor.fetchall()
         for row in results:
             row["issues"] = classify_issues(row["final_status"], row["visual_status"])
 
         # 인식 품질 평가 (인식 누락/오매칭이 많으면 개별 알림 대신 재촬영을 안내)
-        cursor.execute("SELECT book_id, sequence_order, confidence_score FROM VISION_DATA WHERE session_id = %s", (sid,))
+        cursor.execute("SELECT reg_no, sequence_order, confidence_score, visual_status FROM VISION_DATA WHERE session_id = %s", (sid,))
         vision_rows = cursor.fetchall()   # 같은 연결로 다음 조회를 하기 전에 결과를 모두 읽어야 함
         if shelf_id not in master_cache:
             master_cache[shelf_id] = get_master_book_info(shelf_id, conn)
         quality = assess_session_quality(vision_rows, master_cache[shelf_id])
+
+        # 책등이 안 보이는 책과 대조할 후보 (RFID에는 있지만 사진에서 확인되지 않은 책)
+        cursor.execute("SELECT reg_no FROM RFID_DATA WHERE session_id = %s", (sid,))
+        unknown_books = find_unknown_book_candidates(results, {row["reg_no"] for row in cursor.fetchall()})
     finally:
         cursor.close()
 
@@ -861,8 +946,10 @@ def load_session_detail(conn, session: dict, master_cache: dict, locations: dict
         "location_label": location_label(loc, fallback=shelf_id),
         "scan_time": session["scan_time"],
         "image_path": session.get("image_path") or "",
+        "rfid_source": session.get("rfid_source"),
         "quality": quality,
         "summary": summarize_results(results),
+        "unknown_books": unknown_books,
         "results": results,
     }
 
@@ -877,13 +964,13 @@ def get_all_sessions(limit: int = Query(30, ge=1, le=200), shelf_id: Optional[st
         cursor = conn.cursor(dictionary=True)
         if shelf_id:
             cursor.execute(
-                """SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION
+                """SELECT session_id, library_id, shelf_id, scan_time, image_path, rfid_source FROM SHELF_SESSION
                    WHERE library_id = %s AND shelf_id = %s ORDER BY scan_time DESC LIMIT %s""",
                 (ctx.library_id, shelf_id, limit)
             )
         else:
             cursor.execute(
-                "SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION WHERE library_id = %s "
+                "SELECT session_id, library_id, shelf_id, scan_time, image_path, rfid_source FROM SHELF_SESSION WHERE library_id = %s "
                 "ORDER BY scan_time DESC LIMIT %s",
                 (ctx.library_id, limit)
             )
@@ -913,7 +1000,7 @@ def get_all_results(session_id: Optional[str] = None, ctx: AuthContext = Depends
         else:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
-                "SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION WHERE library_id = %s "
+                "SELECT session_id, library_id, shelf_id, scan_time, image_path, rfid_source FROM SHELF_SESSION WHERE library_id = %s "
                 "ORDER BY scan_time DESC LIMIT 1",
                 (ctx.library_id,)
             )
@@ -1008,7 +1095,7 @@ def get_daily_report(report_date: Optional[date] = Query(None, alias="date"), ct
         locations = fetch_shelf_locations(conn, ctx.library_id)
         cursor = conn.cursor(dictionary=True)
         cursor.execute(
-            """SELECT session_id, shelf_id, scan_time, image_path FROM SHELF_SESSION
+            """SELECT session_id, library_id, shelf_id, scan_time, image_path, rfid_source FROM SHELF_SESSION
                WHERE library_id = %s AND scan_time >= %s AND scan_time < %s ORDER BY scan_time DESC, session_id DESC""",
             (ctx.library_id, day_start, day_end)
         )

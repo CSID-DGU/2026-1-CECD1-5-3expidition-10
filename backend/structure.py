@@ -5,21 +5,18 @@ ID 규칙 (locations.py, library_schema.sql과 같음)
   구역   zone_id     = <도서관>-<구역 코드>               예) LIB001-A
   책꽂이 bookcase_id = <도서관>-<구역 코드>-<번호 2자리>    예) LIB001-A-01   (bookcase_code A-01)
   층     shelf_id    = <책꽂이 ID>-<층 번호>              예) LIB001-A-01-3 (shelf_code A-01-3)
-ID는 순찰 기록 · 수신함 폴더 · 사진 파일 이름에 쓰이므로, 만든 뒤에는 코드 · 번호를 바꾸지 않고 이름(설명)만 고칩니다.
+ID는 순찰 기록 · 도서 배가 위치 · 순찰 사진 폴더 이름(load_patrol_photos.py)에 쓰이므로, 만든 뒤에는 코드 · 번호를 바꾸지 않고 이름(설명)만 고칩니다.
 
 삭제 규칙: 기록이 남은 층은 지우지 않습니다.
-  - 등록된 도서(BOOK_MASTER), 순찰 기록(SHELF_SESSION), 수신함 사진(PATROL_PHOTO)이 있는 층은 삭제 불가
+  - 배가된 도서(BOOK_LOCATION), 순찰 기록(SHELF_SESSION), 수신함 사진(PATROL_PHOTO)이 있는 층은 삭제 불가
   - 층 번호는 맨 아래가 1층. 층은 맨 위에 쌓이고, 맨 위 층만 지울 수 있음 (층 번호가 비지 않도록)
   - 책꽂이 · 구역은 안의 모든 층이 지울 수 있을 때만 통째로 삭제
   - 층의 정상 상태 기준 이미지(이력 포함)는 층과 함께 지움
 """
-import os
 import re
 from typing import Optional
 
-from config import PATROL_INBOX_DIR
-
-ZONE_CODE_RE = re.compile(r"^[A-Z0-9]{1,5}$")   # 수신함 파일 이름 규칙(locations.SHELF_FILENAME_RE)과 맞춤
+ZONE_CODE_RE = re.compile(r"^[A-Z0-9]{1,5}$")   # 순찰 사진 파일 이름 규칙(locations.SHELF_FILENAME_RE)과 맞춤
 MAX_BOOKCASE_NO = 99
 MAX_LEVELS = 20
 MAX_BULK_BOOKCASES = 30
@@ -87,7 +84,7 @@ def _level_blockers(cursor, shelf_id: str) -> list:
     """층을 지울 수 없는 이유 목록 (비어 있으면 지울 수 있음)"""
     reasons = []
     for sql, label in (
-        ("SELECT COUNT(*) AS n FROM BOOK_MASTER WHERE shelf_id = %s", "등록된 도서 {n}권"),
+        ("SELECT COUNT(*) AS n FROM BOOK_LOCATION WHERE shelf_id = %s", "배가된 도서 {n}권"),
         ("SELECT COUNT(*) AS n FROM SHELF_SESSION WHERE shelf_id = %s", "순찰 기록 {n}건"),
         ("SELECT COUNT(*) AS n FROM PATROL_PHOTO WHERE shelf_id = %s", "수신함 사진 {n}장"),
     ):
@@ -119,15 +116,6 @@ def _delete_levels(cursor, levels: list):
     for lv in levels:
         cursor.execute("DELETE FROM NORMAL_IMAGE WHERE shelf_id = %s", (lv["shelf_id"],))
         cursor.execute("DELETE FROM SHELF_INFO WHERE shelf_id = %s", (lv["shelf_id"],))
-
-
-def _remove_empty_dirs(*rel_paths: str):
-    """지운 책꽂이 · 구역의 빈 수신함 폴더 정리 (사진이 남아 있으면 그대로 둠)"""
-    for rel in rel_paths:
-        try:
-            os.rmdir(os.path.join(PATROL_INBOX_DIR, rel))
-        except OSError:
-            pass
 
 
 # ---------------------------------------------------------------- 추가
@@ -307,7 +295,6 @@ def delete_bookcase(conn, library_id: str, bookcase_code: str) -> dict:
         raise
     finally:
         cursor.close()
-    _remove_empty_dirs(f"{library_id}/{bc['zone_code']}/{bc['bookcase_code']}")
     return {"deleted": bc["bookcase_code"], "levels": len(levels)}
 
 
@@ -328,6 +315,4 @@ def delete_zone(conn, library_id: str, zone_code: str) -> dict:
         raise
     finally:
         cursor.close()
-    _remove_empty_dirs(*[f"{library_id}/{zone['zone_code']}/{bc['bookcase_code']}" for bc in bookcases],
-                       f"{library_id}/{zone['zone_code']}")
     return {"deleted": zone["zone_code"], "bookcases": len(bookcases), "levels": len(levels)}

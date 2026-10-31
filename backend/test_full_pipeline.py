@@ -61,7 +61,7 @@ def load_payloads_from_json():
             "visual_status": book.get("visual_status", "normal")
         })
 
-    # 가상 RFID 스캔 결과: 서버의 가상 도서 정보(BOOK_MASTER) 기준
+    # 가상 RFID 스캔 결과: 서버의 도서 정보 기준 (태그 값 = 등록번호, 미태깅 · 미비치 도서는 빠짐)
     res_tags = api.get(f"{BASE_URL}/api/shelves/{SHELF_ID}/virtual-rfid")
     if res_tags.status_code != 200:
         print(f"❌ [가상 RFID 조회 실패] 에러: {res_tags.text}")

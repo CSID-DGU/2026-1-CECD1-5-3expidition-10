@@ -3,8 +3,10 @@
 
 두 가지 방식이 있습니다. (환경변수 AI_MODE, 기본 worker)
   - worker    : AI 작업 프로세스(ai_worker.py)를 하나 띄워 두고 계속 씁니다.
-                모델은 한 번만 불러오고, 층별 기준 사진 분석 결과도 기억해 두어 사진 한 장이 훨씬 빨리 끝납니다.
+                모델은 한 번만 불러오고, 층별 기준 사진 분석 결과도 DB에 저장해 두어 사진 한 장이 훨씬 빨리 끝납니다.
                 서버를 켤 때 미리 띄워 둡니다(warm_up). 작업 프로세스가 죽거나 응답이 없으면 다음 요청 때 다시 띄웁니다.
+                기준 사진은 분석을 기다리지 않고 미리 분석합니다: 서버를 켤 때(분석 결과가 없는 기준 사진만),
+                관리자가 등록 · 교체 · 지정 · 되돌릴 때(prepare_reference_async).
                 ach/ 코드를 고친 뒤에는 서버를 다시 시작해야 반영됩니다. (uvicorn --reload는 백엔드 파일 변경만 감지)
   - subprocess: 예전 방식. 사진마다 `python JsonTesting.py`를 새로 실행합니다. (ach/dataset/test 폴더 · 결과 파일 경유)
 두 방식 모두 analyze_image_to_dict의 결과(vision_items)를 돌려주며, 책등 크롭은 ach/pipeline_outputs/에 남습니다.
@@ -21,6 +23,8 @@ import time
 from collections import deque
 
 from ai_worker import PROTOCOL_PREFIX
+from db import get_db_connection
+from normal_images import clear_old_analyses, is_current_image, normal_images_to_analyze
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 ACH_DIR = os.path.normpath(os.path.join(BACKEND_DIR, "..", "ach"))
@@ -31,6 +35,7 @@ WORKER_LOG_PATH = os.path.join(BACKEND_DIR, "logs", "ai_worker.log")     # 작�
 AI_MODE = os.getenv("AI_MODE", "worker").lower()
 STARTUP_TIMEOUT = 300    # 작업 프로세스 준비(모델 로드) 최대 대기 초
 ANALYZE_TIMEOUT = 600    # 사진 한 장 분석 최대 대기 초
+REFERENCE_SOURCES = {"memory": "재사용(메모리)", "db": "재사용(DB)"}
 CHILD_ENV = {"PYTHONIOENCODING": "utf-8"}   # Windows 기본 cp949에서는 이모지 print로 죽으므로 UTF-8 고정
 
 
@@ -111,20 +116,30 @@ class AIWorkerClient:
                 self._start()
 
     # ---------------------------------------------------------- 분석
-    def analyze(self, image_path: str, normal_dir: str) -> dict:
+    def _request(self, request: dict) -> dict:
         with self._lock:
             if not self._alive():
                 self._start()
-            self._proc.stdin.write(json.dumps({"image_path": image_path, "normal_dir": normal_dir}, ensure_ascii=False) + "\n")
+            self._proc.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
             self._proc.stdin.flush()
             reply = self._receive(ANALYZE_TIMEOUT, "AI 분석")
         if not reply.get("ok"):
             raise AIWorkerError(f"AI 엔진 내부 에러 발생:\n{reply.get('error')}")
+        return reply
+
+    def analyze(self, image_path: str, image_id: int) -> dict:
+        reply = self._request({"image_path": image_path, "image_id": image_id})
         t = reply.get("timing", {})
-        how = {"memory": "재사용(메모리)", "disk": "재사용(디스크)"}.get(reply.get("reference_cached"), "새로 분석")
+        how = REFERENCE_SOURCES.get(reply.get("reference_cached"), "새로 분석")
         print(f"🧠 [AI 분석] 기준 사진 {how} {t.get('reference_seconds')}초"
               f" · 사진 분석 {t.get('analyze_seconds')}초")
         return reply["result"]
+
+    def prepare(self, image_id: int):
+        """기준 사진만 분석해 DB에 저장합니다. (이미 있으면 그대로)"""
+        reply = self._request({"op": "prepare", "image_id": image_id})
+        if reply.get("reference_cached") is None:
+            print(f"🧠 [기준 사진 미리 분석] 기준 이미지 {image_id} 완료 {reply['timing']['reference_seconds']}초")
 
 
 def tail_log(lines: int = 30) -> str:
@@ -137,18 +152,64 @@ def tail_log(lines: int = 30) -> str:
 
 worker = AIWorkerClient()
 atexit.register(worker.stop)
+_reference_queue = queue.Queue()   # 미리 분석할 기준 이미지 (image_id)
+
+
+def prepare_reference_async(image_id: int):
+    """기준 사진을 백그라운드에서 미리 분석합니다. 기다리지 않으며, 일괄 분석과 같은 작업 프로세스를 차례로 씁니다."""
+    if AI_MODE == "worker":
+        _reference_queue.put(image_id)
+
+
+def _queue_unanalyzed_references():
+    """분석 결과가 없는 현재 기준 사진을 찾아 줄을 세우고, 지금 AI와 맞지 않는 오래된 결과를 지웁니다."""
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        fingerprint = worker.info["ai_fingerprint"]
+        clear_old_analyses(conn, fingerprint)
+        missing = normal_images_to_analyze(conn, fingerprint)
+    finally:
+        conn.close()
+    if missing:
+        print(f"🧠 [기준 사진 미리 분석] 분석 결과가 없는 기준 사진 {len(missing)}장을 분석합니다.")
+    for image_id in missing:
+        _reference_queue.put(image_id)
+
+
+def _prepare_reference(image_id: int):
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        current = is_current_image(conn, image_id)
+    finally:
+        conn.close()
+    if current:   # 줄 서 있는 동안 다시 바뀐 사진은 건너뜀
+        worker.prepare(image_id)
 
 
 def warm_up_async():
-    """서버 시작 시 AI 작업 프로세스를 미리 띄워 둡니다(첫 분석 대기 시간 단축). 실패해도 서버는 계속 동작합니다."""
+    """
+    서버 시작 시 AI 작업 프로세스를 미리 띄워 두고(첫 분석 대기 시간 단축), 기준 사진 미리 분석 요청을 처리합니다.
+    실패해도 서버는 계속 동작합니다. 미리 분석하지 못한 기준 사진은 첫 분석 때 분석합니다.
+    """
     if AI_MODE != "worker":
         return
 
     def run():
         try:
             worker.ensure_started()
+            _queue_unanalyzed_references()
         except Exception as e:
             print(f"⚠️ AI 작업 프로세스를 미리 띄우지 못했습니다 (분석할 때 다시 시도): {e}")
+        while True:
+            image_id = _reference_queue.get()
+            try:
+                _prepare_reference(image_id)
+            except Exception as e:
+                print(f"⚠️ 기준 이미지 {image_id}를 미리 분석하지 못했습니다 (분석할 때 다시 시도): {e}")
     threading.Thread(target=run, daemon=True, name="ai-worker-warmup").start()
 
 
@@ -175,10 +236,11 @@ def _run_subprocess(image_path: str, normal_dir: str) -> dict:
     return test_results[0]
 
 
-def run_vision_ai(image_path: str, normal_dir: str) -> list:
+def run_vision_ai(image_path: str, image_id: int, normal_dir: str) -> list:
     """
     사진 한 장을 분석해 vision_items(왼쪽부터 정렬된 책 목록)를 반환합니다.
-    image_path: 분석할 사진 (절대 경로) / normal_dir: 그 층의 정상 상태 기준 사진 폴더
+    image_path: 분석할 사진 (절대 경로) / image_id: 그 층의 기준 이미지 (worker 방식)
+    normal_dir: 그 층의 정상 상태 기준 사진 폴더 (subprocess 방식)
     """
-    result = worker.analyze(image_path, normal_dir) if AI_MODE == "worker" else _run_subprocess(image_path, normal_dir)
+    result = worker.analyze(image_path, image_id) if AI_MODE == "worker" else _run_subprocess(image_path, normal_dir)
     return result.get("vision_items", [])

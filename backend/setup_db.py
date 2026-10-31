@@ -1,23 +1,27 @@
+import argparse
 import glob
 import hashlib
 import os
-import shutil
+import subprocess
 from datetime import datetime
 
 import mysql.connector
 from mysql.connector import Error
 
 from auth import hash_password
-from config import BACKEND_DIR, DB_CONFIG, NORMAL_SEED_DIR, PATROL_INBOX_DIR
+from config import BACKEND_DIR, DB_CONFIG, DEMO_ADMIN_PASSWORD, DEMO_LIBRARIAN_PASSWORD, NORMAL_SEED_DIR
 from image_check import detect_image_ext
 
 # DB를 최신 구조로 맞춥니다. 새 DB든 예전 DB든 여러 번 실행해도 안전합니다.
-#  1) 테이블 생성 (db_create/library_schema.sql, patrol_schema.sql)
+#  1) 테이블 생성 (db_create/library_schema.sql, patrol_schema.sql). 기준 이미지 분석 결과(NORMAL_IMAGE_ANALYSIS)는 서버가 채움
 #  2) 예전 구조의 데이터 이전
 #     - 단일 서가 'A-12' 시절 → A-01-3
 #     - 도서관 구분이 없던 시절의 구역/책꽂이/층 ID(A, A-01, A-01-3) → 도서관 LIB001 소속(LIB001-A, LIB001-A-01, LIB001-A-01-3)
 #       세션 · 판정 · 수신함 사진 기록도 함께 옮김
-#     - BOOK_MASTER 기본 키를 (층, 도서 ID)로 변경 (도서 ID B001~은 층 안에서만 고유)
+#     - 도서 정보를 실제 도서관 시스템 구조로 전환 (2026-10-25, 멘토 자료 기준) — 예전 구조이면 --convert로 실행
+#       BOOK_MASTER → BO_BOOK_TBL(도서) + IDX_BO_TBL(종) + BOOK_LOCATION(층 · 순서), 도서 ID B001 → 등록번호(REG_NO)
+#       예전 분석 기록(세션 · Vision · RFID · 판정)은 도서 ID 체계가 달라 지움. 전환 전에 DB를 backups/v0.4/db/에 자동 백업
+#       순찰 사진은 수신함 폴더(patrol_inbox) 대신 PATROL_PHOTO에 사진째 저장. 분석 전이던 폴더 사진은 DB로 옮김
 #  3) 나중에 추가된 컬럼 보충, 더 이상 쓰지 않는 컬럼(LIBRARY.robot_key_hash) 삭제
 #  4) 가상 데이터 생성 · 갱신 (db_create/library_data.sql)
 #  5) 시연용 계정 (없을 때만 만듦, 기존 비밀번호는 바꾸지 않음)
@@ -29,7 +33,11 @@ DB_CREATE_DIR = os.path.join(BACKEND_DIR, "db_create")
 SCHEMA_SQL = os.path.join(DB_CREATE_DIR, "library_schema.sql")
 DATA_SQL = os.path.join(DB_CREATE_DIR, "library_data.sql")
 PATROL_SQL = os.path.join(DB_CREATE_DIR, "patrol_schema.sql")   # 순찰 사진 수신함
+SESSION_SQL = os.path.join(DB_CREATE_DIR, "init.sql")            # 분석 세션 테이블 (지우고 새로 만듦)
 LEGACY_NORMAL_DIR = os.path.join(BACKEND_DIR, "normal_images")  # 도서관 구분 전의 기준 이미지 파일 보관소
+LEGACY_INBOX_DIR = os.path.join(BACKEND_DIR, "patrol_inbox")    # 순찰 사진을 DB에 저장하기 전의 수신함 폴더
+BACKUP_DIR = os.path.normpath(os.path.join(BACKEND_DIR, "..", "backups", "v0.4", "db"))
+DOCKER_CONTAINER = os.getenv("DB_CONTAINER", "library-mysql")    # 백업할 MySQL의 docker 컨테이너 (기본: docker-compose.yml의 container_name)
 
 # 도서관 구분이 생기기 전의 데이터는 모두 이 도서관 소속으로 옮깁니다.
 LEGACY_LIBRARY_ID = "LIB001"
@@ -38,9 +46,9 @@ LEGACY_SHELF_IDS = {"A-12": "A-01-3"}   # 단일 서가 시절의 서가 ID → 
 
 # 시연용 계정: (도서관, 아이디, 비밀번호, 이름, 권한). 같은 아이디가 이미 있으면 건드리지 않습니다.
 DEMO_USERS = [
-    ("LIB001", "admin", "admin1234", "관리자", "ADMIN"),
-    ("LIB001", "librarian", "lib1234", "김사서", "LIBRARIAN"),
-    ("LIB002", "admin", "admin1234", "두번째 관리자", "ADMIN"),
+    ("LIB001", "admin", DEMO_ADMIN_PASSWORD, "관리자", "ADMIN"),
+    ("LIB001", "librarian", DEMO_LIBRARIAN_PASSWORD, "김사서", "LIBRARIAN"),
+    ("LIB002", "admin", DEMO_ADMIN_PASSWORD, "두번째 관리자", "ADMIN"),
 ]
 
 # (테이블, 컬럼, 컬럼 정의) — 예전 DB에 없던 컬럼. init.sql / *_schema.sql의 정의와 같아야 합니다.
@@ -52,8 +60,24 @@ ADDED_COLUMNS = [
      "VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '사서 조치 상태 (PENDING/RESOLVED/FALSE_POSITIVE)'"),
     ("ANALYSIS_RESULT", "action_time", "DATETIME NULL COMMENT '조치 기록 시각'"),
     ("ANALYSIS_RESULT", "action_by", "INT NULL COMMENT '조치를 기록한 사서 (APP_USER.user_id)'"),
+    ("SHELF_SESSION", "rfid_source",
+     "VARCHAR(10) NULL COMMENT 'RFID 출처 (READER 리더 / VIRTUAL 가상 / NONE 미수신, NULL은 직접 적재 · 예전 세션)'"),
     ("PATROL_PHOTO", "library_id", "VARCHAR(10) NULL COMMENT '도서관 (shelf_id의 도서관과 같음, 도서관별 조회용)'"),
+    ("PATROL_PHOTO", "rfid_tags",
+     "MEDIUMTEXT NULL COMMENT 'RFID 리더값 JSON [{\"reg_no\", \"rssi\"}]. NULL = 리더값 없음, [] = 리더가 읽은 태그 없음'"),
     ("APP_USER", "deleted_at", "DATETIME NULL COMMENT '삭제한 시각 (조치 기록이 있어 이력용으로 남긴 계정. 아이디는 <아이디>#<user_id>로 바뀜)'"),
+]
+# 이름을 바꾼 컬럼 (테이블, 예전 이름, 새 이름, 컬럼 정의) — 도서 ID가 등록번호가 되면서 book_id → reg_no
+RENAMED_COLUMNS = [
+    ("VISION_DATA", "book_id", "reg_no",
+     "VARCHAR(50) COMMENT 'AI가 식별한 도서의 등록번호 (BO_BOOK_TBL.REG_NO, 확정 못 하면 UNKNOWN)'"),
+    ("ANALYSIS_RESULT", "book_id", "reg_no",
+     "VARCHAR(50) NOT NULL COMMENT '도서 등록번호 (BO_BOOK_TBL.REG_NO, 어떤 책인지 확정 못 하면 UNKNOWN)'"),
+]
+# 소수 초 자릿수를 늘린 시각 컬럼 (테이블, 컬럼, 자릿수, 컬럼 정의)
+DATETIME_PRECISIONS = [
+    ("NORMAL_IMAGE", "archived_at", 6,
+     "DATETIME(6) NULL COMMENT '이력으로 내려간 시각 (같은 초에 연달아 바꿔도 순서가 유지되도록 마이크로초까지)'"),
 ]
 # 더 이상 쓰지 않는 컬럼 (로봇 키 인증 제거)
 DROPPED_COLUMNS = [("LIBRARY", "robot_key_hash")]
@@ -68,7 +92,6 @@ LEGACY_SPACE_COLUMNS = [
 ]
 # 새로 필요한 인덱스 (테이블, 인덱스 이름, 정의)
 ADDED_INDEXES = [
-    ("PATROL_PHOTO", "uq_patrol_file", "UNIQUE INDEX uq_patrol_file (file_path)"),
     ("PATROL_PHOTO", "idx_patrol_library", "INDEX idx_patrol_library (library_id, status)"),
     ("SHELF_SESSION", "idx_session_library", "INDEX idx_session_library (library_id, scan_time)"),
     ("ZONE", "uq_zone_library_code", "UNIQUE INDEX uq_zone_library_code (library_id, zone_code)"),
@@ -120,6 +143,26 @@ def drop_columns(cursor, columns):
             print(f"  ✔️ {table}.{column} 컬럼 삭제")
 
 
+def rename_columns(cursor, columns):
+    for table, old, new, definition in columns:
+        if table_exists(cursor, table) and column_exists(cursor, table, old) and not column_exists(cursor, table, new):
+            cursor.execute(f"ALTER TABLE {table} CHANGE COLUMN {old} {new} {definition}")
+            print(f"  ✔️ {table}.{old} → {new} 컬럼 이름 변경")
+
+
+def widen_datetime_columns(cursor, columns):
+    for table, column, precision, definition in columns:
+        cursor.execute(
+            """SELECT DATETIME_PRECISION FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s AND COLUMN_NAME = %s""",
+            (DB_CONFIG['database'], table, column)
+        )
+        row = cursor.fetchone()
+        if row and row[0] != precision:
+            cursor.execute(f"ALTER TABLE {table} MODIFY {column} {definition}")
+            print(f"  ✔️ {table}.{column} 시각을 소수 {precision}자리까지 저장")
+
+
 def migrate_single_shelf(cursor):
     """단일 서가 'A-12' 시절의 데이터 → 층 코드 A-01-3 (이후 도서관 접두어가 붙음)"""
     if column_exists(cursor, "SHELF_INFO", "location"):
@@ -130,7 +173,8 @@ def migrate_single_shelf(cursor):
         cursor.execute("UPDATE SHELF_SESSION SET shelf_id = %s WHERE shelf_id = %s", (new_code, old_id))
         if cursor.rowcount:
             print(f"  ✔️ 예전 서가 {old_id} → {new_code} 세션 기록 {cursor.rowcount}건 이전")
-        cursor.execute("DELETE FROM BOOK_MASTER WHERE shelf_id = %s", (old_id,))   # 도서는 가상 데이터로 다시 만듦
+        if table_exists(cursor, "BOOK_MASTER"):
+            cursor.execute("DELETE FROM BOOK_MASTER WHERE shelf_id = %s", (old_id,))   # 도서는 가상 데이터로 다시 만듦
         cursor.execute("DELETE FROM SHELF_INFO WHERE shelf_id = %s", (old_id,))
 
 
@@ -176,41 +220,92 @@ def migrate_to_libraries(cursor):
           f"도서 {moved.get('BOOK_MASTER', 0)} · 세션 {moved.get('SHELF_SESSION', 0)} · 수신함 사진 {moved.get('PATROL_PHOTO', 0)}")
 
 
-def migrate_patrol_inbox_paths(cursor):
-    """수신함 사진 경로에 도서관 폴더를 붙입니다. (<구역>/<책꽂이>/... → <도서관>/<구역>/<책꽂이>/...)"""
-    if not table_exists(cursor, "PATROL_PHOTO"):
-        return
-    cursor.execute(
-        """SELECT p.photo_id, p.file_path, z.library_id FROM PATROL_PHOTO p
-           JOIN SHELF_INFO s ON p.shelf_id = s.shelf_id
-           JOIN BOOKCASE b ON s.bookcase_id = b.bookcase_id
-           JOIN ZONE z ON b.zone_id = z.zone_id
-           WHERE p.file_path NOT LIKE CONCAT(z.library_id, '/%')"""
-    )
-    rows = cursor.fetchall()
-    for photo_id, file_path, library_id in rows:
-        new_path = f"{library_id}/{file_path}"
-        src, dst = os.path.join(PATROL_INBOX_DIR, file_path), os.path.join(PATROL_INBOX_DIR, new_path)
-        if os.path.exists(src):
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            shutil.move(src, dst)
-        cursor.execute("UPDATE PATROL_PHOTO SET file_path = %s WHERE photo_id = %s", (new_path, photo_id))
-    if rows:
-        print(f"  ✔️ 수신함 사진 경로 {len(rows)}건에 도서관 폴더 추가")
+def needs_book_conversion(cursor) -> bool:
+    """도서 정보 · RFID · 순찰 사진이 예전 구조(BOOK_MASTER, RFID_DATA.rfid_uid, PATROL_PHOTO.file_path)인지"""
+    return (table_exists(cursor, "BOOK_MASTER")
+            or (table_exists(cursor, "RFID_DATA") and column_exists(cursor, "RFID_DATA", "rfid_uid"))
+            or (table_exists(cursor, "PATROL_PHOTO") and column_exists(cursor, "PATROL_PHOTO", "file_path")))
 
 
-def migrate_book_master_key(cursor):
-    """BOOK_MASTER 기본 키: book_id → (shelf_id, book_id). 도서 ID(B001~)는 층 안에서만 고유"""
-    cursor.execute(
-        """SELECT COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE
-           WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'BOOK_MASTER' AND CONSTRAINT_NAME = 'PRIMARY'
-           ORDER BY ORDINAL_POSITION""",
-        (DB_CONFIG['database'],)
-    )
-    if [row[0] for row in cursor.fetchall()] != ["book_id"]:
+def backup_database() -> str:
+    """전환 전에 DB 전체를 docker의 mysqldump로 backups/v0.4/db/에 백업합니다. 실패하면 RuntimeError"""
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    name = f"library_ai_db_before_mentor_db_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+    target = os.path.join(BACKUP_DIR, name)
+    dump_in_container = f"/tmp/{name}"
+    # 셸 리다이렉트(>)는 PowerShell에서 파일 인코딩이 바뀌므로, 컨테이너 안에 파일로 받은 뒤 docker cp로 꺼냄
+    commands = [
+        ["docker", "exec", DOCKER_CONTAINER, "mysqldump", "-u" + DB_CONFIG["user"], "-p" + DB_CONFIG["password"],
+         "--databases", DB_CONFIG["database"], "--result-file=" + dump_in_container],
+        ["docker", "cp", f"{DOCKER_CONTAINER}:{dump_in_container}", target],
+        ["docker", "exec", DOCKER_CONTAINER, "rm", "-f", dump_in_container],
+    ]
+    for command in commands:
+        try:
+            done = subprocess.run(command, capture_output=True, text=True)
+        except FileNotFoundError:
+            raise RuntimeError("docker 명령을 찾을 수 없습니다")
+        if done.returncode != 0:
+            raise RuntimeError((done.stderr or done.stdout).strip())
+    if not os.path.exists(target) or os.path.getsize(target) == 0:
+        raise RuntimeError("백업 파일이 만들어지지 않았습니다")
+    return target
+
+
+def collect_legacy_inbox_photos(cursor) -> list:
+    """예전 수신함 폴더에 있던 분석 전 사진 [(shelf_id, 파일 경로, 촬영 시각)] (전환 뒤 DB로 옮김)"""
+    if not (table_exists(cursor, "PATROL_PHOTO") and column_exists(cursor, "PATROL_PHOTO", "file_path")):
+        return []
+    cursor.execute("SELECT shelf_id, file_path, captured_at FROM PATROL_PHOTO "
+                   "WHERE status IN ('WAITING', 'FAILED', 'QUEUED', 'ANALYZING') ORDER BY captured_at, photo_id")
+    photos = []
+    for shelf_id, file_path, captured_at in cursor.fetchall():
+        path = os.path.join(LEGACY_INBOX_DIR, file_path)
+        if os.path.isfile(path):
+            photos.append((shelf_id, path, captured_at))
+    return photos
+
+
+def convert_book_structure(cursor):
+    """
+    도서 정보를 실제 도서관 시스템 구조로 전환합니다. (되돌릴 수 없으므로 백업 후 실행)
+      - 분석 세션 테이블(SHELF_SESSION · VISION_DATA · RFID_DATA · ANALYSIS_RESULT)을 지우고 새 구조로 다시 만듦
+        (예전 판정의 도서 ID B001~은 등록번호와 맞지 않음)
+      - PATROL_PHOTO를 사진 저장 구조로 다시 만듦
+      - BOOK_MASTER 삭제 (도서는 library_data.sql이 BO_BOOK_TBL · IDX_BO_TBL · BOOK_LOCATION으로 다시 넣음)
+    """
+    for stmt in load_statements(SESSION_SQL):
+        cursor.execute(stmt)
+    print("  ✔️ 분석 세션 테이블을 새 구조로 다시 만듦 (예전 분석 기록 삭제)")
+    cursor.execute("DROP TABLE IF EXISTS PATROL_PHOTO")
+    for stmt in load_statements(PATROL_SQL):
+        cursor.execute(stmt)
+    print("  ✔️ PATROL_PHOTO를 사진 저장 구조로 다시 만듦")
+    if table_exists(cursor, "BOOK_MASTER"):
+        cursor.execute("DROP TABLE BOOK_MASTER")
+        print("  ✔️ BOOK_MASTER 삭제 (BO_BOOK_TBL · IDX_BO_TBL · BOOK_LOCATION으로 대체)")
+
+
+def restore_legacy_inbox_photos(conn, photos: list):
+    """예전 수신함 폴더의 분석 전 사진을 PATROL_PHOTO로 옮깁니다. (폴더의 파일은 지우지 않음)"""
+    if not photos:
         return
-    cursor.execute("ALTER TABLE BOOK_MASTER DROP PRIMARY KEY, ADD PRIMARY KEY (shelf_id, book_id)")
-    print("  ✔️ BOOK_MASTER 기본 키를 (층, 도서 ID)로 변경")
+    from locations import fetch_shelf_location
+    from patrol import PhotoRejected, register_patrol_photo
+    moved = 0
+    for shelf_id, path, captured_at in photos:
+        shelf = fetch_shelf_location(conn, shelf_id)
+        if shelf is None:
+            continue
+        with open(path, "rb") as f:
+            data = f.read()
+        try:
+            if register_patrol_photo(conn, shelf, data, captured_at, original_name=os.path.basename(path)):
+                moved += 1
+        except PhotoRejected as e:
+            print(f"  ⚠️ 수신함 사진 {os.path.relpath(path, BACKEND_DIR)}: {e}")
+    conn.commit()
+    print(f"  ✔️ 예전 수신함 폴더의 분석 전 사진 {moved}장을 DB로 옮김 (backend/patrol_inbox 폴더는 이제 쓰지 않으므로 지워도 됨)")
 
 
 def backfill_library_ids(cursor):
@@ -253,7 +348,7 @@ def seed_users(cursor):
                    VALUES (%s, %s, %s, %s, %s, %s)""",
                 (library_id, username, hash_password(password), display_name, role, now)
             )
-            print(f"  ✔️ 계정 생성: {library_id} / {username} / {password} ({role})")
+            print(f"  ✔️ 계정 생성: {library_id} / {username} ({role})")
 
 
 def _shelf_has_any_normal_image(cursor, shelf_id: str) -> bool:
@@ -296,11 +391,30 @@ def seed_normal_images(cursor):
             print(f"  ⚠️ {label}: {e}")
 
 
-def setup_db():
+CONVERT_GUIDE = """
+⚠️ 이 DB는 예전 도서 구조(BOOK_MASTER, 도서 ID B001~)입니다. 멘토 자료 기준 구조로 전환해야 합니다.
+   전환하면 예전 분석 기록(순찰 세션 · 판정 · 조치 기록)이 지워집니다. (도서 ID 체계가 달라 새 구조와 맞지 않음)
+   도서관 · 계정 · 구역/책꽂이/층 · 기준 사진은 그대로 남고, 분석 전이던 수신함 폴더 사진은 DB로 옮겨집니다.
+   전환 직전에 DB 전체를 backups/v0.4/db/에 자동으로 백업합니다. (docker 컨테이너 library-mysql 필요, 다르면 환경변수 DB_CONTAINER로 지정)
+
+   전환하려면:  python setup_db.py --convert
+"""
+
+
+def setup_db(convert: bool = False, skip_backup: bool = False) -> bool:
+    """DB를 최신 구조로 맞춥니다. 예전 도서 구조인데 convert=False면 안내만 하고 False를 반환"""
     conn = None
     try:
         conn = mysql.connector.connect(**DB_CONFIG)
         cursor = conn.cursor()
+
+        # 0) 예전 도서 구조 → 전환 확인 + 백업 (DB를 건드리기 전에)
+        converting = needs_book_conversion(cursor)
+        if converting and not convert:
+            print(CONVERT_GUIDE)
+            return False
+        if converting and not skip_backup:
+            print(f"  ✔️ 전환 전 DB 백업: {backup_database()}")
 
         # 1) 테이블 생성
         for stmt in load_statements(SCHEMA_SQL) + load_statements(PATROL_SQL):
@@ -309,44 +423,54 @@ def setup_db():
         add_columns(cursor, LEGACY_SPACE_COLUMNS)
         migrate_single_shelf(cursor)
         add_columns(cursor, ADDED_COLUMNS)
+        widen_datetime_columns(cursor, DATETIME_PRECISIONS)
         drop_columns(cursor, DROPPED_COLUMNS)
+        rename_columns(cursor, RENAMED_COLUMNS)
         migrate_to_libraries(cursor)
-        migrate_book_master_key(cursor)
+        legacy_photos = []
+        if converting:
+            legacy_photos = collect_legacy_inbox_photos(cursor)
+            convert_book_structure(cursor)
         # 4) 가상 데이터 (예전 구조 이전이 끝난 뒤)
         for stmt in load_statements(DATA_SQL):
             cursor.execute(stmt)
         backfill_library_ids(cursor)
-        migrate_patrol_inbox_paths(cursor)
         add_indexes(cursor)
         # 5) 계정, 6) 기준 이미지
         seed_users(cursor)
         seed_normal_images(cursor)
         conn.commit()
+        if converting:
+            restore_legacy_inbox_photos(conn, legacy_photos)
+            from reset_db import clear_spine_store   # 지운 세션들의 책등 · 원본 사진 보관 폴더 정리
+            clear_spine_store()
 
         cursor.execute(
             """SELECT l.library_id, l.library_name,
                       (SELECT COUNT(*) FROM ZONE z WHERE z.library_id = l.library_id),
                       (SELECT COUNT(*) FROM SHELF_INFO s JOIN BOOKCASE b ON s.bookcase_id = b.bookcase_id
                          JOIN ZONE z ON b.zone_id = z.zone_id WHERE z.library_id = l.library_id),
-                      (SELECT COUNT(*) FROM BOOK_MASTER m JOIN SHELF_INFO s ON m.shelf_id = s.shelf_id
-                         JOIN BOOKCASE b ON s.bookcase_id = b.bookcase_id JOIN ZONE z ON b.zone_id = z.zone_id
-                         WHERE z.library_id = l.library_id),
+                      (SELECT COUNT(*) FROM BO_BOOK_TBL bk WHERE bk.library_id = l.library_id),
+                      (SELECT COUNT(*) FROM BOOK_LOCATION m JOIN BO_BOOK_TBL bk ON m.book_key = bk.REC_KEY
+                         WHERE bk.library_id = l.library_id),
                       (SELECT COUNT(*) FROM APP_USER u WHERE u.library_id = l.library_id),
                       (SELECT COUNT(*) FROM NORMAL_IMAGE n JOIN SHELF_INFO s ON n.shelf_id = s.shelf_id
                          JOIN BOOKCASE b ON s.bookcase_id = b.bookcase_id JOIN ZONE z ON b.zone_id = z.zone_id
                          WHERE z.library_id = l.library_id AND n.is_current = 1),
-                      (SELECT COUNT(*) FROM SHELF_SESSION ss WHERE ss.library_id = l.library_id)
+                      (SELECT COUNT(*) FROM SHELF_SESSION ss WHERE ss.library_id = l.library_id),
+                      (SELECT COUNT(*) FROM PATROL_PHOTO p WHERE p.library_id = l.library_id AND p.status = 'WAITING')
                FROM LIBRARY l ORDER BY l.library_id"""
         )
-        for lib, name, zones, shelves, books, users, normals, sessions in cursor.fetchall():
-            print(f"  ✔️ {lib} {name}: 구역 {zones} · 층 {shelves} · 도서 {books} · 계정 {users} · "
-                  f"기준 이미지 {normals} · 순찰 세션 {sessions}")
+        for lib, name, zones, shelves, books, placed, users, normals, sessions, waiting in cursor.fetchall():
+            print(f"  ✔️ {lib} {name}: 구역 {zones} · 층 {shelves} · 소장 도서 {books}(층 배정 {placed}) · 계정 {users} · "
+                  f"기준 이미지 {normals} · 순찰 세션 {sessions} · 분석 대기 사진 {waiting}")
         cursor.execute("SELECT COUNT(*) FROM SHELF_SESSION WHERE library_id IS NULL")
         orphan = cursor.fetchone()[0]
         if orphan:
             print(f"  ⚠️ 어느 층에도 속하지 않는 예전 세션 {orphan}건은 대시보드에 표시되지 않습니다.")
         cursor.close()
         print("✨ [성공] DB가 최신 구조로 준비되었습니다.")
+        return True
     except Error as e:
         if conn and conn.is_connected():
             conn.rollback()
@@ -358,4 +482,14 @@ def setup_db():
 
 
 if __name__ == "__main__":
-    setup_db()
+    parser = argparse.ArgumentParser(description="DB를 최신 구조로 맞춥니다. (여러 번 실행해도 안전)")
+    parser.add_argument("--convert", action="store_true",
+                        help="예전 도서 구조(BOOK_MASTER)를 멘토 자료 기준 구조로 전환 (예전 분석 기록 삭제, 자동 백업)")
+    parser.add_argument("--skip-backup", action="store_true",
+                        help="전환 전 자동 백업을 건너뜀 (docker가 아닌 MySQL이라 직접 백업한 경우)")
+    args = parser.parse_args()
+    try:
+        setup_db(convert=args.convert, skip_backup=args.skip_backup)
+    except RuntimeError as e:
+        print(f"❌ 전환 전 DB 백업 실패: {e}")
+        print("   아무것도 바꾸지 않았습니다. DB를 직접 백업한 뒤 python setup_db.py --convert --skip-backup 으로 실행하세요.")

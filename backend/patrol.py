@@ -1,18 +1,18 @@
+import hashlib
+import json
 import os
-import shutil
 from datetime import datetime
 from typing import Optional
 
-from config import PATROL_INBOX_DIR, SPINE_STORE_DIR
+from config import SPINE_STORE_DIR
 from db import get_db_connection
-from locations import fetch_shelf_locations, location_label, shelf_code_from_filename, shelf_folder
-from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
+from image_check import detect_image_ext
+from locations import fetch_shelf_locations, location_label
+from pipeline_jobs import pipeline_queue
 
-# 순찰 사진 수신함 (도서관별 폴더)
-#  폴더 구조: patrol_inbox/<도서관>/<구역>/<책꽂이>/<층 코드로 시작하는 파일 이름>.jpg
-#            (예: LIB001/A/A-01/A-01-3.jpg, LIB001/A/A-01/A-01-3_20261003_0930.jpg)
-#  - 순찰 사진은 이 폴더에 들어온다고 가정합니다. (사진을 찍어 넣는 로봇은 개발 범위 밖)
-#  - '책꽂이 폴더 + 층 코드로 시작하는 파일 이름'인 사진은 자동으로 등록됩니다. (sync_inbox)
+# 순찰 사진 수신함 (PATROL_PHOTO 테이블, 사진 바이트도 DB에 저장)
+#  - 로봇이 찍은 순찰 사진은 PATROL_PHOTO에 바로 들어온다고 가정합니다. (로봇은 개발 범위 밖)
+#    시연 · 테스트에서는 load_patrol_photos.py가 로봇 대신 사진 폴더를 읽어 register_patrol_photo로 넣습니다.
 #  - 현황 · 일괄 분석은 도서관마다 따로 다룹니다. (AI 분석 대기열은 모든 도서관이 함께 씀)
 #  사진 상태: WAITING → QUEUED(분석 순서 대기) → ANALYZING → DONE / FAILED (FAILED는 다음 일괄 분석에서 다시 시도)
 #  일괄 분석은 구역 → 책꽂이 → 층 → 촬영 시각 순서로 진행합니다.
@@ -41,91 +41,77 @@ def _update_photo(photo_id: int, sql_set: str, params: tuple):
         conn.close()
 
 
-def ensure_inbox_folders(locations: dict):
-    """모든 책꽂이의 수신함 폴더를 미리 만들어, 사람이 사진을 직접 넣을 위치를 알 수 있게 합니다."""
-    for folder in {shelf_folder(loc) for loc in locations.values()}:
-        os.makedirs(os.path.join(PATROL_INBOX_DIR, folder), exist_ok=True)
+class PhotoRejected(Exception):
+    """수신함에 넣을 수 없는 사진 (이유는 메시지)"""
 
 
-def _classify_inbox_file(rel_path: str, library_id: str, shelves_by_code: dict):
-    """수신함 파일(<도서관>/<구역>/<책꽂이>/<파일>) → (shelf_id, None) 또는 (None, 등록할 수 없는 이유)"""
-    parts = rel_path.split("/")
-    if len(parts) != 4:
-        return None, f"구역/책꽂이 폴더 안에 넣어야 합니다 (예: {library_id}/A/A-01/A-01-3.jpg)"
-    _, zone_code, bookcase_code, filename = parts
-    stem, ext = os.path.splitext(filename)
-    if ext.lower() not in ALLOWED_IMAGE_EXTS:
-        return None, "jpg / jpeg / png 사진만 분석할 수 있습니다"
-    shelf_code = shelf_code_from_filename(stem)
-    if not shelf_code:
-        return None, f"파일 이름이 층 코드로 시작해야 합니다 (예: {bookcase_code}-3.jpg)"
-    shelf = shelves_by_code.get(shelf_code)
-    if shelf is None:
-        return None, f"등록되지 않은 층입니다: {shelf_code}"
-    if shelf["zone_code"] != zone_code or shelf["bookcase_code"] != bookcase_code:
-        return None, f"{shelf['location_label']} 사진은 {shelf_folder(shelf)} 폴더에 넣어야 합니다"
-    if shelf["book_count"] == 0:
-        return None, f"{shelf['location_label']}에는 등록된 도서가 없어 분석할 수 없습니다"
-    return shelf["shelf_id"], None
-
-
-def sync_inbox(conn, library_id: str, locations: dict) -> list:
+def normalize_rfid_tags(items) -> str:
     """
-    도서관의 수신함 폴더(patrol_inbox/<도서관>/)와 PATROL_PHOTO를 맞춥니다.
-      - 아직 등록되지 않은 사진 → WAITING으로 등록 (촬영 시각 = 파일 수정 시각)
-        이미 분석이 끝난 사진과 같은 이름이면 새 사진으로 보고 등록 (예전 기록의 경로는 <경로>#<사진 ID>로 바꿈)
-      - 분석 전(WAITING/FAILED)인데 파일이 사라진 사진 → 등록 취소
-    반환: 규칙에 맞지 않아 등록하지 못한 파일 목록 [{"file_path", "reason"}]
+    리더값(등록번호 문자열 또는 {"reg_no", "rssi"} 목록)을 저장할 JSON으로 바꿉니다.
+    같은 태그는 신호가 가장 강한 값 하나로 합칩니다. 빈 목록은 '리더가 읽은 태그 없음'으로 그대로 저장합니다.
     """
-    ensure_inbox_folders(locations)
-    shelves_by_code = {loc["shelf_code"]: loc for loc in locations.values()}
-    library_dir = os.path.join(PATROL_INBOX_DIR, library_id)
-    cursor = conn.cursor(dictionary=True)
+    if not isinstance(items, list):
+        raise PhotoRejected("RFID 리더값은 목록이어야 합니다")
+    tags = {}
+    for item in items:
+        tag = {"reg_no": item, "rssi": None} if isinstance(item, str) else item
+        reg_no = tag.get("reg_no") if isinstance(tag, dict) else None
+        if not isinstance(reg_no, str) or not 0 < len(reg_no.strip()) <= 20:
+            raise PhotoRejected(f"RFID 등록번호가 올바르지 않습니다: {item}")
+        reg_no, rssi = reg_no.strip(), tag.get("rssi")
+        if reg_no not in tags or (rssi is not None and (tags[reg_no] is None or rssi > tags[reg_no])):
+            tags[reg_no] = rssi
+    return json.dumps([{"reg_no": reg_no, "rssi": rssi} for reg_no, rssi in tags.items()], ensure_ascii=False)
+
+
+def attach_rfid_tags(conn, library_id: str, photo_id: int, items) -> bool:
+    """분석 전(대기 · 실패) 사진에 RFID 리더값을 붙입니다. 그런 사진이 없으면 False"""
+    tags = normalize_rfid_tags(items)
+    cursor = conn.cursor()
     try:
-        cursor.execute("SELECT photo_id, file_path, status FROM PATROL_PHOTO WHERE library_id = %s", (library_id,))
-        rows = cursor.fetchall()
-        cursor.execute("SELECT photo_id, file_path, status FROM PATROL_PHOTO")   # file_path는 모든 도서관에서 고유
-        all_rows = cursor.fetchall()
-        # 분석이 끝난(DONE) 사진의 파일은 이미 지워졌으므로, 같은 이름의 파일이 다시 있으면 새로 들어온 사진입니다.
-        # (매번 'A-01-3.jpg'처럼 같은 이름으로 넣는 경우) → 아직 처리 중인 사진만 '등록됨'으로 봅니다.
-        registered = {r["file_path"] for r in all_rows if r["status"] != "DONE"}
-        done_by_path = {r["file_path"]: r["photo_id"] for r in all_rows if r["status"] == "DONE"}
-
-        unrecognized = []
-        for dirpath, _, filenames in os.walk(library_dir):
-            for name in filenames:
-                if name.startswith((".", "~")):
-                    continue
-                full = os.path.join(dirpath, name)
-                rel_path = os.path.relpath(full, PATROL_INBOX_DIR).replace(os.sep, "/")
-                if rel_path in registered:
-                    continue
-                shelf_id, reason = _classify_inbox_file(rel_path, library_id, shelves_by_code)
-                if reason:
-                    unrecognized.append({"file_path": rel_path, "reason": reason})
-                    continue
-                captured = datetime.fromtimestamp(os.path.getmtime(full)).strftime('%Y-%m-%d %H:%M:%S')
-                if rel_path in done_by_path:
-                    # 예전 분석 기록은 남기고 경로만 '<경로>#<사진 ID>'로 바꿔 자리를 비움 (file_path는 UNIQUE)
-                    old_id = done_by_path[rel_path]
-                    cursor.execute("UPDATE PATROL_PHOTO SET file_path = %s WHERE photo_id = %s AND status = 'DONE'",
-                                   (f"{rel_path}#{old_id}", old_id))
-                # file_path는 UNIQUE: 동시에 두 번 동기화돼도 한 번만 등록
-                cursor.execute(
-                    """INSERT IGNORE INTO PATROL_PHOTO (library_id, shelf_id, file_path, captured_at, received_at, status)
-                       VALUES (%s, %s, %s, %s, %s, 'WAITING')""",
-                    (library_id, shelf_id, rel_path, captured, _now())
-                )
-                if cursor.rowcount:
-                    print(f"📂 [수신함에 직접 넣은 사진 등록] {rel_path}")
-
-        missing = [r["photo_id"] for r in rows
-                   if r["status"] in ANALYZABLE_STATUSES and not os.path.exists(os.path.join(PATROL_INBOX_DIR, r["file_path"]))]
-        if missing:
-            cursor.execute(f"DELETE FROM PATROL_PHOTO WHERE photo_id IN ({_in(missing)})", tuple(missing))
-            print(f"🗑️ 수신함에서 사라진 사진 {len(missing)}장의 등록을 취소했습니다.")
+        cursor.execute(
+            f"""SELECT 1 FROM PATROL_PHOTO WHERE photo_id = %s AND library_id = %s AND status IN ({_in(ANALYZABLE_STATUSES)})""",
+            (photo_id, library_id) + ANALYZABLE_STATUSES)
+        if cursor.fetchone() is None:
+            return False
+        cursor.execute("UPDATE PATROL_PHOTO SET rfid_tags = %s WHERE photo_id = %s", (tags, photo_id))
         conn.commit()
-        return unrecognized
+        return True
+    finally:
+        cursor.close()
+
+
+def register_patrol_photo(conn, shelf: dict, data: bytes, captured_at: datetime,
+                          original_name: Optional[str] = None, rfid_items=None) -> Optional[int]:
+    """
+    순찰 사진 1장을 수신함(PATROL_PHOTO)에 분석 대기(WAITING)로 넣습니다. 커밋은 호출하는 쪽에서 합니다.
+    shelf: fetch_shelf_location(s) 결과 (도서가 등록된 층만 받음)
+    같은 층에 같은 사진이 아직 분석 전(대기 · 진행 · 실패)으로 있으면 넣지 않고 None을 반환합니다.
+    (분석이 끝난 사진과 같은 사진은 다시 넣을 수 있음 — 같은 테스트 사진을 여러 번 분석하는 경우)
+    rfid_items: 함께 스캔한 RFID 리더값. None이면 리더값 없음, []이면 리더가 읽은 태그 없음
+    """
+    if shelf["book_count"] == 0:
+        raise PhotoRejected(f"{shelf['location_label']}에는 등록된 도서가 없어 분석할 수 없습니다")
+    try:
+        ext, _ = detect_image_ext(data, ("JPEG", "PNG"))   # AI(JsonTesting.py)는 .jpg / .png만 읽음
+    except ValueError as e:
+        raise PhotoRejected(str(e))
+    sha256 = hashlib.sha256(data).hexdigest()
+    rfid_tags = None if rfid_items is None else normalize_rfid_tags(rfid_items)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT COUNT(*) FROM PATROL_PHOTO WHERE shelf_id = %s AND sha256 = %s AND status <> 'DONE'",
+                       (shelf["shelf_id"], sha256))
+        if cursor.fetchone()[0] > 0:
+            return None
+        cursor.execute(
+            """INSERT INTO PATROL_PHOTO (library_id, shelf_id, image_data, ext, sha256, original_name,
+                                         captured_at, received_at, status, rfid_tags)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'WAITING', %s)""",
+            (shelf["library_id"], shelf["shelf_id"], data, ext, sha256, original_name,
+             captured_at.strftime('%Y-%m-%d %H:%M:%S'), _now(), rfid_tags)
+        )
+        return cursor.lastrowid
     finally:
         cursor.close()
 
@@ -154,20 +140,15 @@ class BatchAlreadyRunning(Exception):
     pass
 
 
-def _photo_hooks(photo_id: int, inbox_file: str) -> dict:
+def _photo_hooks(photo_id: int) -> dict:
     def on_start(job):
         _update_photo(photo_id, "status = 'ANALYZING'", ())
 
     def on_done(job):
         _update_photo(photo_id, "status = 'DONE', analyzed_at = %s, error = NULL", (_now(),))
-        # 원본은 세션 보관소에 복사되어 있으므로 수신함 파일은 정리 (수신함 = 아직 분석하지 않은 사진만)
-        try:
-            os.remove(os.path.join(PATROL_INBOX_DIR, inbox_file))
-        except OSError:
-            pass
 
     def on_fail(job, error):
-        # 실패한 세션은 pipeline_jobs.discard_session이 지움. 수신함 파일은 다시 분석할 수 있게 남겨 둠
+        # 실패한 세션은 pipeline_jobs.discard_session이 지움. 사진은 DB에 남아 다음 일괄 분석에서 다시 시도
         _update_photo(photo_id, "status = 'FAILED', analyzed_at = %s, error = %s, session_id = NULL",
                       (_now(), error[:2000]))
 
@@ -180,8 +161,6 @@ def start_batch_analysis(conn, library_id: str) -> dict:
     순서: 구역 → 책꽂이 번호 → 층 → 촬영 시각.
     이 도서관의 묶음이 이미 분석 중이면 BatchAlreadyRunning, 분석할 사진이 없으면 photo_count = 0.
     """
-    locations = fetch_shelf_locations(conn, library_id)
-    sync_inbox(conn, library_id, locations)   # 직접 넣은 사진도 포함
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute(f"SELECT COUNT(*) AS n FROM PATROL_PHOTO WHERE library_id = %s AND status IN ({_in(RUNNING_STATUSES)})",
@@ -189,7 +168,7 @@ def start_batch_analysis(conn, library_id: str) -> dict:
         if cursor.fetchone()["n"] > 0:
             raise BatchAlreadyRunning()
         cursor.execute(
-            f"""SELECT p.photo_id, p.shelf_id, p.file_path, p.captured_at
+            f"""SELECT p.photo_id, p.shelf_id, p.ext, p.captured_at
                 FROM PATROL_PHOTO p
                 JOIN SHELF_INFO s ON p.shelf_id = s.shelf_id
                 JOIN BOOKCASE b ON s.bookcase_id = b.bookcase_id
@@ -204,20 +183,15 @@ def start_batch_analysis(conn, library_id: str) -> dict:
         batch_id = f"BATCH_{library_id}_{now.strftime('%Y%m%d_%H%M%S_%f')}"
         jobs = []
         for p in photos:
-            src = os.path.join(PATROL_INBOX_DIR, p["file_path"])
-            if not os.path.exists(src):
-                cursor.execute(
-                    "UPDATE PATROL_PHOTO SET status = 'FAILED', analyzed_at = %s, error = %s WHERE photo_id = %s",
-                    (_now(), "수신함에서 사진 파일을 찾을 수 없습니다.", p["photo_id"])
-                )
-                continue
-            # AI(JsonTesting.py)는 .jpg / .png만 읽으므로 .jpeg는 .jpg로 저장
-            ext = ALLOWED_IMAGE_EXTS.get(os.path.splitext(p["file_path"])[1].lower(), ".jpg")
             # 세션 ID: <층>_<묶음 시각>_<사진ID> (한 묶음 안에서도 겹치지 않음)
             session_id = f"{p['shelf_id']}_{now.strftime('%Y%m%d_%H%M%S')}_{p['photo_id']}"
-            image_rel_path = f"{session_id}/original{ext}"
+            image_rel_path = f"{session_id}/original{p['ext']}"
+            # AI는 파일을 읽으므로 DB의 사진을 세션 보관소에 꺼내 둠 (사진이 커서 한 장씩 읽음)
+            cursor.execute("SELECT image_data FROM PATROL_PHOTO WHERE photo_id = %s", (p["photo_id"],))
+            data = cursor.fetchone()["image_data"]
             os.makedirs(os.path.join(SPINE_STORE_DIR, session_id), exist_ok=True)
-            shutil.copy2(src, os.path.join(SPINE_STORE_DIR, image_rel_path))
+            with open(os.path.join(SPINE_STORE_DIR, image_rel_path), "wb") as f:
+                f.write(data)
             cursor.execute(
                 """UPDATE PATROL_PHOTO SET status = 'QUEUED', batch_id = %s, queued_at = %s, session_id = %s,
                           analyzed_at = NULL, error = NULL WHERE photo_id = %s""",
@@ -230,15 +204,14 @@ def start_batch_analysis(conn, library_id: str) -> dict:
 
     for p, session_id, image_rel_path in jobs:
         pipeline_queue.submit(session_id, p["shelf_id"], image_rel_path,
-                              scan_time=p["captured_at"], hooks=_photo_hooks(p["photo_id"], p["file_path"]))
+                              scan_time=p["captured_at"], hooks=_photo_hooks(p["photo_id"]))
     print(f"📦 [일괄 분석 시작] {batch_id}: {library_id} 순찰 사진 {len(jobs)}장 (구역 → 책꽂이 → 층 순서)")
     return {"batch_id": batch_id if jobs else None, "photo_count": len(jobs)}
 
 
 def patrol_status(conn, library_id: str) -> dict:
-    """도서관의 수신함 현황(구역별 분석 대기 장수, 등록하지 못한 파일) + 가장 최근 일괄 분석의 진행 상황"""
+    """도서관의 수신함 현황(구역별 분석 대기 장수) + 가장 최근 일괄 분석의 진행 상황"""
     locations = fetch_shelf_locations(conn, library_id)
-    unrecognized = sync_inbox(conn, library_id, locations)
     cursor = conn.cursor(dictionary=True)
     try:
         cursor.execute("SELECT status, COUNT(*) AS n FROM PATROL_PHOTO WHERE library_id = %s GROUP BY status", (library_id,))
@@ -296,7 +269,6 @@ def patrol_status(conn, library_id: str) -> dict:
             "failed_count": counts.get("FAILED", 0),
             "analyzable_count": sum(counts.get(s, 0) for s in ANALYZABLE_STATUSES),
             "analyzable_by_zone": by_zone,
-            "unrecognized_files": unrecognized,
             "last_received_at": last_received,
             "latest_batch": batch,
         }
@@ -308,11 +280,14 @@ def list_patrol_photos(conn, library_id: str, status: Optional[str], limit: int)
     locations = fetch_shelf_locations(conn, library_id)
     cursor = conn.cursor(dictionary=True)
     try:
+        # 사진 바이트(image_data)는 목록에 넣지 않음
+        columns = ("photo_id, library_id, shelf_id, ext, sha256, original_name, captured_at, received_at, status, "
+                   "batch_id, queued_at, analyzed_at, session_id, error")
         if status:
-            cursor.execute("SELECT * FROM PATROL_PHOTO WHERE library_id = %s AND status = %s ORDER BY captured_at DESC LIMIT %s",
-                           (library_id, status, limit))
+            cursor.execute(f"SELECT {columns} FROM PATROL_PHOTO WHERE library_id = %s AND status = %s "
+                           "ORDER BY captured_at DESC LIMIT %s", (library_id, status, limit))
         else:
-            cursor.execute("SELECT * FROM PATROL_PHOTO WHERE library_id = %s ORDER BY captured_at DESC LIMIT %s",
+            cursor.execute(f"SELECT {columns} FROM PATROL_PHOTO WHERE library_id = %s ORDER BY captured_at DESC LIMIT %s",
                            (library_id, limit))
         rows = cursor.fetchall()
     finally:

@@ -1,8 +1,8 @@
 import re
 from typing import Dict, Optional
 
-# 순찰 사진 수신함 폴더 규칙
-#   patrol_inbox/<도서관>/<구역 코드>/<책꽂이 코드>/<층 코드>[_아무거나].jpg
+# 순찰 사진 폴더 규칙 (load_patrol_photos.py가 로봇 대신 사진을 넣을 때)
+#   <도서관 폴더>/<구역 코드>/<책꽂이 코드>/<층 코드>[_아무거나].jpg
 #   예) LIB001/A/A-01/A-01-3.jpg, LIB001/A/A-01/A-01-3_20261003_093000.jpg
 # 파일 이름에서 층 코드를 읽는 규칙: "A-01-3.jpg", "A-01-3_아침.jpg", "A-01-3 (2).png" 등
 SHELF_FILENAME_RE = re.compile(r"^([A-Za-z0-9]+-\d+-\d+)(?:[_ (].*)?$")
@@ -19,15 +19,17 @@ def shelf_code_from_filename(stem: str) -> Optional[str]:
     return m.group(1).upper() if m else None
 
 
-# 층(SHELF_INFO) 단위 위치 정보: 도서관 / 구역 / 책꽂이 / 층 + 등록 도서 수 · 대출 수 · 기준 이미지 수
+# 층(SHELF_INFO) 단위 위치 정보: 도서관 / 구역 / 책꽂이 / 층 + 배가 도서 수 · 미비치 도서 수 · 기준 이미지 수
+#   loaned_count = 미비치(WORKING_STATUS가 비치중 'BOL112N'이 아닌, 대출 중 등) 도서 수
 SHELF_LOCATION_QUERY = """
     SELECT
         s.shelf_id, s.shelf_code, s.level, s.shelf_name,
         b.bookcase_id, b.bookcase_code, b.bookcase_no, b.bookcase_name,
         z.zone_id, z.zone_code, z.zone_name, z.location AS zone_location,
         z.library_id,
-        (SELECT COUNT(*) FROM BOOK_MASTER m WHERE m.shelf_id = s.shelf_id) AS book_count,
-        (SELECT COUNT(*) FROM BOOK_MASTER m WHERE m.shelf_id = s.shelf_id AND m.loan_status = 'LOANED') AS loaned_count,
+        (SELECT COUNT(*) FROM BOOK_LOCATION m WHERE m.shelf_id = s.shelf_id) AS book_count,
+        (SELECT COUNT(*) FROM BOOK_LOCATION m JOIN BO_BOOK_TBL bk ON bk.REC_KEY = m.book_key
+           WHERE m.shelf_id = s.shelf_id AND bk.WORKING_STATUS <> 'BOL112N') AS loaned_count,
         (SELECT COUNT(*) FROM NORMAL_IMAGE n WHERE n.shelf_id = s.shelf_id AND n.is_current = 1) AS normal_count,
         (SELECT COUNT(*) FROM NORMAL_IMAGE n WHERE n.shelf_id = s.shelf_id AND n.is_current = 0) AS normal_history_count,
         (SELECT COUNT(*) FROM SHELF_SESSION ss WHERE ss.shelf_id = s.shelf_id) AS session_count

@@ -5,14 +5,19 @@ services:
     image: mysql:8.0
     container_name: library-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: 1234
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-1234}   # backend/.env의 DB_PASSWORD, 없으면 1234 (DB를 처음 만들 때만 적용)
       MYSQL_DATABASE: library_ai_db
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"   # 이 컴퓨터 안에서만 접속 (외부에 열지 않음)
     volumes:
+      - library_mysql_data:/var/lib/mysql   # DB 데이터 (이름 있는 볼륨, 컨테이너를 다시 만들어도 유지)
       # 파일 이름 순서대로 실행되므로 번호로 순서를 고정 (세션 테이블 → 도서관 스키마 → 가상 데이터)
       - ./db_create/init.sql:/docker-entrypoint-initdb.d/1_init.sql
       - ./db_create/library_schema.sql:/docker-entrypoint-initdb.d/2_library_schema.sql
       - ./db_create/library_data.sql:/docker-entrypoint-initdb.d/3_library_data.sql
       - ./db_create/patrol_schema.sql:/docker-entrypoint-initdb.d/4_patrol_schema.sql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+volumes:
+  library_mysql_data:
+    name: library_mysql_data

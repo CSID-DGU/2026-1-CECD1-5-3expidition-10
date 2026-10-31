@@ -44,7 +44,7 @@ def get_normal_image_bytes(conn, shelf_id: str) -> Optional[tuple]:
 def _archive_current(cursor, shelf_id: str) -> int:
     cursor.execute(
         "UPDATE NORMAL_IMAGE SET is_current = 0, archived_at = %s WHERE shelf_id = %s AND is_current = 1",
-        (_now(), shelf_id)
+        (datetime.now(), shelf_id)   # 마이크로초까지 저장 → 같은 초에 연달아 바꿔도 되돌리기 순서가 맞음
     )
     return cursor.rowcount
 
@@ -119,6 +119,41 @@ def restore_previous_normal_image(conn, shelf_id: str) -> Optional[dict]:
     finally:
         cursor.close()
     return get_normal_image_info(conn, shelf_id)
+
+
+def is_current_image(conn, image_id: int) -> bool:
+    """image_id가 지금도 어떤 층의 현재 기준 이미지인지"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT 1 FROM NORMAL_IMAGE WHERE image_id = %s AND is_current = 1", (image_id,))
+        return cursor.fetchone() is not None
+    finally:
+        cursor.close()
+
+
+def normal_images_to_analyze(conn, fingerprint: str) -> list:
+    """현재 기준 이미지 중 이 AI(지문)의 분석 결과(NORMAL_IMAGE_ANALYSIS)가 없는 image_id 목록"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """SELECT n.image_id FROM NORMAL_IMAGE n
+               LEFT JOIN NORMAL_IMAGE_ANALYSIS a ON a.image_id = n.image_id AND a.ai_fingerprint = %s
+               WHERE n.is_current = 1 AND a.image_id IS NULL ORDER BY n.image_id""",
+            (fingerprint,)
+        )
+        return [row[0] for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+
+
+def clear_old_analyses(conn, fingerprint: str):
+    """예전 AI 코드 · 모델로 만든 분석 결과를 지웁니다. (이력의 기준 이미지 포함, 되돌리면 다시 분석)"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM NORMAL_IMAGE_ANALYSIS WHERE ai_fingerprint <> %s", (fingerprint,))
+        conn.commit()
+    finally:
+        cursor.close()
 
 
 def is_current_normal_image(conn, shelf_id: str, path: str) -> bool:

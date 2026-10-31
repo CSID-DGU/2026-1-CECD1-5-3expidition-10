@@ -1,5 +1,5 @@
 -- 도서관 · 계정 · 공간 · 도서 · 기준 이미지 스키마
---   도서관(LIBRARY) → 구역(ZONE) → 책꽂이(BOOKCASE) → 층(SHELF_INFO) → 도서(BOOK_MASTER)
+--   도서관(LIBRARY) → 구역(ZONE) → 책꽂이(BOOKCASE) → 층(SHELF_INFO) → 배가 위치(BOOK_LOCATION) → 도서(BO_BOOK_TBL) → 종(IDX_BO_TBL)
 -- 순찰 사진 1장 = 책꽂이 1개 층(SHELF_INFO 1행)이며, 분석 세션도 층 단위로 만들어집니다.
 -- 여러 도서관이 한 DB를 함께 쓰므로 구역 · 책꽂이 · 층 ID 앞에는 도서관 ID가 붙습니다. (예: LIB001-A-01-3)
 -- 화면에는 도서관 안에서의 코드(zone_code 'A', bookcase_code 'A-01', shelf_code 'A-01-3')로 표시합니다.
@@ -73,20 +73,58 @@ CREATE TABLE IF NOT EXISTS SHELF_INFO (
     FOREIGN KEY (bookcase_id) REFERENCES BOOKCASE(bookcase_id)
 );
 
--- 7. 도서 마스터: 각 층에 꽂혀 있어야 할 도서와 올바른 순서
---    book_id는 층 안에서만 고유 (AI가 정상 기준 이미지에서 n번째로 인식한 책 = B00n)
-CREATE TABLE IF NOT EXISTS BOOK_MASTER (
-    shelf_id VARCHAR(50) NOT NULL COMMENT '소속 층',
-    book_id VARCHAR(50) NOT NULL COMMENT '층 안의 도서 ID (Vision AI 매칭 결과와 동일한 체계)',
+-- 7~9. 도서 정보: 실제 도서관 시스템(KOLAS)의 도서 테이블에서 필요한 컬럼만 같은 이름으로 가져왔습니다.
+--   (멘토 자료 2026-10-19: IDX_BO_TBL = 도서 종(서지), BO_BOOK_TBL = 도서 1권. 대문자 컬럼은 원래 테이블의 컬럼)
+--   실제 시스템에는 층 · 순서 정보가 없어 BOOK_LOCATION은 우리 시스템에만 있는 테이블입니다.
+--   RFID 태그에는 등록번호(REG_NO)가 기록되므로 태그 ↔ 도서 연결은 REG_NO로 합니다.
+
+-- 7. 도서 종 (서지 정보, 같은 책의 복본들이 공유)
+CREATE TABLE IF NOT EXISTS IDX_BO_TBL (
+    REC_KEY BIGINT PRIMARY KEY COMMENT '종 키',
+    TITLE VARCHAR(500) NOT NULL COMMENT '서명',
+    AUTHOR VARCHAR(500) NULL COMMENT '저자',
+    PUBLISHER VARCHAR(200) NULL COMMENT '발행자',
+    PUB_YEAR VARCHAR(20) NULL COMMENT '발행년',
+    ST_CODE VARCHAR(100) NULL COMMENT 'ISBN',
+    KDC_CLASS VARCHAR(30) NULL COMMENT 'KDC 분류기호'
+);
+
+-- 8. 도서 (책 한 권 = 1행, 복본마다 따로)
+--    비치 여부: WORKING_STATUS = 'BOL112N'이면 비치중(관내 배가 중), 나머지(관외대출 · 책두레 등)는 미비치
+--    태깅 여부: WORKNO(태그 UID)가 있으면 태깅 도서, 비어 있으면 미태깅 도서 (영상으로만 판정)
+CREATE TABLE IF NOT EXISTS BO_BOOK_TBL (
+    REC_KEY BIGINT PRIMARY KEY COMMENT '도서 키',
+    library_id VARCHAR(10) NOT NULL COMMENT '[우리 컬럼] 소장 도서관 (등록번호는 도서관 안에서만 고유)',
+    SPECIES_KEY BIGINT NOT NULL COMMENT '종 키 (IDX_BO_TBL.REC_KEY)',
+    REG_NO VARCHAR(20) NOT NULL COMMENT '등록번호 (= RFID 태그에 기록된 값, 예: EL0000015459)',
+    REG_CODE VARCHAR(10) NULL COMMENT '등록구분 (예: EL)',
+    WORKNO VARCHAR(30) NULL COMMENT 'RFID 태그 UID (비어 있으면 미태깅). 도서 연결에는 쓰지 않음',
+    SHELF_LOC_CODE VARCHAR(10) NULL COMMENT '자료실 코드',
+    SEPARATE_SHELF_CODE VARCHAR(10) NULL COMMENT '별치기호',
+    CLASS_NO VARCHAR(30) NULL COMMENT '분류기호',
+    BOOK_CODE VARCHAR(30) NULL COMMENT '도서기호',
+    VOL_CODE VARCHAR(30) NULL COMMENT '권책기호',
+    COPY_CODE VARCHAR(10) NULL COMMENT '복본기호',
+    WORKING_STATUS VARCHAR(10) NOT NULL DEFAULT 'BOL112N' COMMENT '자료상태 (BOL112N = 비치중, 그 외 = 미비치)',
+    MANAGE_CODE VARCHAR(10) NULL COMMENT '관리구분',
+    UNIQUE INDEX uq_book_reg_no (library_id, REG_NO),
+    FOREIGN KEY (library_id) REFERENCES LIBRARY(library_id),
+    FOREIGN KEY (SPECIES_KEY) REFERENCES IDX_BO_TBL(REC_KEY)
+);
+
+-- 9. 도서 배가 위치 [우리 테이블]: 각 층에 꽂혀 있어야 할 도서와 올바른 순서
+--    correct_order n = 정상 기준 사진에서 왼쪽부터 n번째 책 (Vision AI가 돌려주는 B00n과 같은 번호)
+--    층에 배정되지 않은 도서(BO_BOOK_TBL에만 있음)는 순찰에서 발견되면 '오배가'
+CREATE TABLE IF NOT EXISTS BOOK_LOCATION (
+    book_key BIGINT PRIMARY KEY COMMENT '도서 (BO_BOOK_TBL.REC_KEY)',
+    shelf_id VARCHAR(50) NOT NULL COMMENT '배가된 층',
     correct_order INT NOT NULL COMMENT '층 내 올바른 순서 (왼쪽부터 1번)',
-    title VARCHAR(255) NOT NULL COMMENT '서명',
-    rfid_uid VARCHAR(50) NOT NULL UNIQUE COMMENT '부착된 RFID 태그 UID',
-    loan_status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE' COMMENT '대출 상태 (AVAILABLE/LOANED)',
-    PRIMARY KEY (shelf_id, book_id),
+    UNIQUE INDEX uq_location_order (shelf_id, correct_order),
+    FOREIGN KEY (book_key) REFERENCES BO_BOOK_TBL(REC_KEY),
     FOREIGN KEY (shelf_id) REFERENCES SHELF_INFO(shelf_id)
 );
 
--- 8. 층별 정상 상태 기준 이미지 (현재 1장 + 이전 이미지 이력). 이미지 자체를 DB에 저장
+-- 10. 층별 정상 상태 기준 이미지 (현재 1장 + 이전 이미지 이력). 이미지 자체를 DB에 저장
 CREATE TABLE IF NOT EXISTS NORMAL_IMAGE (
     image_id INT AUTO_INCREMENT PRIMARY KEY,
     shelf_id VARCHAR(50) NOT NULL COMMENT '층',
@@ -100,12 +138,12 @@ CREATE TABLE IF NOT EXISTS NORMAL_IMAGE (
     is_current TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1 = 지금 기준 이미지, 0 = 이력 (되돌리기용)',
     created_at DATETIME NOT NULL,
     created_by INT NULL COMMENT '등록한 사용자',
-    archived_at DATETIME NULL COMMENT '이력으로 내려간 시각',
+    archived_at DATETIME(6) NULL COMMENT '이력으로 내려간 시각 (같은 초에 연달아 바꿔도 순서가 유지되도록 마이크로초까지)',
     INDEX idx_normal_shelf (shelf_id, is_current),
     FOREIGN KEY (shelf_id) REFERENCES SHELF_INFO(shelf_id)
 );
 
--- 9. 도서관 전체 지도 이미지 (도서관마다 1장)
+-- 11. 도서관 전체 지도 이미지 (도서관마다 1장)
 CREATE TABLE IF NOT EXISTS LIBRARY_MAP (
     library_id VARCHAR(10) PRIMARY KEY,
     image_data MEDIUMBLOB NOT NULL,
@@ -113,4 +151,14 @@ CREATE TABLE IF NOT EXISTS LIBRARY_MAP (
     updated_at DATETIME NOT NULL,
     updated_by INT NULL,
     FOREIGN KEY (library_id) REFERENCES LIBRARY(library_id)
+);
+
+-- 12. 기준 이미지의 AI 분석 결과 (기준 이미지 + AI 지문이 같으면 다시 분석하지 않음, 서버가 자동으로 채움)
+CREATE TABLE IF NOT EXISTS NORMAL_IMAGE_ANALYSIS (
+    image_id INT NOT NULL COMMENT '기준 이미지',
+    ai_fingerprint CHAR(16) NOT NULL COMMENT 'AI 코드 · 모델 파일 내용의 지문 (ai_worker.py)',
+    pool_data LONGBLOB NOT NULL COMMENT '분석 결과 (AI의 reference pool, pickle)',
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (image_id, ai_fingerprint),
+    FOREIGN KEY (image_id) REFERENCES NORMAL_IMAGE(image_id) ON DELETE CASCADE
 );

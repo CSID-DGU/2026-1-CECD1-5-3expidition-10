@@ -24,6 +24,16 @@ async function logout() {
     location.href = "/login";
 }
 
+// 세션의 RFID 출처 표시 (없으면 빈 문자열)
+function rfidLabel(source) {
+    const label = { READER: "RFID 리더", VIRTUAL: "가상 RFID", NONE: "RFID 미수신" }[source];
+    return label ? ` · ${label}` : "";
+}
+
+// 터치 화면에서는 작은 버튼도 손가락으로 누르기 쉽게 키움
+document.head.insertAdjacentHTML("beforeend",
+    "<style>@media (pointer: coarse) { button, select, input { min-height: 40px; } button { min-width: 40px; } }</style>");
+
 // 상단 바의 도서관 · 사서 표시 + 로그아웃 버튼 (요소 id: user-box)
 function renderUserBox(me) {
     const box = document.getElementById("user-box");
@@ -32,16 +42,20 @@ function renderUserBox(me) {
         ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">관리자</span>`
         : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">사서</span>`;
     box.innerHTML = `
-        <span class="text-sm text-slate-600 flex items-center gap-1.5">
+        <span class="text-sm text-slate-600 flex items-center gap-1.5 whitespace-nowrap">
             <i class="fa-solid fa-building-columns text-slate-400"></i>
             <b class="text-slate-700">${escapeHtml(me.library_name)}</b>
             <span class="text-slate-300">|</span> ${escapeHtml(me.display_name)} ${role}
         </span>
         ${me.is_admin && typeof openAccountModal === "function" ? `
-        <button onclick="openAccountModal()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
+        <button onclick="openAccountModal()" class="whitespace-nowrap text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
             <i class="fa-solid fa-users"></i> 사서 계정
         </button>` : ""}
-        <button onclick="logout()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
+        ${typeof openMyPassword === "function" ? `
+        <button onclick="openMyPassword()" class="whitespace-nowrap text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
+            <i class="fa-solid fa-key"></i> 내 비밀번호
+        </button>` : ""}
+        <button onclick="logout()" class="whitespace-nowrap text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
             <i class="fa-solid fa-right-from-bracket"></i> 로그아웃
         </button>`;
 }
@@ -50,6 +64,7 @@ function renderUserBox(me) {
 const ISSUE_GROUPS = [
     { key: "lost",     title: "분실 위험", icon: "fa-eye-slash",            color: "border-red-500 bg-red-50 text-red-700",          badge: "bg-red-100 text-red-700" },
     { key: "foreign",  title: "오배가",    icon: "fa-right-left",           color: "border-orange-500 bg-orange-50 text-orange-700", badge: "bg-orange-100 text-orange-700" },
+    { key: "status",   title: "상태이상",  icon: "fa-rotate-left",          color: "border-pink-500 bg-pink-50 text-pink-700",       badge: "bg-pink-100 text-pink-700" },
     { key: "misorder", title: "오배열",    icon: "fa-shuffle",              color: "border-violet-500 bg-violet-50 text-violet-700", badge: "bg-violet-100 text-violet-700" },
     { key: "physical", title: "외형 이상", icon: "fa-triangle-exclamation", color: "border-amber-500 bg-amber-50 text-amber-700",    badge: "bg-amber-100 text-amber-700" },
     { key: "check",    title: "확인 필요", icon: "fa-magnifying-glass",     color: "border-slate-400 bg-slate-50 text-slate-700",    badge: "bg-slate-200 text-slate-700" },
@@ -93,10 +108,19 @@ function seqLabel(row) {
     return row.sequence_order > 0 ? `${row.sequence_order}번째` : "위치 불명";
 }
 
-// 도서 ID + 서명 (서가 정보 BOOK_MASTER에 등록된 도서만 서명이 있음)
+// 도서 ID(등록번호) + 서명 (도서 정보 BO_BOOK_TBL에 있는 도서만 서명이 있음)
 function bookLabel(row) {
-    const id = escapeHtml(row.book_id || "Unknown");
+    if (row.reg_no === "UNKNOWN") return "알 수 없는 책";
+    const id = escapeHtml(row.reg_no || "Unknown");
     return row.title ? `${id} 「${escapeHtml(row.title)}」` : id;
+}
+
+// 책등이 안 보이는 책과 대조한 RFID 후보 안내 문구 (서버 analyzer.find_unknown_book_candidates). 어떤 책인지 확정하지는 않음
+function unknownBooksMessage(hint) {
+    const books = hint.candidates.map(c => `<b>${bookLabel(c)}</b>`).join(", ");
+    return hint.matched
+        ? `RFID로는 아래 책이 있지만 사진에서 확인되지 않았습니다: ${books} — 책등이 안 보이는 책일 가능성이 높습니다.`
+        : `참고: RFID로는 아래 책이 있지만 사진에서 확인되지 않았습니다: ${books} (책등이 안 보이는 책 ${hint.unknown_count}권과 권수가 달라 연결하지 않았습니다)`;
 }
 
 function spineUrl(path) {

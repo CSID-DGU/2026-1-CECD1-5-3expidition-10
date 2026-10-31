@@ -3,35 +3,40 @@ AI 분석 작업 프로세스 (서버가 자식 프로세스로 띄워 계속 �
 
 이 프로세스는
   - 모델을 처음 한 번만 불러오고,
-  - 층별 기준 사진의 분석 결과(reference pool)를 기억해 둡니다. 메모리(최근 CACHE_SIZE개 층)와 디스크(.ai_cache/)에
-    저장하므로 서버를 다시 켜도, 층이 많아도 다시 분석하지 않습니다.
-    키 = 기준 사진 내용(SHA-256) + AI 코드 · 모델 파일 지문 → 기준 사진이나 AI 코드 · 모델이 바뀌면 자동으로 새로 분석합니다.
+  - 층별 기준 사진의 분석 결과(reference pool)를 메모리(최근 CACHE_SIZE개 층)와 DB(NORMAL_IMAGE_ANALYSIS)에 저장합니다.
+    서버를 다시 켜도, 층이 많아도, 같은 DB를 쓰는 다른 컴퓨터에서도 다시 분석하지 않습니다.
+    키 = 기준 이미지(image_id) + AI 코드 · 모델 파일 지문 → 기준 사진이나 AI 코드 · 모델이 바뀌면 자동으로 새로 분석합니다.
 분석 자체는 ach/MakeResult.py(v4)를 그대로 사용합니다. (AI 코드는 수정하지 않음)
-  - 기준 사진 등록: MakeResult.build_normal_reference_pool()  (MakeResult.NORMAL_DIR 폴더의 사진 사용)
+  - 기준 사진 분석: MakeResult.build_normal_reference_pool()  (DB의 기준 이미지를 임시 폴더에 꺼내 MakeResult.NORMAL_DIR로 지정)
   - 사진 분석:     MakeResult.analyze_image_to_dict(image_path, pool)
 
 통신: 표준 입력으로 요청 한 줄(JSON), 표준 출력으로 응답 한 줄(JSON, 앞에 PROTOCOL_PREFIX).
-  요청 {"image_path": 분석할 사진 절대 경로, "normal_dir": 그 층의 기준 사진 폴더}
-  응답 {"ok": true, "result": analyze_image_to_dict 결과, "timing": {...}, "reference_cached": "memory"/"disk"/null}
+  요청 {"image_path": 분석할 사진 절대 경로, "image_id": 그 층의 기준 이미지}
+       {"op": "prepare", "image_id": 기준 이미지}   → 기준 사진만 미리 분석해 DB에 저장
+  응답 {"ok": true, "result": analyze_image_to_dict 결과, "timing": {...}, "reference_cached": "memory"/"db"/null}
        {"ok": false, "error": 에러 내용}
 AI 코드의 print 출력은 표준 에러(서버가 로그 파일로 보냄)로 보냅니다. 표준 입력이 닫히면(서버 종료) 끝납니다.
 """
 import glob
 import hashlib
+import io
 import json
 import os
 import pickle
+import re
 import sys
+import tempfile
 import time
 import traceback
 from collections import OrderedDict
+from datetime import datetime
+
+from db import get_db_connection
 
 PROTOCOL_PREFIX = "@@AI@@"
 ACH_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ach"))
 RESULT_JSON_PATH = os.path.join(ACH_DIR, "vision_output", "test_results.json")
 CACHE_SIZE = int(os.getenv("AI_REFERENCE_CACHE", "8"))   # 메모리에 기억해 둘 층(기준 사진) 수
-DISK_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".ai_cache")   # 디스크 캐시 (git 제외)
-DISK_CACHE_KEEP = int(os.getenv("AI_REFERENCE_DISK_CACHE", "300"))                       # 디스크에 남길 최대 개수
 AI_ENTRY_FILES = ["MakeResult.py", "JsonTesting.py"]   # 지문에 넣을 AI 진입 파일 (있는 것만)
 
 _proto = None   # 응답 전용 통로 (setup_channels)
@@ -52,52 +57,125 @@ def send(message: dict):
 
 
 def ai_fingerprint() -> str:
-    """AI 코드(MakeResult.py, app/*.py) 내용과 모델 파일(크기 · 수정 시각)의 지문. 바뀌면 캐시를 쓰지 않음"""
+    """
+    AI 코드(MakeResult.py, app/*.py)와 사용하는 모델 파일 내용의 지문. 바뀌면 저장된 분석 결과를 쓰지 않음
+    내용으로만 만들므로 줄바꿈 · 수정 시각이 달라도 같은 값 → 같은 DB를 쓰는 다른 컴퓨터도 분석 결과를 함께 씀
+    """
     digest = hashlib.sha256()
     entries = [os.path.join(ACH_DIR, n) for n in AI_ENTRY_FILES if os.path.exists(os.path.join(ACH_DIR, n))]
+    code = {}
     for path in sorted(entries + glob.glob(os.path.join(ACH_DIR, "app", "*.py"))):
         with open(path, "rb") as f:
-            digest.update(os.path.basename(path).encode() + f.read())
-    for path in sorted(glob.glob(os.path.join(ACH_DIR, "model", "*.pt"))):
-        st = os.stat(path)
-        digest.update(f"{os.path.basename(path)}:{st.st_size}:{int(st.st_mtime)}".encode())
+            code[os.path.basename(path)] = f.read().replace(b"\r\n", b"\n")
+        digest.update(os.path.basename(path).encode() + code[os.path.basename(path)])
+    # app/models.py가 불러오는 모델만 (컴퓨터마다 다를 수 있는 다른 .pt 파일은 지문에 넣지 않음)
+    for name in sorted(set(re.findall(r"model/([\w.-]+\.pt)", code.get("models.py", b"").decode("utf-8")))):
+        path = os.path.join(ACH_DIR, "model", name)
+        if os.path.exists(path):
+            digest.update(name.encode())
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    digest.update(chunk)
     return digest.hexdigest()[:16]
 
 
-def reference_key(normal_dir: str, fingerprint: str) -> str:
-    """기준 사진 폴더의 내용(파일 이름 + 바이트) + AI 지문으로 만든 키. 기준 사진이나 AI가 바뀌면 키도 바뀜"""
-    digest = hashlib.sha256(fingerprint.encode())
-    for name in sorted(os.listdir(normal_dir)):
-        if name.lower().endswith((".jpg", ".png")):
-            digest.update(name.encode("utf-8"))
-            with open(os.path.join(normal_dir, name), "rb") as f:
-                digest.update(f.read())
-    return digest.hexdigest()
+class PoolUnpickler(pickle.Unpickler):
+    """DB에서 꺼낸 분석 결과를 읽습니다. numpy 배열 · 숫자만 허용해, DB 내용이 바뀌어도 코드가 실행되지 않게 합니다."""
+    ALLOWED = {"dtype", "ndarray", "_frombuffer", "_reconstruct", "scalar"}
+
+    def find_class(self, module, name):
+        if module.split(".")[0] == "numpy" and name in self.ALLOWED:
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(f"허용하지 않는 형식: {module}.{name}")
 
 
-def load_disk_cache(key: str):
-    path = os.path.join(DISK_CACHE_DIR, key + ".pkl")
-    try:
-        with open(path, "rb") as f:          # 이 프로세스가 직접 저장한 파일만 읽음
-            pool = pickle.load(f)
-        os.utime(path)                       # 최근 사용 표시 (오래된 것부터 정리)
-        return pool
-    except (OSError, pickle.UnpicklingError, EOFError, AttributeError, ImportError):
+def load_saved_pool(image_id: int, fingerprint: str):
+    """DB에 저장된 분석 결과. 없거나 읽지 못하면 None (새로 분석)"""
+    conn = get_db_connection()
+    if not conn:
         return None
-
-
-def save_disk_cache(key: str, pool: dict):
+    cursor = conn.cursor()
     try:
-        os.makedirs(DISK_CACHE_DIR, exist_ok=True)
-        tmp = os.path.join(DISK_CACHE_DIR, key + ".tmp")
-        with open(tmp, "wb") as f:
-            pickle.dump(pool, f, protocol=pickle.HIGHEST_PROTOCOL)
-        os.replace(tmp, os.path.join(DISK_CACHE_DIR, key + ".pkl"))
-        files = sorted(glob.glob(os.path.join(DISK_CACHE_DIR, "*.pkl")), key=os.path.getmtime)
-        for old in files[:-DISK_CACHE_KEEP]:
-            os.remove(old)
-    except Exception as e:   # pickle 실패 포함 — 캐시 못 써도 분석은 계속
-        print(f"⚠️ 기준 데이터 디스크 캐시 저장 실패: {e}")
+        cursor.execute("SELECT pool_data FROM NORMAL_IMAGE_ANALYSIS WHERE image_id = %s AND ai_fingerprint = %s",
+                       (image_id, fingerprint))
+        row = cursor.fetchone()
+        return PoolUnpickler(io.BytesIO(bytes(row[0]))).load() if row else None
+    except Exception as e:
+        print(f"⚠️ 저장된 기준 사진 분석 결과를 읽지 못했습니다 (새로 분석): {e}")
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def save_pool(image_id: int, fingerprint: str, pool: dict):
+    conn = get_db_connection()
+    if not conn:
+        return
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """INSERT INTO NORMAL_IMAGE_ANALYSIS (image_id, ai_fingerprint, pool_data, created_at)
+               VALUES (%s, %s, %s, %s)
+               ON DUPLICATE KEY UPDATE pool_data = VALUES(pool_data), created_at = VALUES(created_at)""",
+            (image_id, fingerprint, pickle.dumps(pool, protocol=pickle.HIGHEST_PROTOCOL), datetime.now())
+        )
+        conn.commit()
+    except Exception as e:   # 저장하지 못해도 분석은 계속
+        print(f"⚠️ 기준 사진 분석 결과를 DB에 저장하지 못했습니다: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def read_normal_image(image_id: int) -> tuple:
+    """기준 이미지 (층 코드, 바이트, 확장자)"""
+    conn = get_db_connection()
+    if not conn:
+        raise RuntimeError("DB 연결 실패")
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """SELECT s.shelf_code, n.image_data, n.ext FROM NORMAL_IMAGE n
+               JOIN SHELF_INFO s ON n.shelf_id = s.shelf_id WHERE n.image_id = %s""",
+            (image_id,)
+        )
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+    if row is None:
+        raise RuntimeError(f"기준 이미지를 찾을 수 없습니다: {image_id}")
+    return row[0], bytes(row[1]), row[2]
+
+
+def build_pool(MakeResult, image_id: int) -> dict:
+    """기준 이미지를 임시 폴더에 꺼내 분석합니다."""
+    shelf_code, data, ext = read_normal_image(image_id)
+    with tempfile.TemporaryDirectory(prefix="normal_") as folder:
+        with open(os.path.join(folder, f"{shelf_code}_0{ext}"), "wb") as f:
+            f.write(data)
+        MakeResult.NORMAL_DIR = folder
+        pool = MakeResult.build_normal_reference_pool()
+    if not pool:
+        raise RuntimeError("정상 상태 기준 사진에서 책을 찾지 못했습니다. (기준 사진을 확인하세요)")
+    return pool
+
+
+def get_pool(MakeResult, cache: OrderedDict, image_id: int, fingerprint: str) -> tuple:
+    """기준 이미지의 분석 결과 (pool, 어디서 가져왔는지: "memory" / "db" / None = 새로 분석). 메모리 → DB → 새로 분석 순"""
+    if image_id in cache:
+        cache.move_to_end(image_id)
+        return cache[image_id], "memory"
+    pool = load_saved_pool(image_id, fingerprint)
+    cached = "db" if pool is not None else None
+    if pool is None:
+        pool = build_pool(MakeResult, image_id)
+        save_pool(image_id, fingerprint, pool)
+    cache[image_id] = pool
+    while len(cache) > CACHE_SIZE:
+        cache.popitem(last=False)
+    return pool, cached
 
 
 def main():
@@ -106,7 +184,7 @@ def main():
     sys.path.insert(0, ACH_DIR)
     import MakeResult                        # YOLO(app.pipeline import 시) 로드
     MakeResult.get_embedder()                # ResNet 로드 (첫 요청이 아니라 지금)
-    cache = OrderedDict()                    # reference_key → reference pool (메모리)
+    cache = OrderedDict()                    # image_id → reference pool (메모리)
     fingerprint = ai_fingerprint()
     send({"type": "ready", "load_seconds": round(time.perf_counter() - started, 1), "pid": os.getpid(),
           "ai_fingerprint": fingerprint})
@@ -117,24 +195,11 @@ def main():
         try:
             req = json.loads(line)
             t0 = time.perf_counter()
-            key = reference_key(req["normal_dir"], fingerprint)
-            if key in cache:
-                cached = "memory"
-                cache.move_to_end(key)
-            else:
-                pool = load_disk_cache(key)
-                cached = "disk" if pool is not None else None
-                if pool is None:
-                    MakeResult.NORMAL_DIR = req["normal_dir"]
-                    pool = MakeResult.build_normal_reference_pool()
-                    if not pool:
-                        raise RuntimeError("정상 상태 기준 사진에서 책을 찾지 못했습니다. (기준 사진을 확인하세요)")
-                    save_disk_cache(key, pool)
-                cache[key] = pool
-                while len(cache) > CACHE_SIZE:
-                    cache.popitem(last=False)
-            pool = cache[key]
+            pool, cached = get_pool(MakeResult, cache, req["image_id"], fingerprint)
             t1 = time.perf_counter()
+            if req.get("op") == "prepare":
+                send({"ok": True, "reference_cached": cached, "timing": {"reference_seconds": round(t1 - t0, 1)}})
+                continue
             result = MakeResult.analyze_image_to_dict(req["image_path"], pool)
             t2 = time.perf_counter()
             if result.get("status") != "success":
