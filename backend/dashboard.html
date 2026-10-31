@@ -6,7 +6,7 @@
     <title>VLM 지능형 서고 관리 플랫폼</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="/assets/common.js?v=20261031c"></script>
+    <script src="/assets/common.js?v=20261101"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
@@ -303,7 +303,8 @@
                 ? `원래 위치 <b>${escapeHtml(r.home_location)}</b>로 옮겨 주세요.` : "배가 위치가 지정되지 않은 도서입니다. 도서 정보를 확인해 주세요."}`,
             "상태이상":      r => `<b>${bookLabel(r)}</b> 도서는 대출 중(미비치)으로 되어 있는데 서가에서 발견되었습니다. 반납 처리를 확인해 주세요.`,
             "미분석":        r => `RFID로 읽은 등록번호 <b>${escapeHtml(r.reg_no)}</b>의 도서 정보가 없습니다. 등록 여부를 확인해 주세요.`,
-            "오배열":        r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 청구기호 순서에서 벗어나 있습니다. 제자리로 옮겨주세요.`,
+            "오배열":        r => `<b>${seqLabel(r)}</b> 책(${bookTitle(r)})의 자리가 잘못되었습니다. ${r.move_to
+                ? `<b>${escapeHtml(r.move_to)}</b>로 옮겨 주세요.` : "제자리로 옮겨 주세요."}`,
             "인식 실패":     r => `<b>${bookLabel(r)}</b> 도서의 RFID는 감지되었으나 영상에서 찾지 못했습니다. 서가에서 직접 확인해 주세요.`,
             "미확인 도서":   r => `<b>${seqLabel(r)}</b> 책을 어떤 도서인지 식별하지 못했습니다. 직접 확인해 주세요.`,
             "중복 인식":     r => `<b>${seqLabel(r)}</b> 책이 다른 위치의 책과 같은 도서(${bookLabel(r)})로 인식되었습니다. 직접 확인해 주세요.`,
@@ -1681,6 +1682,12 @@
                 }
                 listContainer.appendChild(section);
             });
+
+            // 책등 안 보임 알림을 처리해도, 권수가 달랐던 후보는 따로 알림이 없으므로 안내를 남겨 둠
+            const unknownBooks = payload.unknown_books;
+            if (unknownBooks && !unknownBooks.matched && !pending.some(r => r.issues[0].group === "physical")) {
+                listContainer.appendChild(buildUnknownBooksHint(unknownBooks));
+            }
 
             if (handled.length > 0) {
                 taskContainer.appendChild(buildSection("처리된 알림", "bg-emerald-100 text-emerald-700", handled, false));

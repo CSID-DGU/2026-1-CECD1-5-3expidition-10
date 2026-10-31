@@ -6,7 +6,7 @@
     <title>일일 순찰 리포트</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="/assets/common.js?v=20261031c"></script>
+    <script src="/assets/common.js?v=20261101"></script>
     <style>
         @media print {
             body { background: white; }
@@ -65,7 +65,7 @@
                 <tr class="border-t border-slate-100 ${handled ? "text-slate-400" : ""}">
                     <td class="py-2 pr-3 whitespace-nowrap"><i class="fa-solid ${group.icon} mr-1"></i>${group.title}</td>
                     <td class="py-2 pr-3 whitespace-nowrap">${seqLabel(row)}</td>
-                    <td class="py-2 pr-3">${row.issues[0].group === "foreign" ? bookTitle(row) : bookLabel(row)}${row.home_location ? `<div class="text-xs text-slate-500">원래 위치: ${escapeHtml(row.home_location)}</div>` : ""}</td>
+                    <td class="py-2 pr-3">${row.issues[0].group === "foreign" ? bookTitle(row) : bookLabel(row)}${row.home_location ? `<div class="text-xs text-slate-500">원래 위치: ${escapeHtml(row.home_location)}</div>` : ""}${row.move_to ? `<div class="text-xs text-slate-500">옮길 자리: ${escapeHtml(row.move_to)}</div>` : ""}</td>
                     <td class="py-2 pr-3">${labels}</td>
                     <td class="py-2 text-right whitespace-nowrap">${status}</td>
                 </tr>`;

@@ -281,8 +281,8 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
     - rfid_received: False면 RFID 없이 영상으로만 판정합니다. (읽지 못한 것이 아니라 받지 못한 것이므로 누락으로 보지 않음)
     - 인식된 책(vision row)마다 결과 1건 + Vision에 없는 책마다 결과 1건을 반환합니다.
       Vision 결과는 current_order = sequence_order, Vision에 없는 책은 current_order = -1.
-    - 책등이 안 보이는 책은 '알 수 없는 책'입니다. 그 수가 'RFID에만 있는 책' 수와 같으면 그 책들을 후보로 보아
-      인식 실패 대신 '책등 확인 필요'로 둡니다. (확정은 아님. 수가 다르면 인식 실패 그대로)
+    - 책등이 안 보이는 책은 '알 수 없는 책'입니다. 그런 책이 있으면 'RFID에만 있는 책'은 후보로 한 번에 안내하므로
+      인식 실패 대신 '책등 확인 필요'로 둡니다. (어떤 책인지 확정하지는 않음)
     """
     results = []
 
@@ -333,9 +333,6 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
     in_place_idx = longest_increasing_subsequence([expected_order_map[reg_no] for _, reg_no in placed])
     misplaced = {reg_no for i, (_, reg_no) in enumerate(placed) if i not in in_place_idx}
 
-    # 알 수 없는 책과 'RFID에만 있는 책'의 수가 같으면 그 책들이 후보
-    paper_matched = paper_count > 0 and paper_count == len(rfid_reg_nos - set(identified))
-
     # [4] 도서별 논리적 상태 판정
     for reg_no in set(identified) | rfid_reg_nos | set(master_data):
         in_master = reg_no in master_data
@@ -361,7 +358,7 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
                 logical_status = "RFID 미인식 (태그 점검 필요)"
         elif in_rfid:
             # RFID로는 서가에 있는 것이 확인되지만 영상에서 찾지 못한 경우 → 분실이 아니라 인식 실패
-            logical_status = PAPER_CANDIDATE_STATUS if paper_matched else "인식 실패 (육안 확인 필요)"
+            logical_status = PAPER_CANDIDATE_STATUS if paper_count > 0 else "인식 실패 (육안 확인 필요)"
         elif not rfid_received:
             logical_status = "인식 실패 (RFID 미수신, 육안 확인 필요)"
         else:
@@ -391,6 +388,29 @@ def find_unknown_book_candidates(results: List[dict], rfid_reg_nos: Set[str]) ->
     if not unknown_count or not candidates:
         return None
     return {"unknown_count": unknown_count, "candidates": candidates, "matched": unknown_count == len(candidates)}
+
+
+def misorder_target(reg_no: str, master_data: Dict[str, dict]) -> Optional[str]:
+    """
+    오배열 도서를 옮길 자리: "3번째 자리 (「앞 책」과 「뒤 책」 사이)". 층에 있어야 할 책 기준으로 세므로 대출 중인 책은 빠집니다.
+    청구기호를 보지 않아도 옆 책의 제목으로 자리를 찾을 수 있게 합니다. 이 층 도서가 아니면 None
+    """
+    expected = sorted((info['correct_order'], key) for key, info in master_data.items() if info['on_shelf'])
+    books = [key for _, key in expected]
+    if reg_no not in books:
+        return None
+    index = books.index(reg_no)
+    before = master_data[books[index - 1]]['title'] if index > 0 else None
+    after = master_data[books[index + 1]]['title'] if index + 1 < len(books) else None
+    if before and after:
+        place = f"「{before}」과(와) 「{after}」 사이"
+    elif after:
+        place = f"맨 왼쪽, 「{after}」 앞"
+    elif before:
+        place = f"맨 오른쪽, 「{before}」 뒤"
+    else:
+        return f"{index + 1}번째 자리"
+    return f"{index + 1}번째 자리 ({place})"
 
 
 def analyze_shelf_session(session_id: str, shelf_id: str, conn: mysql.connector.connection.MySQLConnection) -> Dict[str, Any]:

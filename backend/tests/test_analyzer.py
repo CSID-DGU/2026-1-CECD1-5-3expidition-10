@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analyzer import (PAPER_CANDIDATE_STATUS, UNKNOWN_PAPER_STATUS, assess_session_quality, classify_issues,
                       find_unknown_book_candidates, judge_shelf, longest_increasing_subsequence, merge_status,
-                      vision_book_id_to_reg_no)
+                      misorder_target, vision_book_id_to_reg_no)
 
 
 def book(order, on_shelf=True, tagged=True):
@@ -125,11 +125,20 @@ class UnknownPaperBookTest(unittest.TestCase):
         self.assertEqual(classify_issues(PAPER_CANDIDATE_STATUS, "normal"), [])
         self.assertEqual(classify_issues(UNKNOWN_PAPER_STATUS, "abnormal_paper"), [{"group": "physical", "label": "책등 안 보임"}])
 
-    def test_different_count_keeps_recognition_failure(self):
+    def test_different_count_is_also_one_group(self):
         rows = paper(seen("R1", "R2", "R3"), 2)[:2] + [seen("x", "y", "R4")[2]]
         result = status(judge_shelf(rows, {"R1", "R2", "R3", "R4"}, master(4)))
+        self.assertEqual(result["R2"], PAPER_CANDIDATE_STATUS)
+        self.assertEqual(result["R3"], PAPER_CANDIDATE_STATUS)
+
+    def test_without_paper_book_stays_recognition_failure(self):
+        result = status(judge_shelf(seen("R1"), {"R1", "R2"}, master(2)))
         self.assertEqual(result["R2"], "인식 실패 (육안 확인 필요)")
-        self.assertEqual(result["R3"], "인식 실패 (육안 확인 필요)")
+
+    def test_foreign_candidate_keeps_its_alert(self):
+        rows = paper(seen("R1", "R2"), 2)
+        result = status(judge_shelf(rows, {"R1", "R2", "OTHER"}, master(2)))
+        self.assertEqual(result["OTHER"], "오배가 (타 서가 도서)")
 
     def test_book_without_tag_stays_missing(self):
         rows = paper(seen("R1", "R2", "R3"), 2)
@@ -148,6 +157,14 @@ class UnknownPaperBookTest(unittest.TestCase):
         ]
         hint = find_unknown_book_candidates(results, {"R2"})
         self.assertEqual(hint, {"unknown_count": 1, "candidates": [{"reg_no": "R2", "title": "책"}], "matched": True})
+
+    def test_different_count_is_not_matched(self):
+        results = [
+            {"sequence_order": 2, "reg_no": "UNKNOWN", "title": None, "final_status": UNKNOWN_PAPER_STATUS},
+            {"sequence_order": -1, "reg_no": "R2", "title": "책", "final_status": PAPER_CANDIDATE_STATUS},
+            {"sequence_order": -1, "reg_no": "R3", "title": "책2", "final_status": PAPER_CANDIDATE_STATUS},
+        ]
+        self.assertFalse(find_unknown_book_candidates(results, {"R2", "R3"})["matched"])
 
     def test_no_candidates_means_no_hint(self):
         results = [{"sequence_order": 2, "reg_no": "UNKNOWN", "title": None, "final_status": UNKNOWN_PAPER_STATUS}]
@@ -174,6 +191,25 @@ class QualityTest(unittest.TestCase):
     def test_paper_books_do_not_ask_for_retake(self):
         rows = paper(paper(seen("R1", "R2", "R3"), 1), 2)
         self.assertTrue(assess_session_quality(rows, master(3))["is_reliable"])
+
+
+class MisorderTargetTest(unittest.TestCase):
+    def test_between_neighbors(self):
+        self.assertEqual(misorder_target("R3", master()), "3번째 자리 (「도서2」과(와) 「도서4」 사이)")
+
+    def test_ends_of_shelf(self):
+        self.assertEqual(misorder_target("R1", master()), "1번째 자리 (맨 왼쪽, 「도서2」 앞)")
+        self.assertEqual(misorder_target("R5", master()), "5번째 자리 (맨 오른쪽, 「도서4」 뒤)")
+
+    def test_loaned_book_is_not_counted(self):
+        books = master(R2={"on_shelf": False})
+        self.assertEqual(misorder_target("R3", books), "2번째 자리 (「도서1」과(와) 「도서4」 사이)")
+
+    def test_only_book(self):
+        self.assertEqual(misorder_target("R1", master(1)), "1번째 자리")
+
+    def test_other_floor_book(self):
+        self.assertIsNone(misorder_target("OTHER", master()))
 
 
 class MergeStatusTest(unittest.TestCase):

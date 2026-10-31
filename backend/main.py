@@ -10,7 +10,8 @@ from PIL import Image
 from pydantic import BaseModel
 from mysql.connector import Error
 from analyzer import (analyze_shelf_session, assess_session_quality, classify_issues, find_unknown_book_candidates,
-                      get_master_book_info, get_virtual_rfid_items, get_vision_id_map, vision_book_id_to_reg_no,
+                      get_master_book_info, get_virtual_rfid_items, get_vision_id_map, misorder_target,
+                      vision_book_id_to_reg_no,
                       RFID_INSERT_SQL)
 from auth import (SESSION_COOKIE, SESSION_HOURS, AuthContext, authenticate, clear_login_failures, client_ip,
                   context_from_session_token, create_session, delete_session, login_retry_seconds, optional_auth,
@@ -1019,17 +1020,19 @@ def load_session_detail(conn, session: dict, master_cache: dict, locations: dict
     try:
         cursor.execute(RESULTS_QUERY, (session["library_id"], sid))
         results = cursor.fetchall()
+        if shelf_id not in master_cache:
+            master_cache[shelf_id] = get_master_book_info(shelf_id, conn)
         for row in results:
             row["issues"] = classify_issues(row["final_status"], row["visual_status"])
             # 오배가 도서를 가져다 둘 곳 (RFID로 등록번호를 알기 때문에 찾을 수 있음)
             is_foreign = any(issue["group"] == "foreign" for issue in row["issues"])
             row["home_location"] = home_location_text(row, locations) if is_foreign else None
+            is_misorder = any(issue["group"] == "misorder" for issue in row["issues"])
+            row["move_to"] = misorder_target(row["reg_no"], master_cache[shelf_id]) if is_misorder else None
 
         # 인식 품질 평가 (인식 누락/오매칭이 많으면 개별 알림 대신 재촬영을 안내)
         cursor.execute("SELECT reg_no, sequence_order, confidence_score, visual_status FROM VISION_DATA WHERE session_id = %s", (sid,))
         vision_rows = cursor.fetchall()   # 같은 연결로 다음 조회를 하기 전에 결과를 모두 읽어야 함
-        if shelf_id not in master_cache:
-            master_cache[shelf_id] = get_master_book_info(shelf_id, conn)
         quality = assess_session_quality(vision_rows, master_cache[shelf_id])
 
         # 책등이 안 보이는 책과 대조할 후보 (RFID에는 있지만 사진에서 확인되지 않은 책)
