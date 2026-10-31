@@ -215,7 +215,7 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 - **`library_data.sql`과 구조 편집의 관계**: 도서관 · 도서는 실행할 때마다 파일 내용으로 갱신(upsert)하지만, 구역 · 책꽂이 · 층은 **그 도서관에 하나도 없을 때만** 넣습니다. 관리자가 대시보드에서 고친 구조는 `setup_db.py`를 다시 실행해도 되살아나거나 덮어써지지 않습니다.
 - **도서 목록 바꾸기**: `library_data.sql`의 `IDX_BO_TBL` · `BO_BOOK_TBL` · `BOOK_LOCATION`을 수정한 뒤 `python setup_db.py`를 실행합니다. 층 순서(`correct_order`)는 정상 기준 사진의 왼쪽부터 n번째 책과 같아야 합니다(AI의 `B00n`). 대출 시연은 `WORKING_STATUS`를 `BOL211O` 등으로 바꿉니다. (구조는 대시보드에서 편집)
 - **새 도서관 만들기**: `python manage_users.py create-library LIB003 "도서관 이름"` → 첫 관리자 계정이 만들어지고, 구조는 관리자가 대시보드에서 만듭니다.
-- **실제 도서관 시스템 연동**: `analyzer.py`의 `USE_MOCK_ILS = False`로 바꾸면 외부 API에서 서가 정보를 받아옵니다(연동 전).
+- **실제 도서관 시스템 연동**: `analyzer.py`의 `USE_MOCK_ILS = False`로 바꾸면 외부 API에서 서가 정보를 받아오는 구조로 설계했습니다.
 - **시각 기준**: 순찰 시각과 조치 시각은 서버(Python)의 로컬 시각으로 기록합니다. MySQL 컨테이너의 `NOW()`는 UTC라서 쓰지 않습니다.
 
 ---
