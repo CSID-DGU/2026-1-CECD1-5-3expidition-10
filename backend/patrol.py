@@ -86,7 +86,7 @@ def register_patrol_photo(conn, shelf: dict, data: bytes, captured_at: datetime,
     """
     순찰 사진 1장을 수신함(PATROL_PHOTO)에 분석 대기(WAITING)로 넣습니다. 커밋은 호출하는 쪽에서 합니다.
     shelf: fetch_shelf_location(s) 결과 (도서가 등록된 층만 받음)
-    같은 층에 같은 사진이 아직 분석 전(대기 · 진행 · 실패)으로 있으면 넣지 않고 None을 반환합니다.
+    같은 층에 같은 사진 · 같은 RFID 리더값이 아직 분석 전(대기 · 진행 · 실패)으로 있으면 넣지 않고 None을 반환합니다.
     (분석이 끝난 사진과 같은 사진은 다시 넣을 수 있음 — 같은 테스트 사진을 여러 번 분석하는 경우)
     rfid_items: 함께 스캔한 RFID 리더값. None이면 리더값 없음, []이면 리더가 읽은 태그 없음
     """
@@ -100,8 +100,10 @@ def register_patrol_photo(conn, shelf: dict, data: bytes, captured_at: datetime,
     rfid_tags = None if rfid_items is None else normalize_rfid_tags(rfid_items)
     cursor = conn.cursor()
     try:
-        cursor.execute("SELECT COUNT(*) FROM PATROL_PHOTO WHERE shelf_id = %s AND sha256 = %s AND status <> 'DONE'",
-                       (shelf["shelf_id"], sha256))
+        cursor.execute(
+            "SELECT COUNT(*) FROM PATROL_PHOTO WHERE shelf_id = %s AND sha256 = %s AND rfid_tags <=> %s AND status <> 'DONE'",
+            (shelf["shelf_id"], sha256, rfid_tags)
+        )
         if cursor.fetchone()[0] > 0:
             return None
         cursor.execute(

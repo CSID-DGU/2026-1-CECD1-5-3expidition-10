@@ -214,6 +214,7 @@
             <div id="placement-summary" class="text-xs text-slate-600"></div>
             <div id="placement-floors" class="flex flex-col gap-2"></div>
             <div class="flex items-center justify-end gap-2 pt-1">
+                <button type="button" id="placement-undo" onclick="undoPlacement()" class="hidden mr-auto text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">이전 배정으로 되돌리기</button>
                 <button type="button" onclick="refreshPlacement()" class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">다시 계산</button>
                 <button type="button" id="placement-apply" onclick="applyPlacement()" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">이 배정으로 저장</button>
             </div>
@@ -425,6 +426,16 @@
                 ? `<i class="fa-solid fa-circle-check"></i> 최근 순찰이 정상이고 미비치(대출 등) 도서가 없어, 최근 순찰 사진을 기준 사진으로 쓰기 좋습니다.`
                 : `<i class="fa-solid fa-circle-info"></i> 일괄 갱신 대상 아님: ${ref.reasons.map(escapeHtml).join(" · ")}`;
             box.appendChild(note);
+            if (level.reference_mismatch) box.appendChild(buildReferenceWarning(level.reference_mismatch));
+        }
+
+        // 기준 사진의 권수와 연결된 책 수가 달라 AI의 책 번호가 어긋날 수 있을 때
+        function buildReferenceWarning(mismatch) {
+            const box = document.createElement("div");
+            box.className = "w-full p-3 rounded-xl border-l-4 border-amber-500 bg-amber-50 text-amber-800 shadow-sm text-sm";
+            box.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> 기준 사진의 책(${mismatch.detected}권)과 이 층에 연결된 책(${mismatch.expected}권)의 수가 달라, 책이 다른 도서로 판정될 수 있습니다. `
+                + (ME.is_admin ? "기준 사진을 확인하고 <b>배가 위치 자동 배정</b>을 다시 실행해 주세요." : "관리자에게 알려 주세요.");
+            return box;
         }
 
         async function sendForm(url, method, file) {
@@ -996,6 +1007,9 @@
                 summary.innerHTML = placementSummary(plan);
                 floors.innerHTML = plan.floors.map(placementFloor).join("");
                 apply.disabled = plan.floors.length === 0;
+                const undo = document.getElementById('placement-undo');
+                undo.classList.toggle('hidden', !plan.previous);
+                undo.title = plan.previous ? `${formatTime(plan.previous.saved_at)}에 보관한 배정 (${plan.previous.book_count}권)` : "";
             } catch (e) {
                 summary.innerHTML = `<span class="text-rose-700">${escapeHtml(e.message)}</span>`;
             }
@@ -1012,6 +1026,19 @@
                 refreshLocations();
             } catch (e) {
                 alert(`❌ 저장 실패: ${e.message}`);
+            }
+        }
+
+        async function undoPlacement() {
+            if (!confirm("지금 배정을 이전 배정으로 바꿉니다. 다시 누르면 지금 배정으로 돌아옵니다.")) return;
+            try {
+                const result = await fetchJson(`${API_BASE}/book-placement/undo`, { method: "POST" });
+                alert(`✅ ${result.restored_count}권의 배가 위치를 되돌렸습니다.`);
+                document.getElementById('placement-floors').innerHTML = "";
+                refreshPlacement();
+                refreshLocations();
+            } catch (e) {
+                alert(`❌ 되돌리기 실패: ${e.message}`);
             }
         }
 
@@ -1627,6 +1654,9 @@
                 countLabel.innerText = "문제 없음";
                 countLabel.className = pill + "bg-emerald-100 text-emerald-700";
             }
+
+            const mismatch = shelfIndex[payload.shelf_id]?.level.reference_mismatch;
+            if (mismatch) taskContainer.appendChild(buildReferenceWarning(mismatch));
 
             // 인식 품질이 낮으면 재촬영 안내를 먼저 띄우고, 개별 판정은 접어서 참고용으로만 제공
             let listContainer = taskContainer;

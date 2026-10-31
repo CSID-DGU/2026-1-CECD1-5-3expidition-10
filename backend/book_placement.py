@@ -1,8 +1,9 @@
 import re
+from datetime import datetime
 from typing import Dict, List, Optional, Set
 
 from analyzer import ON_SHELF_STATUS
-from normal_images import get_normal_image_info, load_reference_slots
+from normal_images import get_normal_image_info, reference_book_count
 
 # 배가 위치 자동 배정: 도서 정보의 청구기호로 BOOK_LOCATION(층 · 순서)을 만듭니다. 책마다 위치를 넣지 않아도 됩니다.
 #  1. 도서를 청구기호순으로 나열합니다.
@@ -12,6 +13,7 @@ from normal_images import get_normal_image_info, load_reference_slots
 #       틀린 층의 권수를 고칩니다. (미리보기 → 적용)
 #  3. 미비치(대출 등) 도서는 기준 사진에 없으므로 권수에서 빼고, 청구기호 위치에 끼워 넣습니다.
 #  AI의 책 ID(기준 사진의 n번째)는 BOOK_LOCATION.reference_slot으로 연결합니다. (미비치 도서 때문에 correct_order와 다를 수 있음)
+#  저장 직전의 배정은 BOOK_LOCATION_PREVIOUS에 한 벌 보관해 되돌릴 수 있습니다. 되돌리면 지금 배정과 서로 바뀝니다.
 
 
 class PlacementNotReady(Exception):
@@ -68,6 +70,11 @@ def _assign_by_rfid(waiting: List[dict], tags: Set[str], detected: Optional[int]
     low, high = call_number_key(tagged[0]), call_number_key(tagged[-1])
     untagged = [b for b in waiting if not b["tagged"] and low <= call_number_key(b) <= high]
     members = sorted(tagged + untagged, key=call_number_key)
+    # 층 끝의 미태깅 도서: 사진 권수가 남으면 범위 바로 뒤의 미태깅 도서까지 이 층으로 봄
+    for book in (b for b in waiting if call_number_key(b) > high):
+        if book["tagged"] or detected is None or len(members) >= detected:
+            break
+        members.append(book)
     if detected is not None and len(members) != detected:
         warnings.append(f"기준 사진은 {detected}권, RFID 기준은 {len(members)}권입니다. 기준 사진을 확인해 주세요")
     return members, warnings
@@ -130,11 +137,6 @@ def plan_placement(books: List[dict], floors: List[dict], counts: Dict[str, int]
             "no_call_number": [_book_brief(b) for b in no_call_number]}
 
 
-def _reference_book_count(conn, image_id: int) -> Optional[int]:
-    slots = load_reference_slots(conn, image_id)
-    return None if slots is None else len(slots)
-
-
 def _latest_reader_tags(conn, shelf_id: str) -> Optional[Set[str]]:
     """그 층의 가장 최근 RFID 리더 세션에서 읽은 등록번호. 리더값이 없으면 None (가상 RFID는 BOOK_LOCATION으로 만든 값이라 쓰지 않음)"""
     cursor = conn.cursor()
@@ -178,7 +180,7 @@ def build_placement(conn, library_id: str, locations: Dict[str, dict], top_down:
             skipped += 1
             continue
         floors.append({"shelf_id": loc["shelf_id"], "location_label": loc["location_label"],
-                       "detected": _reference_book_count(conn, image["image_id"]),
+                       "detected": reference_book_count(conn, image["image_id"]),
                        "reader_tags": _latest_reader_tags(conn, loc["shelf_id"])})
 
     cursor = conn.cursor(dictionary=True)
@@ -195,7 +197,65 @@ def build_placement(conn, library_id: str, locations: Dict[str, dict], top_down:
                                      if current.get(row["book_key"]) != (floor["shelf_id"], row["correct_order"]))
     plan["skipped_floors"] = skipped
     plan["current_count"] = len(current)
+    plan["previous"] = previous_placement(conn, library_id)
     return plan
+
+
+def previous_placement(conn, library_id: str) -> Optional[dict]:
+    """되돌릴 수 있는 이전 배정 {"book_count", "saved_at"}. 없으면 None"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT COUNT(*), MAX(saved_at) FROM BOOK_LOCATION_PREVIOUS WHERE library_id = %s", (library_id,))
+        count, saved_at = cursor.fetchone()
+    finally:
+        cursor.close()
+    return {"book_count": count, "saved_at": saved_at} if count else None
+
+
+def _keep_current(cursor, library_id: str):
+    """지금 배정을 이전 배정으로 보관하고 비웁니다. 이전에 보관한 배정은 없어집니다."""
+    cursor.execute("DELETE FROM BOOK_LOCATION_PREVIOUS WHERE library_id = %s", (library_id,))
+    cursor.execute(
+        """INSERT INTO BOOK_LOCATION_PREVIOUS (library_id, book_key, shelf_id, correct_order, reference_slot, saved_at)
+           SELECT bk.library_id, loc.book_key, loc.shelf_id, loc.correct_order, loc.reference_slot, %s
+           FROM BOOK_LOCATION loc JOIN BO_BOOK_TBL bk ON bk.REC_KEY = loc.book_key WHERE bk.library_id = %s""",
+        (datetime.now(), library_id)
+    )
+    cursor.execute(
+        """DELETE loc FROM BOOK_LOCATION loc JOIN BO_BOOK_TBL bk ON bk.REC_KEY = loc.book_key
+           WHERE bk.library_id = %s""",
+        (library_id,)
+    )
+
+
+def undo_placement(conn, library_id: str) -> Optional[int]:
+    """
+    이전 배정으로 되돌립니다. 지금 배정이 이전 배정이 되므로 다시 누르면 원래대로 돌아옵니다.
+    복구한 도서 수를 반환. 이전 배정이 없으면 None. 그사이 없어진 층 · 도서는 건너뜁니다.
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """SELECT p.book_key, p.shelf_id, p.correct_order, p.reference_slot FROM BOOK_LOCATION_PREVIOUS p
+               JOIN BO_BOOK_TBL bk ON bk.REC_KEY = p.book_key
+               JOIN SHELF_INFO s ON s.shelf_id = p.shelf_id
+               WHERE p.library_id = %s""",
+            (library_id,)
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return None
+        _keep_current(cursor, library_id)
+        cursor.executemany(
+            "INSERT INTO BOOK_LOCATION (book_key, shelf_id, correct_order, reference_slot) VALUES (%s, %s, %s, %s)", rows
+        )
+        conn.commit()
+        return len(rows)
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
 
 
 def apply_placement(conn, library_id: str, plan: dict) -> int:
@@ -203,11 +263,7 @@ def apply_placement(conn, library_id: str, plan: dict) -> int:
     cursor = conn.cursor()
     saved = 0
     try:
-        cursor.execute(
-            """DELETE loc FROM BOOK_LOCATION loc JOIN BO_BOOK_TBL bk ON bk.REC_KEY = loc.book_key
-               WHERE bk.library_id = %s""",
-            (library_id,)
-        )
+        _keep_current(cursor, library_id)
         for floor in plan["floors"]:
             for row in floor["rows"]:
                 cursor.execute(

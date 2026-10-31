@@ -15,14 +15,15 @@ from analyzer import (analyze_shelf_session, assess_session_quality, classify_is
 from auth import (SESSION_COOKIE, SESSION_HOURS, AuthContext, authenticate, clear_login_failures, client_ip,
                   context_from_session_token, create_session, delete_session, login_retry_seconds, optional_auth,
                   record_login_failure, require_admin, require_user)
-from book_placement import PlacementNotReady, apply_placement, build_placement
+from book_placement import PlacementNotReady, apply_placement, build_placement, undo_placement
 from config import COOKIE_SECURE, SPINE_STORE_DIR
 from db import get_db_connection
 from image_check import detect_image_ext
 from locations import (build_location_tree, fetch_shelf_location, fetch_shelf_locations, fetch_space_skeleton,
                        location_label)
 from normal_images import (delete_normal_image, get_normal_image_bytes, get_normal_image_info,
-                           is_current_normal_image, load_reference_slots, restore_previous_normal_image, save_normal_image)
+                           is_current_normal_image, load_reference_slots, reference_book_count,
+                           restore_previous_normal_image, save_normal_image)
 from patrol import (BatchAlreadyRunning, PhotoRejected, attach_rfid_tags, list_patrol_photos, patrol_status,
                     recover_interrupted_photos, start_batch_analysis)
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
@@ -476,6 +477,18 @@ def reference_update_check(conn, loc: dict, latest: Optional[dict]) -> dict:
         return {"eligible": False, "reasons": ["이미 최근 순찰 사진이 기준 사진입니다"], "already_current": True}
     return {"eligible": not reasons, "reasons": reasons}
 
+def reference_mismatch(conn, loc: dict) -> Optional[dict]:
+    """
+    기준 사진의 권수가 그 층에 연결된 책 수와 다르면 {"detected", "expected"}, 같으면 None.
+    다르면 AI의 책 번호(기준 사진의 n번째)가 다른 책으로 연결됩니다. (기준 사진 교체, 기준 사진의 인식 누락 등)
+    """
+    if not loc["normal_image_id"] or not loc["book_count"]:
+        return None
+    detected = reference_book_count(conn, loc["normal_image_id"])
+    expected = loc["slot_count"] or loc["book_count"] - loc["loaned_count"]
+    return {"detected": detected, "expected": expected} if detected is not None and detected != expected else None
+
+
 def build_level_states(conn, library_id: str) -> dict:
     """
     도서관의 모든 층 위치 정보에 최근 순찰 요약, 상태(level_status), 기준 사진 갱신 후보 판정을 붙입니다.
@@ -504,6 +517,7 @@ def build_level_states(conn, library_id: str) -> dict:
             latest = load_session_detail(conn, latest_sessions[shelf_id], master_cache, locations)
             latest.pop("location")
         loc["has_normal_image"] = loc["normal_count"] > 0
+        loc["reference_mismatch"] = reference_mismatch(conn, loc)
         loc["reference_update"] = reference_update_check(conn, loc, latest)
         if latest:
             latest.pop("results")
@@ -699,6 +713,20 @@ def apply_book_placement(payload: BookPlacementRequest, ctx: AuthContext = Depen
         print(f"📚 [배가 위치 자동 배정] {ctx.library_id} {saved}권 by {ctx.username}")
         return {"saved_count": saved, "unassigned_count": len(plan["unassigned"]),
                 "no_call_number_count": len(plan["no_call_number"])}
+    finally:
+        conn.close()
+
+
+@app.post("/api/book-placement/undo")
+def undo_book_placement(ctx: AuthContext = Depends(require_admin)):
+    """[관리자] 자동 배정을 저장하기 전의 배가 위치로 되돌립니다. 다시 부르면 되돌리기 전으로 돌아옵니다."""
+    conn = require_db()
+    try:
+        restored = undo_placement(conn, ctx.library_id)
+        if restored is None:
+            raise HTTPException(status_code=404, detail="되돌릴 이전 배정이 없습니다.")
+        print(f"📚 [배가 위치 되돌리기] {ctx.library_id} {restored}권 by {ctx.username}")
+        return {"restored_count": restored}
     finally:
         conn.close()
 

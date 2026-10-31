@@ -40,6 +40,25 @@ def load_reference_slots(conn, image_id: int) -> Optional[list]:
     return PoolUnpickler(io.BytesIO(bytes(row[0]))).load()["slots"] if row else None
 
 
+_book_counts = {}   # (image_id, 분석 시각) → 권수. 층 상태를 볼 때마다 분석 결과를 풀지 않도록 기억해 둠
+
+
+def reference_book_count(conn, image_id: int) -> Optional[int]:
+    """기준 이미지에서 인식된 책 수. 아직 분석되지 않았으면 None"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT MAX(created_at) FROM NORMAL_IMAGE_ANALYSIS WHERE image_id = %s", (image_id,))
+        created_at = cursor.fetchone()[0]
+    finally:
+        cursor.close()
+    if created_at is None:
+        return None
+    key = (image_id, created_at)
+    if key not in _book_counts:
+        _book_counts[key] = len(load_reference_slots(conn, image_id))
+    return _book_counts[key]
+
+
 def _now() -> str:
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 

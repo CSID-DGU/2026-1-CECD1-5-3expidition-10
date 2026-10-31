@@ -65,6 +65,8 @@ ID는 도서관끼리 겹치지 않도록 **도서관 ID를 앞에 붙인 전역
 - 권수로 자르면 한 층의 인식 오차가 뒤 층까지 밀립니다. 그래서 바로 저장하지 않고 층별 첫 책 · 마지막 책과 기준 사진의 책등을 보여 주며, 관리자가 권수를 고쳐 다시 계산한 뒤 저장합니다.
 - 청구기호가 없는 책은 배정하지 않고 권수만 알려 줍니다. 층이 모자라 남은 책도 마찬가지입니다.
 - 분석되지 않은 기준 사진이 있으면 권수를 몰라 배정할 수 없습니다(409). 분석이 끝난 뒤 다시 시도합니다.
+- 기준 사진을 바꿔 권수가 달라지면 AI의 책 번호가 다른 책으로 연결될 수 있습니다. 서버가 기준 사진 권수와 연결된 책 수를 비교해(`main.reference_mismatch`, 층 정보의 `reference_mismatch`) 다르면 알림판과 '정상 상태' 탭에 경고를 띄웁니다.
+- 저장 직전의 배정은 `BOOK_LOCATION_PREVIOUS`에 한 벌 보관합니다. 되돌리면 지금 배정과 서로 바뀌므로 다시 되돌릴 수 있습니다. 그사이 없어진 층 · 도서는 건너뜁니다.
 - 시연 도서의 청구기호는 배가 순서대로 매긴 가상 값입니다. `setup_db.py`를 다시 실행하면 시연 4개 층의 배정은 `library_data.sql` 값으로 돌아갑니다.
 
 ### 구조 편집 (`structure.py`, 관리자)
@@ -253,6 +255,7 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 |---|---|---|
 | POST | `/api/book-placement/preview` | 배정안 계산 (저장 안 함). 본문 `{"top_down", "counts": {shelf_id: 권수}}` |
 | POST | `/api/book-placement/apply` | 같은 본문으로 다시 계산해 `BOOK_LOCATION`을 새로 만듦. 지난 순찰의 판정 결과는 바뀌지 않음 |
+| POST | `/api/book-placement/undo` | 저장 직전의 배정으로 되돌림. 이전 배정이 없으면 404 |
 | GET | `/api/book-placement/spine/{shelf_id}/{slot}` | 기준 사진의 n번째 책등 사진 (첫 책 · 마지막 책 확인용) |
 
 ### 사서 계정 관리 (`accounts.py`, 모두 [관리자], 로그인한 도서관의 계정만)
@@ -362,6 +365,7 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | `spine_archive.py` | 원본 사진·책등 크롭을 세션 보관소로 복사 (서버와 스크립트가 같이 사용) |
 | `setup_db.py` | DB를 최신 구조로 맞춤 (스키마, 추가 컬럼, 가상 데이터, 예전 구조 이전 · `--convert` 도서 구조 전환, 시연용 계정 · 기준 이미지) |
 | `reset_db.py` | 세션 데이터, 순찰 사진 수신함(DB), 보관 사진 초기화 |
+| `tests/` | 판정 · 배가 위치 배정 단위 테스트 (DB · AI 없이 실행, `python -m unittest discover backend/tests`) |
 | `test_full_pipeline.py` | AI 분석 없이, 고정 예시(`test_data/`의 A-01-3 사진과 AI 결과)를 서버에 보내 판정만 테스트 |
 | `docker-compose.yml`, `db_create/` | MySQL 컨테이너와 초기 스키마, 시연용 기준 이미지(`db_create/seed/`) |
 

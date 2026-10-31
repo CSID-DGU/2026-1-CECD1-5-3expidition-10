@@ -125,6 +125,17 @@ CREATE TABLE IF NOT EXISTS BOOK_LOCATION (
     FOREIGN KEY (shelf_id) REFERENCES SHELF_INFO(shelf_id)
 );
 
+-- 자동 배정 직전의 배가 위치 (도서관마다 한 벌, 되돌리기용). 예전 배정이므로 외래 키를 걸지 않습니다. (층 · 도서 삭제를 막지 않도록)
+CREATE TABLE IF NOT EXISTS BOOK_LOCATION_PREVIOUS (
+    library_id VARCHAR(10) NOT NULL COMMENT '도서관',
+    book_key BIGINT NOT NULL COMMENT '도서 (BO_BOOK_TBL.REC_KEY)',
+    shelf_id VARCHAR(50) NOT NULL COMMENT '배가된 층',
+    correct_order INT NOT NULL COMMENT '층 내 순서',
+    reference_slot INT NULL COMMENT '기준 사진의 몇 번째 책인지',
+    saved_at DATETIME NOT NULL COMMENT '보관한 시각',
+    PRIMARY KEY (library_id, book_key)
+);
+
 -- 10. 층별 정상 상태 기준 이미지 (현재 1장 + 이전 이미지 이력). 이미지 자체를 DB에 저장
 CREATE TABLE IF NOT EXISTS NORMAL_IMAGE (
     image_id INT AUTO_INCREMENT PRIMARY KEY,

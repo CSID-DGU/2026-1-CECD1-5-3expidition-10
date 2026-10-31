@@ -30,6 +30,8 @@ SHELF_LOCATION_QUERY = """
         (SELECT COUNT(*) FROM BOOK_LOCATION m WHERE m.shelf_id = s.shelf_id) AS book_count,
         (SELECT COUNT(*) FROM BOOK_LOCATION m JOIN BO_BOOK_TBL bk ON bk.REC_KEY = m.book_key
            WHERE m.shelf_id = s.shelf_id AND bk.WORKING_STATUS <> 'BOL112N') AS loaned_count,
+        (SELECT COUNT(m.reference_slot) FROM BOOK_LOCATION m WHERE m.shelf_id = s.shelf_id) AS slot_count,
+        (SELECT n.image_id FROM NORMAL_IMAGE n WHERE n.shelf_id = s.shelf_id AND n.is_current = 1 LIMIT 1) AS normal_image_id,
         (SELECT COUNT(*) FROM NORMAL_IMAGE n WHERE n.shelf_id = s.shelf_id AND n.is_current = 1) AS normal_count,
         (SELECT COUNT(*) FROM NORMAL_IMAGE n WHERE n.shelf_id = s.shelf_id AND n.is_current = 0) AS normal_history_count,
         (SELECT COUNT(*) FROM SHELF_SESSION ss WHERE ss.shelf_id = s.shelf_id) AS session_count
