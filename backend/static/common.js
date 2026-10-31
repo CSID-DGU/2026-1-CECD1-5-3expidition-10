@@ -115,6 +115,11 @@ function bookLabel(row) {
     return row.title ? `${id} 「${escapeHtml(row.title)}」` : id;
 }
 
+// 서명만 표시 (서명이 없는 도서는 등록번호)
+function bookTitle(row) {
+    return row.title ? `「${escapeHtml(row.title)}」` : bookLabel(row);
+}
+
 // 책등이 안 보이는 책과 대조한 RFID 후보 안내 문구 (서버 analyzer.find_unknown_book_candidates). 어떤 책인지 확정하지는 않음
 function unknownBooksMessage(hint) {
     const books = hint.candidates.map(c => `<b>${bookLabel(c)}</b>`).join(", ");

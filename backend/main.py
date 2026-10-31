@@ -942,16 +942,25 @@ RESULTS_QUERY = """
         IFNULL(v.spine_img_path, '') AS spine_img_path,
         r.action_status,
         r.action_time,
-        u.display_name AS action_by_name
+        u.display_name AS action_by_name,
+        home.shelf_id AS home_shelf_id,
+        home.correct_order AS home_order
     FROM ANALYSIS_RESULT r
     LEFT JOIN VISION_DATA v
         ON r.session_id = v.session_id AND r.current_order = v.sequence_order
     LEFT JOIN BO_BOOK_TBL bk ON bk.library_id = %s AND bk.REG_NO = r.reg_no
     LEFT JOIN IDX_BO_TBL b ON b.REC_KEY = bk.SPECIES_KEY
+    LEFT JOIN BOOK_LOCATION home ON home.book_key = bk.REC_KEY
     LEFT JOIN APP_USER u ON r.action_by = u.user_id
     WHERE r.session_id = %s
     ORDER BY r.current_order ASC, r.reg_no ASC
 """
+
+
+def home_location_text(row: dict, locations: dict) -> Optional[str]:
+    """도서의 원래 위치 ("A구역 2번 책꽂이 3층 5번째"). 배가 위치가 지정되지 않은 도서는 None"""
+    loc = locations.get(row["home_shelf_id"])
+    return f"{location_label(loc)} {row['home_order']}번째" if loc else None
 
 
 def summarize_results(results: list) -> dict:
@@ -984,6 +993,9 @@ def load_session_detail(conn, session: dict, master_cache: dict, locations: dict
         results = cursor.fetchall()
         for row in results:
             row["issues"] = classify_issues(row["final_status"], row["visual_status"])
+            # 오배가 도서를 가져다 둘 곳 (RFID로 등록번호를 알기 때문에 찾을 수 있음)
+            is_foreign = any(issue["group"] == "foreign" for issue in row["issues"])
+            row["home_location"] = home_location_text(row, locations) if is_foreign else None
 
         # 인식 품질 평가 (인식 누락/오매칭이 많으면 개별 알림 대신 재촬영을 안내)
         cursor.execute("SELECT reg_no, sequence_order, confidence_score, visual_status FROM VISION_DATA WHERE session_id = %s", (sid,))
