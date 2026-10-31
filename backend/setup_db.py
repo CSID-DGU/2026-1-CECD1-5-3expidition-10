@@ -66,6 +66,7 @@ ADDED_COLUMNS = [
     ("PATROL_PHOTO", "rfid_tags",
      "MEDIUMTEXT NULL COMMENT 'RFID 리더값 JSON [{\"reg_no\", \"rssi\"}]. NULL = 리더값 없음, [] = 리더가 읽은 태그 없음'"),
     ("APP_USER", "deleted_at", "DATETIME NULL COMMENT '삭제한 시각 (조치 기록이 있어 이력용으로 남긴 계정. 아이디는 <아이디>#<user_id>로 바뀜)'"),
+    ("BOOK_LOCATION", "reference_slot", "INT NULL COMMENT '기준 사진의 몇 번째 책인지 (자동 배정한 층, 기준 사진에 없던 미비치 도서는 NULL)'"),
 ]
 # 이름을 바꾼 컬럼 (테이블, 예전 이름, 새 이름, 컬럼 정의) — 도서 ID가 등록번호가 되면서 book_id → reg_no
 RENAMED_COLUMNS = [

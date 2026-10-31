@@ -1,5 +1,7 @@
 import hashlib
+import io
 import os
+import pickle
 import shutil
 from datetime import datetime
 from typing import Optional
@@ -14,6 +16,28 @@ from image_check import detect_image_ext
 NORMAL_WORK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".normal_work")
 HISTORY_KEEP = 10   # 층마다 보관할 이전 기준 이미지 수 (오래된 것부터 삭제)
 INFO_COLUMNS = "image_id, shelf_id, ext, width, height, sha256, source, source_session_id, created_at, created_by"
+
+
+class PoolUnpickler(pickle.Unpickler):
+    """DB에서 꺼낸 분석 결과를 읽습니다. numpy 배열 · 숫자만 허용해, DB 내용이 바뀌어도 코드가 실행되지 않게 합니다."""
+    ALLOWED = {"dtype", "ndarray", "_frombuffer", "_reconstruct", "scalar"}
+
+    def find_class(self, module, name):
+        if module.split(".")[0] == "numpy" and name in self.ALLOWED:
+            return super().find_class(module, name)
+        raise pickle.UnpicklingError(f"허용하지 않는 형식: {module}.{name}")
+
+
+def load_reference_slots(conn, image_id: int) -> Optional[list]:
+    """기준 이미지의 분석 결과에서 책 목록(슬롯, 왼쪽부터). 아직 분석되지 않았으면 None"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT pool_data FROM NORMAL_IMAGE_ANALYSIS WHERE image_id = %s ORDER BY created_at DESC LIMIT 1",
+                       (image_id,))
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+    return PoolUnpickler(io.BytesIO(bytes(row[0]))).load()["slots"] if row else None
 
 
 def _now() -> str:

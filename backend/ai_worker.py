@@ -32,6 +32,7 @@ from collections import OrderedDict
 from datetime import datetime
 
 from db import get_db_connection
+from normal_images import PoolUnpickler
 
 PROTOCOL_PREFIX = "@@AI@@"
 ACH_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ach"))
@@ -77,16 +78,6 @@ def ai_fingerprint() -> str:
                 for chunk in iter(lambda: f.read(1 << 20), b""):
                     digest.update(chunk)
     return digest.hexdigest()[:16]
-
-
-class PoolUnpickler(pickle.Unpickler):
-    """DB에서 꺼낸 분석 결과를 읽습니다. numpy 배열 · 숫자만 허용해, DB 내용이 바뀌어도 코드가 실행되지 않게 합니다."""
-    ALLOWED = {"dtype", "ndarray", "_frombuffer", "_reconstruct", "scalar"}
-
-    def find_class(self, module, name):
-        if module.split(".")[0] == "numpy" and name in self.ALLOWED:
-            return super().find_class(module, name)
-        raise pickle.UnpicklingError(f"허용하지 않는 형식: {module}.{name}")
 
 
 def load_saved_pool(image_id: int, fingerprint: str):

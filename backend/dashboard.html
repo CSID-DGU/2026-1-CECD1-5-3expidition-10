@@ -126,6 +126,10 @@
                         <i class="fa-solid fa-images"></i> <span id="bulk-ref-text">기준 사진 일괄 갱신</span>
                     </button>
                     <span class="flex-1 min-w-[200px] text-[11px] text-slate-400">최근 순찰이 정상이고 미비치(대출 등) 도서가 없는 층(<span class="text-sky-600">●</span>)만 최근 순찰 사진으로 바꿉니다</span>
+                    <button onclick="openPlacementModal()"
+                            class="shrink-0 whitespace-nowrap text-xs px-2.5 py-1.5 rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrow-down-1-9"></i> 배가 위치 자동 배정
+                    </button>
                 </div>
             </div>
 
@@ -191,6 +195,29 @@
                 <button type="submit" id="form-modal-submit" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">저장</button>
             </div>
         </form>
+    </div>
+
+    <!-- 배가 위치 자동 배정 (관리자) -->
+    <div id="placement-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closePlacementModal()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-5 flex flex-col gap-3 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-arrow-down-1-9 text-indigo-500"></i> 배가 위치 자동 배정</h3>
+                <button type="button" onclick="closePlacementModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">청구기호순 도서 목록을 기준 사진의 권수만큼 잘라 층에 배정합니다. RFID 리더값이 있는 층은 읽힌 책으로 정합니다. 층마다 <b>첫 책 · 마지막 책</b>이 사진과 맞는지 보고, 틀리면 권수를 고친 뒤 다시 계산하세요. 한 층이 틀리면 뒤 층이 모두 밀립니다.</p>
+            <label class="text-xs font-semibold text-slate-600 flex items-center gap-2">책꽂이 안의 배가 순서
+                <select id="placement-order" onchange="refreshPlacement()" class="font-normal text-sm border border-slate-200 rounded-lg px-2 py-1">
+                    <option value="top">위층부터</option>
+                    <option value="bottom">아래층부터</option>
+                </select>
+            </label>
+            <div id="placement-summary" class="text-xs text-slate-600"></div>
+            <div id="placement-floors" class="flex flex-col gap-2"></div>
+            <div class="flex items-center justify-end gap-2 pt-1">
+                <button type="button" onclick="refreshPlacement()" class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">다시 계산</button>
+                <button type="button" id="placement-apply" onclick="applyPlacement()" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">이 배정으로 저장</button>
+            </div>
+        </div>
     </div>
 
     <!-- 사서 계정 관리 (관리자) -->
@@ -298,7 +325,7 @@
             lb.classList.add('flex');
         }
 
-        document.addEventListener("keydown", e => { if (e.key === "Escape") { closeFormModal(); closeAccountModal(); } });
+        document.addEventListener("keydown", e => { if (e.key === "Escape") { closeFormModal(); closeAccountModal(); closePlacementModal(); } });
 
         function closeLightbox() {
             const lb = document.getElementById('lightbox');
@@ -895,6 +922,108 @@
 
         function closeAccountModal() {
             const modal = document.getElementById('account-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // ===================== 배가 위치 자동 배정 (관리자) =====================
+        function placementRequest() {
+            const counts = {};
+            document.querySelectorAll("#placement-floors input[data-shelf]").forEach(input => {
+                if (input.value !== "") counts[input.dataset.shelf] = Number(input.value);
+            });
+            return { top_down: document.getElementById('placement-order').value === "top", counts };
+        }
+
+        function placementBook(label, shelfId, book) {
+            if (!book) return `<div class="text-xs text-slate-400">${label}: 없음</div>`;
+            const url = `${API_BASE}/book-placement/spine/${encodeURIComponent(shelfId)}/${book.slot}`;
+            return `
+                <div class="flex items-center gap-2 min-w-0">
+                    <img src="${url}" alt="" onerror="this.classList.add('invisible')" class="h-20 w-10 object-contain bg-slate-100 rounded shrink-0">
+                    <div class="min-w-0 text-xs">
+                        <div class="text-slate-400">${label} · 기준 사진 ${book.slot}번째</div>
+                        <div class="font-semibold text-slate-700 break-words">${escapeHtml(book.title)}</div>
+                        <div class="text-slate-400">${escapeHtml(book.call_no)} · ${escapeHtml(book.reg_no)}</div>
+                    </div>
+                </div>`;
+        }
+
+        function placementFloor(floor) {
+            const count = floor.source === "RFID"
+                ? `<span class="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">RFID ${floor.book_count}권</span>`
+                : `<label class="text-xs text-slate-500 flex items-center gap-1">권수
+                       <input type="number" min="0" value="${floor.count}" data-shelf="${escapeHtml(floor.shelf_id)}" class="w-16 border border-slate-200 rounded px-1.5 py-0.5 text-sm">
+                   </label>
+                   ${floor.count === floor.detected ? "" : `<span class="text-[11px] text-amber-700">사진 인식 ${floor.detected ?? "-"}권</span>`}`;
+            const away = floor.away_count ? `<span class="text-[11px] text-slate-500">미비치 ${floor.away_count}권 포함</span>` : "";
+            const warnings = floor.warnings.map(w => `<div class="text-[11px] text-rose-700"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(w)}</div>`).join("");
+            return `
+                <div class="border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <b class="text-sm text-slate-700">${escapeHtml(floor.location_label)}</b>
+                        ${count}${away}
+                        <span class="ml-auto text-[11px] text-slate-400">지금과 다른 책 ${floor.changed_count}권</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        ${placementBook("첫 책", floor.shelf_id, floor.first)}
+                        ${placementBook("마지막 책", floor.shelf_id, floor.last)}
+                    </div>
+                    ${warnings}
+                </div>`;
+        }
+
+        function placementSummary(plan) {
+            const total = plan.floors.reduce((sum, f) => sum + f.book_count + f.away_count, 0);
+            const notes = [`${plan.floors.length}개 층에 ${total}권 배정`];
+            if (plan.unassigned.length) notes.push(`<span class="text-rose-700">배정되지 못한 책 ${plan.unassigned.length}권</span>`);
+            if (plan.no_call_number.length) notes.push(`<span class="text-rose-700">청구기호가 없어 뺀 책 ${plan.no_call_number.length}권</span>`);
+            if (plan.skipped_floors) notes.push(`기준 사진이 없어 건너뛴 층 ${plan.skipped_floors}곳`);
+            return notes.join(" · ");
+        }
+
+        async function refreshPlacement() {
+            const floors = document.getElementById('placement-floors');
+            const summary = document.getElementById('placement-summary');
+            const apply = document.getElementById('placement-apply');
+            apply.disabled = true;
+            summary.textContent = "계산 중...";
+            try {
+                const plan = await fetchJson(`${API_BASE}/book-placement/preview`, {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(placementRequest()),
+                });
+                summary.innerHTML = placementSummary(plan);
+                floors.innerHTML = plan.floors.map(placementFloor).join("");
+                apply.disabled = plan.floors.length === 0;
+            } catch (e) {
+                summary.innerHTML = `<span class="text-rose-700">${escapeHtml(e.message)}</span>`;
+            }
+        }
+
+        async function applyPlacement() {
+            if (!confirm("이 배정으로 배가 위치를 다시 만듭니다. 다음 분석부터 적용되고, 지난 순찰 결과는 바뀌지 않습니다.")) return;
+            try {
+                const result = await fetchJson(`${API_BASE}/book-placement/apply`, {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(placementRequest()),
+                });
+                alert(`✅ ${result.saved_count}권의 배가 위치를 저장했습니다.`);
+                closePlacementModal();
+                refreshLocations();
+            } catch (e) {
+                alert(`❌ 저장 실패: ${e.message}`);
+            }
+        }
+
+        function openPlacementModal() {
+            document.getElementById('placement-floors').innerHTML = "";
+            const modal = document.getElementById('placement-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            refreshPlacement();
+        }
+
+        function closePlacementModal() {
+            const modal = document.getElementById('placement-modal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
         }

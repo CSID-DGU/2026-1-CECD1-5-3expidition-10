@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS BOOK_LOCATION (
     book_key BIGINT PRIMARY KEY COMMENT '도서 (BO_BOOK_TBL.REC_KEY)',
     shelf_id VARCHAR(50) NOT NULL COMMENT '배가된 층',
     correct_order INT NOT NULL COMMENT '층 내 올바른 순서 (왼쪽부터 1번)',
+    reference_slot INT NULL COMMENT '기준 사진의 몇 번째 책인지 (자동 배정한 층, 기준 사진에 없던 미비치 도서는 NULL)',
     UNIQUE INDEX uq_location_order (shelf_id, correct_order),
     FOREIGN KEY (book_key) REFERENCES BO_BOOK_TBL(REC_KEY),
     FOREIGN KEY (shelf_id) REFERENCES SHELF_INFO(shelf_id)

@@ -14,7 +14,7 @@ ON_SHELF_STATUS = "BOL112N"
 
 # 층에 배정된 도서 + 서명 + 비치 · 태깅 여부. 도서 ID는 등록번호(REG_NO)
 MASTER_BOOKS_QUERY = """
-    SELECT bk.REG_NO AS reg_no, sp.TITLE AS title, loc.correct_order,
+    SELECT bk.REG_NO AS reg_no, sp.TITLE AS title, loc.correct_order, loc.reference_slot,
            bk.WORKING_STATUS AS working_status, bk.WORKNO IS NOT NULL AND bk.WORKNO <> '' AS tagged
     FROM BOOK_LOCATION loc
     JOIN BO_BOOK_TBL bk ON bk.REC_KEY = loc.book_key
@@ -97,8 +97,11 @@ PAPER_VISUAL_STATUS = "abnormal_paper"
 
 
 def get_vision_id_map(shelf_id: str, conn: mysql.connector.connection.MySQLConnection) -> Dict[int, str]:
-    """층의 correct_order → 등록번호 (Vision AI의 B00n 변환용)"""
-    return {row['correct_order']: row['reg_no'] for row in _fetch_master_rows(shelf_id, conn)}
+    """기준 사진의 n번째 → 등록번호 (Vision AI의 B00n 변환용). 자동 배정한 층은 reference_slot, 아니면 correct_order"""
+    rows = _fetch_master_rows(shelf_id, conn)
+    if any(row['reference_slot'] for row in rows):
+        return {row['reference_slot']: row['reg_no'] for row in rows if row['reference_slot']}
+    return {row['correct_order']: row['reg_no'] for row in rows}
 
 
 def vision_book_id_to_reg_no(raw_book_id: Optional[str], order_map: Dict[int, str], visual_status: Optional[str] = None) -> str:

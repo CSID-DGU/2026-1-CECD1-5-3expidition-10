@@ -315,3 +315,10 @@ INSERT INTO BOOK_LOCATION (book_key, shelf_id, correct_order) VALUES
     (900000078, 'LIB001-B-01-2', 21),
     (900000079, 'LIB001-B-01-2', 22),
     (900000081, 'LIB001-B-01-2', 23);
+
+-- 가상 청구기호: 실제 서가의 책들이 청구기호순이 아니므로, 지금 배정된 위치에 맞춰 층 순서(A-01-3 → A-02-3 → A-03-3 → B-01-2)와 층 안 순서대로 매겼습니다.
+--    분류기호는 층마다 정한 값 + 층 안 순서, 도서기호는 층 안 순서입니다. (배가 위치 자동 배정 시연용, 책의 실제 분류와는 무관)
+UPDATE BO_BOOK_TBL bk JOIN BOOK_LOCATION loc ON loc.book_key = bk.REC_KEY
+SET bk.CLASS_NO = CONCAT(CASE loc.shelf_id WHEN 'LIB001-A-01-3' THEN '500' WHEN 'LIB001-A-02-3' THEN '566' WHEN 'LIB001-A-03-3' THEN '569' ELSE '590' END, '.', LPAD(loc.correct_order, 2, '0')),
+    bk.BOOK_CODE = CONCAT('가', LPAD(loc.correct_order, 3, '0'))
+WHERE bk.library_id = 'LIB001' AND loc.shelf_id IN ('LIB001-A-01-3', 'LIB001-A-02-3', 'LIB001-A-03-3', 'LIB001-B-01-2');

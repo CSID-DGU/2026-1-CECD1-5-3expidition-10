@@ -1,10 +1,12 @@
+import io
 import os
 import shutil
 from datetime import datetime, date, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from PIL import Image
 from pydantic import BaseModel
 from mysql.connector import Error
 from analyzer import (analyze_shelf_session, assess_session_quality, classify_issues, find_unknown_book_candidates,
@@ -13,13 +15,14 @@ from analyzer import (analyze_shelf_session, assess_session_quality, classify_is
 from auth import (SESSION_COOKIE, SESSION_HOURS, AuthContext, authenticate, clear_login_failures, client_ip,
                   context_from_session_token, create_session, delete_session, login_retry_seconds, optional_auth,
                   record_login_failure, require_admin, require_user)
+from book_placement import PlacementNotReady, apply_placement, build_placement
 from config import COOKIE_SECURE, SPINE_STORE_DIR
 from db import get_db_connection
 from image_check import detect_image_ext
 from locations import (build_location_tree, fetch_shelf_location, fetch_shelf_locations, fetch_space_skeleton,
                        location_label)
 from normal_images import (delete_normal_image, get_normal_image_bytes, get_normal_image_info,
-                           is_current_normal_image, restore_previous_normal_image, save_normal_image)
+                           is_current_normal_image, load_reference_slots, restore_previous_normal_image, save_normal_image)
 from patrol import (BatchAlreadyRunning, PhotoRejected, attach_rfid_tags, list_patrol_photos, patrol_status,
                     recover_interrupted_photos, start_batch_analysis)
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
@@ -660,6 +663,63 @@ def bulk_update_normal_images(payload: BulkReferenceUpdateRequest, ctx: AuthCont
         return {"dry_run": payload.dry_run, "targets": [e for _, e in targets], "updated": updated, "skipped": skipped}
     finally:
         conn.close()
+
+class BookPlacementRequest(BaseModel):
+    top_down: bool = True              # 책꽂이 안에서 위층부터 꽂는 도서관
+    counts: Dict[str, int] = {}        # 관리자가 고친 층별 권수 (shelf_id → 권수)
+
+
+def placement_or_error(conn, ctx: AuthContext, payload: BookPlacementRequest) -> dict:
+    if any(n < 0 for n in payload.counts.values()):
+        raise HTTPException(status_code=400, detail="권수는 0 이상이어야 합니다.")
+    try:
+        return build_placement(conn, ctx.library_id, fetch_shelf_locations(conn, ctx.library_id),
+                               payload.top_down, payload.counts)
+    except PlacementNotReady as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+
+@app.post("/api/book-placement/preview")
+def preview_book_placement(payload: BookPlacementRequest, ctx: AuthContext = Depends(require_admin)):
+    """[관리자] 청구기호와 기준 사진 권수(또는 RFID 리더값)로 계산한 배가 위치 배정안. 저장하지 않습니다."""
+    conn = require_db()
+    try:
+        return placement_or_error(conn, ctx, payload)
+    finally:
+        conn.close()
+
+
+@app.post("/api/book-placement/apply")
+def apply_book_placement(payload: BookPlacementRequest, ctx: AuthContext = Depends(require_admin)):
+    """[관리자] 배정안대로 도서관의 배가 위치(BOOK_LOCATION)를 다시 만듭니다. 지난 순찰의 판정 결과는 바뀌지 않습니다."""
+    conn = require_db()
+    try:
+        plan = placement_or_error(conn, ctx, payload)
+        saved = apply_placement(conn, ctx.library_id, plan)
+        print(f"📚 [배가 위치 자동 배정] {ctx.library_id} {saved}권 by {ctx.username}")
+        return {"saved_count": saved, "unassigned_count": len(plan["unassigned"]),
+                "no_call_number_count": len(plan["no_call_number"])}
+    finally:
+        conn.close()
+
+
+@app.get("/api/book-placement/spine/{shelf_id}/{slot}")
+def get_reference_spine(shelf_id: str = Path(...), slot: int = Path(..., ge=1), ctx: AuthContext = Depends(require_admin)):
+    """[관리자] 기준 사진의 n번째 책등 (배정안의 첫 책 · 마지막 책과 비교하는 용도)"""
+    conn = require_db()
+    try:
+        if fetch_shelf_location(conn, shelf_id, ctx.library_id) is None:
+            raise HTTPException(status_code=404, detail="층을 찾을 수 없습니다.")
+        image = get_normal_image_info(conn, shelf_id)
+        slots = load_reference_slots(conn, image["image_id"]) if image else None
+    finally:
+        conn.close()
+    if not slots or slot > len(slots):
+        raise HTTPException(status_code=404, detail="기준 사진에 그 순서의 책이 없습니다.")
+    buffer = io.BytesIO()
+    Image.fromarray(slots[slot - 1]["crop"]).save(buffer, format="JPEG", quality=85)
+    return Response(content=buffer.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
 
 @app.get("/api/library-map")
 def get_library_map(ctx: AuthContext = Depends(require_user)):
