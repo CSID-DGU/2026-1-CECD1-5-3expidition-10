@@ -117,6 +117,8 @@ python setup_db.py     # 항상 실행: 계정 · 시연용 기준 이미지를 
 >   옛 데이터가 필요 없으면 `docker compose up -d` 뒤 `python setup_db.py`만 실행하면 됩니다.
 
 ### 외부에서 접속하기 (Cloudflare Tunnel)
+> 서버 실행부터 터널, 문제 해결까지의 전체 순서는 [서버 실행 · 외부 접속 설명서](docs/server_guide.md)에 있습니다.
+
 노트북 · 스마트폰 등 다른 기기에서는 Cloudflare Quick Tunnel로 접속합니다. 포트를 열 필요가 없고 계정 · 도메인 없이 HTTPS 주소가 만들어집니다.
 
 1. `backend/.env`의 시연 계정 비밀번호를 기본값이 아닌 값으로 바꾸고 `COOKIE_SECURE=1`로 둡니다. (DB의 비밀번호도 함께 바꿔야 합니다)
