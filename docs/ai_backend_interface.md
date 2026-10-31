@@ -1,6 +1,6 @@
 # AI ↔ 백엔드 연동 규칙과 변경점 (AI 파트 팀원용)
 
-백엔드(`backend/`)가 AI 분석(`ach/JsonTesting.py`)을 어떻게 호출하고 결과를 어떻게 읽는지, 그리고 AI 코드를 수정하거나 새 버전으로 교체할 때 **지켜 주셔야 할 것**을 정리한 문서입니다.
+백엔드(`backend/`)가 AI 분석(`ach/MakeResult.py`)을 어떻게 호출하고 결과를 어떻게 읽는지, 그리고 AI 코드를 수정하거나 새 버전으로 교체할 때 **지켜 주셔야 할 것**을 정리한 문서입니다.
 `feat/backend` 브랜치 기준이며, 백엔드 · 대시보드 전체 사용법은 [루트 README](../README.md)와 [backend/README.md](../backend/README.md)를 참고하세요.
 
 ---
@@ -11,15 +11,15 @@
 예전에는 사진 한 장마다 `python JsonTesting.py`를 새로 실행해서, 매번 모델을 다시 불러오고 그 층의 기준 사진도 처음부터 다시 분석했습니다(사진 1장에 약 30~100초).
 지금은 서버가 **AI 작업 프로세스 하나를 띄워 두고 계속 씁니다.**
 
-1. 서버를 켜면 작업 프로세스가 `ach/`에서 `JsonTesting`을 import하고 `BookshelfAnalyzerAPI()`를 만들어 둡니다(YOLO · ResNet을 이때 한 번만 로드).
+1. 서버를 켜면 작업 프로세스가 `ach/`에서 `MakeResult`를 import합니다(YOLO · ResNet을 이때 한 번만 로드).
 2. 분석 요청 1건(= 책꽂이 한 층의 사진 1장)마다:
    1. 백엔드가 그 층의 **정상 상태 기준 이미지**를 DB에서 꺼내 `backend/.normal_work/<층 코드>_0.jpg`(예: `A-01-3_0.jpg`) 한 장으로 씁니다. (5절 참고)
-   2. 작업 프로세스가 기준 데이터를 준비합니다. 처음 보는 기준 사진이면 `JsonTesting.NORMAL_DIR`을 그 폴더로 바꾸고 `_build_temp_database()`로 만들고, 결과를 메모리와 `backend/.ai_cache/`(디스크)에 저장합니다. 같은 기준 사진이면 저장해 둔 것을 씁니다.
+   2. 작업 프로세스가 기준 데이터를 준비합니다. 메모리나 DB(`NORMAL_IMAGE_ANALYSIS`)에 저장된 것이 있으면 그대로 씁니다. 없으면 DB의 기준 이미지를 임시 폴더에 꺼내 `MakeResult.NORMAL_DIR`로 지정하고 `build_normal_reference_pool()`로 만든 뒤 메모리와 DB에 저장합니다. 기준 사진은 등록 · 교체 · 지정 · 되돌리는 순간과 서버를 켤 때 미리 분석해 두므로, 보통은 저장된 것을 씁니다.
    3. `analyze_image_to_dict(<세션 보관소의 원본 사진 경로>)`로 분석하고, 결과를 `ach/vision_output/test_results.json`에도 남깁니다(예전과 같은 형식, 확인용).
    4. 백엔드가 `vision_items`를 DB에 저장하고 판정합니다. 각 항목의 `spine_img_file`을 `ach/pipeline_outputs/`에서 찾아 세션 보관소로 복사합니다(대시보드의 책등 사진).
 3. 분석이 실패하면(`status`가 `success`가 아니거나 예외) 에러 내용을 사서 화면에 보여 줍니다. 작업 프로세스가 죽거나 10분 안에 응답이 없으면 다음 요청 때 새로 띄웁니다. AI 출력(print)은 `backend/logs/ai_worker.log`에 쌓입니다.
 
-> ⚠️ **AI 코드(`JsonTesting.py`, `app/*.py`)나 모델 파일을 바꾸면 서버를 다시 시작해야 반영됩니다.** 작업 프로세스가 처음 import한 코드를 계속 쓰기 때문입니다. 기준 데이터 캐시는 AI 코드 · 모델 파일이 바뀌면 자동으로 새로 만들어집니다(키에 코드 내용 · 모델 파일 크기와 수정 시각이 들어감).
+> ⚠️ **AI 코드(`MakeResult.py`, `app/*.py`)나 모델 파일을 바꾸면 서버를 다시 시작해야 반영됩니다.** 작업 프로세스가 처음 import한 코드를 계속 쓰기 때문입니다. 저장된 기준 데이터는 AI 코드 · 모델 파일이 바뀌면 서버를 켤 때 자동으로 새로 만들어집니다(키에 코드와 `app/models.py`가 불러오는 모델 파일의 내용이 들어감).
 >
 > 서버는 더 이상 `ach/dataset/test/`를 비우거나 사진을 넣지 않습니다. 그 폴더는 `JsonTesting.py`를 직접 실행할 때만 씁니다.
 
@@ -74,15 +74,16 @@ ach/dataset/test/ 를 비우고 분석할 사진 1장을 uploaded_target.jpg(또
 | 필드 | 의미 | 백엔드에서의 사용 |
 |---|---|---|
 | `sequence_order` | 왼쪽부터 1, 2, 3 … (인식된 책의 순서) | 오배열 판정(LIS), 책등 사진 연결 |
-| `book_id` | 정상 기준 이미지에서 매칭된 책 ID (`B001` ~) · 못 찾으면 `"UNKNOWN"` | 도서 정보(`BOOK_MASTER`)와 대조 |
+| `book_id` | 정상 기준 이미지에서 매칭된 책 ID (`B001` ~) · 못 찾으면 `"UNKNOWN"` | 그 층의 n번째 도서의 **등록번호**로 바꿔 `VISION_DATA.reg_no`에 저장한 뒤 도서 정보와 대조. `abnormal_paper`이면 이 값을 쓰지 않고 `UNKNOWN`으로 저장 |
 | `confidence_score` | 매칭 유사도 (0 ~ 1) | 0.5 미만이면 '미확인 도서', 같은 책 중복 시 높은 쪽 채택 |
 | `visual_status` | `normal` / `abnormal_upside` / `abnormal_tilted` / `abnormal_stack` / `abnormal_paper` | 외형 이상 알림 |
 | `spine_img_file` | `pipeline_outputs` 안의 책등 크롭 파일명 | 대시보드 책등 사진 |
 
 ### 책 ID 규칙
 - `book_id`는 **정상 기준 이미지에서 왼쪽부터 n번째로 인식된 책 = `B00n`** 입니다.
-- 이 번호가 도서 정보(`backend/db_create/library_data.sql`의 `BOOK_MASTER`)의 순서와 맞아야 합니다. 현재 A구역 1번 책꽂이 3층에는 실제 서가 순서대로 13권(B001 = 언리얼 엔진 4 … B013 = 지텔프)이 등록되어 있습니다.
-- 그래서 **정상 기준 이미지에서 책 하나라도 인식되지 않으면 그 뒤 ID가 한 칸씩 밀립니다.** (지금 v5 모델은 정상 이미지에서 12권을 인식해서 실제로 한 칸씩 밀려 있음)
+- 백엔드는 `B00n`을 그 층의 배가 순서 n번째 도서(`BOOK_LOCATION.correct_order = n`)의 **등록번호**(`BO_BOOK_TBL.REG_NO`)로 바꿔 저장합니다(2026-10-25, 멘토 자료 기준 도서 구조). AI 쪽은 지금처럼 `B00n`을 돌려주면 되고, 바꿀 것은 없습니다.
+- 그래서 이 번호가 도서 정보(`backend/db_create/library_data.sql`의 `BOOK_LOCATION`)의 순서와 맞아야 합니다. 현재 A구역 1번 책꽂이 3층에는 실제 서가 순서대로 13권(B001 = 언리얼 엔진 4 … B013 = 지텔프)이 배정되어 있습니다.
+- **정상 기준 이미지에서 책 하나라도 인식되지 않으면 그 뒤 ID가 한 칸씩 밀려 다른 책의 등록번호와 연결됩니다.**
 
 ## 3. 백엔드 작업 중 `ach/JsonTesting.py`에 추가한 변경 (3곳)
 
@@ -119,9 +120,9 @@ ach/dataset/test/ 를 비우고 분석할 사진 1장을 uploaded_target.jpg(또
 ## 5-1. 로그인 · 층 ID 변경 (테스트할 때 알아야 할 것)
 
 - 대시보드는 이제 **로그인**이 필요합니다. 시연용 계정: 도서관 ID `LIB001`, 아이디 `admin`, 비밀번호 `admin1234` (관리자). 일반 사서는 `librarian` / `lib1234`.
-- 층 ID 앞에 도서관 ID가 붙었습니다: `A-01-3` → **`LIB001-A-01-3`**. 화면과 수신함 파일 이름에는 지금처럼 `A-01-3`으로 보입니다.
-- 서버 API를 스크립트로 부를 때도 사서 로그인이 필요합니다. `run_master.py`, `backend/test_full_pipeline.py`는 시연용 계정(`librarian` / `lib1234`)으로 먼저 로그인합니다.
-- 코드를 받은 뒤에는 `cd backend && python setup_db.py`를 한 번 실행해 주세요(계정 · 기준 이미지 생성, 예전 DB 자동 이전).
+- 층 ID 앞에 도서관 ID가 붙었습니다: `A-01-3` → **`LIB001-A-01-3`**. 화면과 순찰 사진 파일 이름에는 지금처럼 `A-01-3`으로 보입니다.
+- 서버 API를 스크립트로 부를 때도 사서 로그인이 필요합니다. `backend/test_full_pipeline.py`는 시연용 계정(`librarian` / `lib1234`)으로 먼저 로그인합니다.
+- 코드를 받은 뒤에는 `cd backend && python setup_db.py`를 한 번 실행해 주세요(계정 · 기준 이미지 생성, 예전 DB 자동 이전). 예전 도서 구조(`BOOK_MASTER`)의 DB라는 안내가 나오면 `python setup_db.py --convert`로 전환합니다(예전 분석 기록 삭제, 자동 백업).
 
 ## 6. AI 수정 후 백엔드와 함께 테스트하는 방법
 
@@ -132,7 +133,7 @@ docker-compose up -d                     # MySQL (처음 한 번)
 python setup_db.py                       # DB 구조 · 가상 데이터 · 계정 · 기준 이미지 준비 (매번 실행해도 안전)
 python -m uvicorn main:app --reload      # 서버
 # 다른 터미널 (루트)
-cp -r LIB001 backend/patrol_inbox/    # 테스트용 순찰 사진 4장(A-01-3, A-02-3, A-03-3, B-01-2)을 수신함에 복사
+python backend/load_patrol_photos.py LIB001    # 테스트용 순찰 사진 4장(A-01-3, A-02-3, A-03-3, B-01-2)을 로봇 대신 수신함(DB)에 넣음
 ```
 http://127.0.0.1:8000 에서 `LIB001` / `admin` / `admin1234`로 로그인한 뒤 **순찰 사진 일괄 분석**을 누르고, 분석이 끝나면 '확인이 필요한 층' 목록이나 서가 선택에서 층을 골라 결과를 확인합니다. 층별 사진 · 도서 수는 루트 README의 '테스트용 순찰 사진' 표를 참고하세요. 실패하면 순찰 바의 '실패'에 마우스를 올리면 AI 에러 내용이 보입니다.
 
@@ -144,5 +145,5 @@ http://127.0.0.1:8000 에서 `LIB001` / `admin` / `admin1234`로 로그인한 �
 2. **1:1 매칭** — 지금은 책마다 가장 비슷한 기준 책을 따로 고르므로 여러 권이 같은 책으로 매칭됩니다(백엔드는 '중복 인식'으로 표시). 전체를 한 번에 1:1로 짝짓는 방식(헝가리안 알고리즘)이면 중복이 사라집니다.
 3. **입출력 경로** — 4절의 차이를 어느 쪽으로 맞출지.
 4. **`requirements.txt`** — `KJI` 브랜치에도 같은 이름의 파일이 저장소 맨 위에 있어, 나중에 main에서 합칠 때 하나로 정리가 필요합니다.
-5. **모델 버전** — `feat/backend`의 GitHub 버전 `ach/app/models.py`는 아직 `yolo11l_seg_v3_best.pt`를 가리킵니다. 백엔드 테스트는 로컬에서 `yolo11m_seg_v5.pt`(KJI 브랜치)로 했습니다. 어느 모델을 쓸지 정해 주세요.
+5. **모델 버전** — 지금 `ach/app/models.py`는 `yolo26l_1280_v3.pt`를 씁니다. 모델을 바꾸면 이 문서와 루트 README도 함께 고쳐 주세요.
 6. **실행 결과물의 git 관리** — `ach/pipeline_outputs/*`, `ach/vision_output/test_results.json`은 분석할 때마다 바뀌는 결과물인데 git에 올라가 있어 매번 '수정됨'으로 뜹니다. `.gitignore`로 빼는 것을 제안합니다.
