@@ -14,7 +14,7 @@ ON_SHELF_STATUS = "BOL112N"
 
 # 층에 배정된 도서 + 서명 + 비치 · 태깅 여부. 도서 ID는 등록번호(REG_NO)
 MASTER_BOOKS_QUERY = """
-    SELECT bk.REG_NO AS reg_no, sp.TITLE AS title, loc.correct_order, loc.reference_slot,
+    SELECT bk.REG_NO AS reg_no, sp.TITLE AS title, loc.correct_order, loc.reference_slot, bk.SPECIES_KEY AS species_key,
            bk.WORKING_STATUS AS working_status, bk.WORKNO IS NOT NULL AND bk.WORKNO <> '' AS tagged
     FROM BOOK_LOCATION loc
     JOIN BO_BOOK_TBL bk ON bk.REC_KEY = loc.book_key
@@ -40,6 +40,7 @@ def get_master_book_info(shelf_id: str, conn: mysql.connector.connection.MySQLCo
             row['reg_no']: {
                 "original_shelf": shelf_id,
                 "title": row['title'],
+                "species_key": row['species_key'],
                 "on_shelf": row['working_status'] == ON_SHELF_STATUS,
                 "tagged": bool(row['tagged']),
                 "correct_order": row['correct_order']
@@ -60,6 +61,7 @@ def get_master_book_info(shelf_id: str, conn: mysql.connector.connection.MySQLCo
             formatted_data[item.get("reg_no")] = {
                 "original_shelf": item.get("shelf_loc"),
                 "title": item.get("title"),
+                "species_key": item.get("species_key"),
                 "on_shelf": item.get("working_status") == ON_SHELF_STATUS,
                 "tagged": bool(item.get("workno")),
                 "correct_order": item.get("order_num")
@@ -92,7 +94,7 @@ def get_virtual_rfid_items(shelf_id: str, conn: mysql.connector.connection.MySQL
 VISION_BOOK_ID_RE = re.compile(r"^B(\d+)$")
 
 # 책등이 안 보이는 책: 사진으로는 어떤 책인지 알 수 없으므로 AI가 위치로 추정한 book_id를 쓰지 않습니다.
-# 어떤 책인지는 RFID 대조로 후보만 보여 줍니다. (judge_shelf, find_unknown_book_candidates)
+# 어떤 책인지는 RFID 대조로 후보만 보여 줍니다. 어떤 책인지 알 수 없는 인식(미확인 도서)도 함께 대조합니다. (judge_shelf, find_unknown_book_candidates)
 PAPER_VISUAL_STATUS = "abnormal_paper"
 
 
@@ -162,9 +164,9 @@ LOGICAL_ISSUE_RULES = [
 
 # 책등이 안 보이는 책의 판정 문구. 외형 알림('책등 안 보임') 한 건으로만 표시됩니다.
 UNKNOWN_PAPER_STATUS = "알 수 없는 책 (책등 안 보임)"
-# RFID 대조 결과 그 책일 가능성이 높은 후보. 알림은 책등 안 보임 쪽에 한 묶음으로 보여 주므로 따로 만들지 않습니다.
+# 알 수 없는 책과 대조할 후보. 알림은 후보 안내 한 묶음으로 보여 주므로 따로 만들지 않습니다.
 # (위 LOGICAL_ISSUE_RULES의 키워드가 들어가면 알림이 생기므로 주의)
-PAPER_CANDIDATE_STATUS = "책등 확인 필요 (RFID로만 감지)"
+UNKNOWN_CANDIDATE_STATUS = "위치 확인 필요 (RFID로만 감지)"
 
 
 def classify_issues(final_status: str, visual_status: str) -> List[dict]:
@@ -268,6 +270,23 @@ def assess_session_quality(vision_rows: List[dict], master_data: Dict[str, dict]
     }
 
 
+def orders_with_copies(reg_nos: List[str], expected_order_map: Dict[str, int], master_data: Dict[str, dict]) -> List[int]:
+    """
+    왼쪽부터 인식된 책의 기대 순서. 같은 종의 복본은 서로 바꿔 꽂혀도 오배열이 아니므로,
+    복본끼리는 기대 순서를 왼쪽부터 다시 나눠 줍니다.
+    """
+    orders = [expected_order_map[reg_no] for reg_no in reg_nos]
+    copies = {}
+    for i, reg_no in enumerate(reg_nos):
+        species = master_data[reg_no].get('species_key')
+        if species is not None:
+            copies.setdefault(species, []).append(i)
+    for positions in copies.values():
+        for i, order in zip(positions, sorted(orders[i] for i in positions)):
+            orders[i] = order
+    return orders
+
+
 def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Dict[str, dict],
                 unregistered_ids: Set[str] = frozenset(), rfid_received: bool = True) -> List[dict]:
     """
@@ -281,25 +300,26 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
     - rfid_received: False면 RFID 없이 영상으로만 판정합니다. (읽지 못한 것이 아니라 받지 못한 것이므로 누락으로 보지 않음)
     - 인식된 책(vision row)마다 결과 1건 + Vision에 없는 책마다 결과 1건을 반환합니다.
       Vision 결과는 current_order = sequence_order, Vision에 없는 책은 current_order = -1.
-    - 책등이 안 보이는 책은 '알 수 없는 책'입니다. 그런 책이 있으면 'RFID에만 있는 책'은 후보로 한 번에 안내하므로
-      인식 실패 대신 '책등 확인 필요'로 둡니다. (어떤 책인지 확정하지는 않음)
+    - 어떤 책인지 알 수 없는 인식(책등 안 보임, 미확인 도서)이 있으면 'RFID에만 있는 책'은 후보로 한 번에 안내하므로
+      인식 실패 대신 '위치 확인 필요'로 둡니다. (어떤 책인지 확정하지는 않음)
     """
     results = []
 
     # [1] Vision 인식 결과 정리: 확정 가능한 매칭 / 미확인 / 중복 인식 분리
     identified = {}     # reg_no -> 대표 vision row (같은 책으로 여러 번 매칭되면 유사도가 가장 높은 것)
     duplicates = []
-    paper_count = 0     # 책등이 안 보이는 책(알 수 없는 책) 수
+    unknown_count = 0   # 어떤 책인지 알 수 없는 인식 수 (책등 안 보임 + 미확인 도서)
     for row in sorted(vision_rows, key=lambda r: -(r.get('confidence_score') or 0.0)):
         reg_no = row.get('reg_no')
         if row.get('visual_status') == PAPER_VISUAL_STATUS and not is_identified(row):
-            paper_count += 1
+            unknown_count += 1
             results.append({
                 "reg_no": "UNKNOWN",
                 "current_order": row['sequence_order'],
                 "final_status": UNKNOWN_PAPER_STATUS
             })
         elif not is_identified(row):
+            unknown_count += 1
             results.append({
                 "reg_no": "UNKNOWN",
                 "current_order": row['sequence_order'],
@@ -330,7 +350,8 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
         (row['sequence_order'], reg_no) for reg_no, row in identified.items()
         if reg_no in expected_order_map
     )
-    in_place_idx = longest_increasing_subsequence([expected_order_map[reg_no] for _, reg_no in placed])
+    in_place_idx = longest_increasing_subsequence(
+        orders_with_copies([reg_no for _, reg_no in placed], expected_order_map, master_data))
     misplaced = {reg_no for i, (_, reg_no) in enumerate(placed) if i not in in_place_idx}
 
     # [4] 도서별 논리적 상태 판정
@@ -358,7 +379,7 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
                 logical_status = "RFID 미인식 (태그 점검 필요)"
         elif in_rfid:
             # RFID로는 서가에 있는 것이 확인되지만 영상에서 찾지 못한 경우 → 분실이 아니라 인식 실패
-            logical_status = PAPER_CANDIDATE_STATUS if paper_count > 0 else "인식 실패 (육안 확인 필요)"
+            logical_status = UNKNOWN_CANDIDATE_STATUS if unknown_count > 0 else "인식 실패 (육안 확인 필요)"
         elif not rfid_received:
             logical_status = "인식 실패 (RFID 미수신, 육안 확인 필요)"
         else:
@@ -378,11 +399,11 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
 
 def find_unknown_book_candidates(results: List[dict], rfid_reg_nos: Set[str]) -> Optional[dict]:
     """
-    알 수 없는 책(책등 안 보임)과 대조할 후보: RFID로 읽혔지만 사진에서 확인되지 않은 책.
-    results는 세션 결과 조회 행(sequence_order, reg_no, title, final_status)입니다. 대상이 없으면 None.
+    어떤 책인지 알 수 없는 인식(책등 안 보임, 미확인 도서)과 대조할 후보: RFID로 읽혔지만 사진에서 확인되지 않은 책.
+    results는 세션 결과 조회 행(sequence_order, reg_no, title)입니다. 대상이 없으면 None.
     matched: 권수가 같아 그 책일 가능성이 높음 / False면 참고용
     """
-    unknown_count = sum(1 for row in results if row['final_status'] == UNKNOWN_PAPER_STATUS)
+    unknown_count = sum(1 for row in results if row['reg_no'] == "UNKNOWN")
     candidates = [{"reg_no": row['reg_no'], "title": row['title']} for row in results
                   if row['sequence_order'] == -1 and row['reg_no'] in rfid_reg_nos]
     if not unknown_count or not candidates:

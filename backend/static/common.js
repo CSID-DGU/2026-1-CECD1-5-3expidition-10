@@ -120,12 +120,12 @@ function bookTitle(row) {
     return row.title ? `「${escapeHtml(row.title)}」` : bookLabel(row);
 }
 
-// 책등이 안 보이는 책과 대조한 RFID 후보 안내 문구 (서버 analyzer.find_unknown_book_candidates). 어떤 책인지 확정하지는 않음
+// 어떤 책인지 알 수 없는 책과 대조한 RFID 후보 안내 문구 (서버 analyzer.find_unknown_book_candidates). 어떤 책인지 확정하지는 않음
 function unknownBooksMessage(hint) {
     const books = hint.candidates.map(c => `<b>${bookLabel(c)}</b>`).join(", ");
     return hint.matched
-        ? `RFID로는 아래 책이 있지만 사진에서 확인되지 않았습니다: ${books} — 책등이 안 보이는 책일 가능성이 높습니다.`
-        : `참고: RFID로는 아래 책이 있지만 사진에서 확인되지 않았습니다: ${books} — 책등이 안 보이는 책 ${hint.unknown_count}권과 권수가 달라 어떤 책인지 특정할 수 없습니다. 직접 확인해 주세요.`;
+        ? `RFID로는 아래 책이 있지만 사진에서 확인되지 않았습니다: ${books} — 어떤 책인지 알 수 없는 책 ${hint.unknown_count}권일 가능성이 높습니다.`
+        : `참고: RFID로는 아래 책이 있지만 사진에서 확인되지 않았습니다: ${books} — 어떤 책인지 알 수 없는 책 ${hint.unknown_count}권과 권수가 달라 특정할 수 없습니다. 직접 확인해 주세요.`;
 }
 
 function spineUrl(path) {

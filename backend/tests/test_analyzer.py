@@ -4,7 +4,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from analyzer import (PAPER_CANDIDATE_STATUS, UNKNOWN_PAPER_STATUS, assess_session_quality, classify_issues,
+from analyzer import (UNKNOWN_CANDIDATE_STATUS, UNKNOWN_PAPER_STATUS, assess_session_quality, classify_issues,
                       find_unknown_book_candidates, judge_shelf, longest_increasing_subsequence, merge_status,
                       misorder_target, vision_book_id_to_reg_no)
 
@@ -114,26 +114,48 @@ class JudgeShelfTest(unittest.TestCase):
         self.assertEqual(by_order[2], "중복 인식 (육안 확인 필요)")
 
 
+class CopiesTest(unittest.TestCase):
+    def test_swapped_copies_are_not_misorder(self):
+        books = master(4, R2={"species_key": 7}, R3={"species_key": 7})
+        result = status(judge_shelf(seen("R1", "R3", "R2", "R4"), set(books), books))
+        self.assertEqual(set(result.values()), {"정상"})
+
+    def test_swapped_different_books_are_misorder(self):
+        books = master(4)
+        result = status(judge_shelf(seen("R1", "R3", "R2", "R4"), set(books), books))
+        self.assertIn("오배열", result.values())
+
+    def test_copy_far_from_its_place_is_still_misorder(self):
+        books = master(5, R1={"species_key": 7}, R2={"species_key": 7})
+        result = status(judge_shelf(seen("R1", "R3", "R4", "R5", "R2"), set(books), books))
+        self.assertEqual([r for r, s in result.items() if s == "오배열"], ["R2"])
+
+
 class UnknownPaperBookTest(unittest.TestCase):
     def test_same_count_groups_candidate(self):
         rows = paper(seen("R1", "R2", "R3"), 2)
         results = judge_shelf(rows, {"R1", "R2", "R3"}, master(3))
-        self.assertEqual(status(results)["R2"], PAPER_CANDIDATE_STATUS)
+        self.assertEqual(status(results)["R2"], UNKNOWN_CANDIDATE_STATUS)
         self.assertIn(UNKNOWN_PAPER_STATUS, [r["final_status"] for r in results])
 
     def test_candidate_makes_no_alert_and_unknown_makes_one(self):
-        self.assertEqual(classify_issues(PAPER_CANDIDATE_STATUS, "normal"), [])
+        self.assertEqual(classify_issues(UNKNOWN_CANDIDATE_STATUS, "normal"), [])
         self.assertEqual(classify_issues(UNKNOWN_PAPER_STATUS, "abnormal_paper"), [{"group": "physical", "label": "책등 안 보임"}])
 
     def test_different_count_is_also_one_group(self):
         rows = paper(seen("R1", "R2", "R3"), 2)[:2] + [seen("x", "y", "R4")[2]]
         result = status(judge_shelf(rows, {"R1", "R2", "R3", "R4"}, master(4)))
-        self.assertEqual(result["R2"], PAPER_CANDIDATE_STATUS)
-        self.assertEqual(result["R3"], PAPER_CANDIDATE_STATUS)
+        self.assertEqual(result["R2"], UNKNOWN_CANDIDATE_STATUS)
+        self.assertEqual(result["R3"], UNKNOWN_CANDIDATE_STATUS)
 
-    def test_without_paper_book_stays_recognition_failure(self):
+    def test_without_unknown_book_stays_recognition_failure(self):
         result = status(judge_shelf(seen("R1"), {"R1", "R2"}, master(2)))
         self.assertEqual(result["R2"], "인식 실패 (육안 확인 필요)")
+
+    def test_unidentified_book_also_groups(self):
+        rows = seen("R1", "R2")
+        rows[1].update(reg_no="UNKNOWN", confidence_score=0.2)
+        self.assertEqual(status(judge_shelf(rows, {"R1", "R2"}, master(2)))["R2"], UNKNOWN_CANDIDATE_STATUS)
 
     def test_foreign_candidate_keeps_its_alert(self):
         rows = paper(seen("R1", "R2"), 2)
@@ -152,17 +174,29 @@ class UnknownPaperBookTest(unittest.TestCase):
     def test_candidates_list(self):
         results = [
             {"sequence_order": 2, "reg_no": "UNKNOWN", "title": None, "final_status": UNKNOWN_PAPER_STATUS},
-            {"sequence_order": -1, "reg_no": "R2", "title": "책", "final_status": PAPER_CANDIDATE_STATUS},
+            {"sequence_order": -1, "reg_no": "R2", "title": "책", "final_status": UNKNOWN_CANDIDATE_STATUS},
             {"sequence_order": -1, "reg_no": "R9", "title": "빠진 책", "final_status": "누락 (분실 위험)"},
         ]
         hint = find_unknown_book_candidates(results, {"R2"})
         self.assertEqual(hint, {"unknown_count": 1, "candidates": [{"reg_no": "R2", "title": "책"}], "matched": True})
 
+    def test_paper_and_unidentified_count_together(self):
+        """A-03-3: 책등 안 보임 1권 + 미확인 1권 = RFID에만 있는 책 2권"""
+        results = [
+            {"sequence_order": 5, "reg_no": "UNKNOWN", "title": None, "final_status": UNKNOWN_PAPER_STATUS},
+            {"sequence_order": 13, "reg_no": "UNKNOWN", "title": None, "final_status": "미확인 도서 (육안 확인 필요)"},
+            {"sequence_order": -1, "reg_no": "R2", "title": "책", "final_status": UNKNOWN_CANDIDATE_STATUS},
+            {"sequence_order": -1, "reg_no": "R3", "title": "책2", "final_status": UNKNOWN_CANDIDATE_STATUS},
+        ]
+        hint = find_unknown_book_candidates(results, {"R2", "R3"})
+        self.assertEqual(hint["unknown_count"], 2)
+        self.assertTrue(hint["matched"])
+
     def test_different_count_is_not_matched(self):
         results = [
             {"sequence_order": 2, "reg_no": "UNKNOWN", "title": None, "final_status": UNKNOWN_PAPER_STATUS},
-            {"sequence_order": -1, "reg_no": "R2", "title": "책", "final_status": PAPER_CANDIDATE_STATUS},
-            {"sequence_order": -1, "reg_no": "R3", "title": "책2", "final_status": PAPER_CANDIDATE_STATUS},
+            {"sequence_order": -1, "reg_no": "R2", "title": "책", "final_status": UNKNOWN_CANDIDATE_STATUS},
+            {"sequence_order": -1, "reg_no": "R3", "title": "책2", "final_status": UNKNOWN_CANDIDATE_STATUS},
         ]
         self.assertFalse(find_unknown_book_candidates(results, {"R2", "R3"})["matched"])
 
