@@ -1,13 +1,13 @@
 """
-서버 → AI 분석 호출 (ach/JsonTesting.py)
+서버 → AI 분석 호출 (저장소 루트의 MakeResult.py / JsonTesting.py)
 
 두 가지 방식이 있습니다. (환경변수 AI_MODE, 기본 worker)
   - worker    : AI 작업 프로세스(ai_worker.py)를 하나 띄워 두고 계속 씁니다.
                 모델은 한 번만 불러오고, 층별 기준 사진 분석 결과도 기억해 두어 사진 한 장이 훨씬 빨리 끝납니다.
                 서버를 켤 때 미리 띄워 둡니다(warm_up). 작업 프로세스가 죽거나 응답이 없으면 다음 요청 때 다시 띄웁니다.
-                ach/ 코드를 고친 뒤에는 서버를 다시 시작해야 반영됩니다. (uvicorn --reload는 백엔드 파일 변경만 감지)
-  - subprocess: 예전 방식. 사진마다 `python JsonTesting.py`를 새로 실행합니다. (ach/dataset/test 폴더 · 결과 파일 경유)
-두 방식 모두 analyze_image_to_dict의 결과(vision_items)를 돌려주며, 책등 크롭은 ach/pipeline_outputs/에 남습니다.
+                AI 코드(MakeResult.py, app/)를 고친 뒤에는 서버를 다시 시작해야 반영됩니다. (uvicorn --reload는 백엔드 파일 변경만 감지)
+  - subprocess: 예전 방식. 사진마다 `python JsonTesting.py`를 새로 실행합니다. (dataset/test 폴더 · 결과 파일 경유)
+두 방식 모두 analyze_image_to_dict의 결과(vision_items)를 돌려주며, 책등 크롭은 저장소 루트의 pipeline_outputs/에 남습니다.
 """
 import atexit
 import json
@@ -23,9 +23,9 @@ from collections import deque
 from ai_worker import PROTOCOL_PREFIX
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-ACH_DIR = os.path.normpath(os.path.join(BACKEND_DIR, "..", "ach"))
-TEST_DIR = os.path.join(ACH_DIR, "dataset", "test")                       # (subprocess 방식) JsonTesting.py 입력 폴더
-RESULT_JSON_PATH = os.path.join(ACH_DIR, "vision_output", "test_results.json")
+AI_DIR = os.path.normpath(os.path.join(BACKEND_DIR, ".."))                  # AI 코드(MakeResult.py, app/, model/)가 있는 저장소 루트
+TEST_DIR = os.path.join(AI_DIR, "dataset", "test")                       # (subprocess 방식) JsonTesting.py 입력 폴더
+RESULT_JSON_PATH = os.path.join(AI_DIR, "vision_output", "test_results.json")
 WORKER_LOG_PATH = os.path.join(BACKEND_DIR, "logs", "ai_worker.log")     # 작업 프로세스의 AI 출력 (git 제외)
 
 AI_MODE = os.getenv("AI_MODE", "worker").lower()
@@ -59,7 +59,7 @@ class AIWorkerClient:
         self._log.flush()
         self._proc = subprocess.Popen(
             [sys.executable, "-u", os.path.join(BACKEND_DIR, "ai_worker.py")],
-            cwd=ACH_DIR, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._log,
+            cwd=AI_DIR, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self._log,
             text=True, encoding="utf-8", errors="replace", env={**os.environ, **CHILD_ENV},
         )
         self._lines = queue.Queue()
@@ -159,7 +159,7 @@ def _run_subprocess(image_path: str, normal_dir: str) -> dict:
     os.makedirs(TEST_DIR, exist_ok=True)
     shutil.copy2(image_path, os.path.join(TEST_DIR, "uploaded_target" + os.path.splitext(image_path)[1]))
     result = subprocess.run(
-        [sys.executable, "JsonTesting.py"], cwd=ACH_DIR, capture_output=True, text=True,
+        [sys.executable, "JsonTesting.py"], cwd=AI_DIR, capture_output=True, text=True,
         encoding="utf-8", errors="replace", env={**os.environ, **CHILD_ENV, "NORMAL_DIR": normal_dir},
     )
     if result.returncode != 0:

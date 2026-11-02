@@ -5,7 +5,7 @@
 순찰 로봇이 서가를 촬영했다고 가정하고, **촬영된 서가 이미지를 정상 상태의 서가 이미지와 비교해 이상을 탐지**하고, 그 결과를 **사서에게 대시보드로 전달**하는 시스템입니다. 실제 로봇은 범위에 포함하지 않으며, 로봇이 찍은 사진이 서버의 **수신함 폴더**에 들어왔다고 가정하고(사진을 폴더에 직접 넣음) 그 이후 과정을 다룹니다.
 
 ## 🌟 주요 기능
-- **Vision AI 분석** (`ach/`): YOLO 세그멘테이션으로 책등을 찾고, ResNet 특징으로 정상 서가 이미지의 책과 매칭합니다. 누움 · 기울어짐 · 뒤집힘 · 종이 끼임 같은 **외형 이상**을 판별합니다.
+- **Vision AI 분석** (`MakeResult.py`, `app/`): YOLO 세그멘테이션으로 책등을 찾고, ResNet 특징으로 정상 서가 이미지의 책과 매칭합니다. 누움 · 기울어짐 · 뒤집힘 · 종이 끼임 같은 **외형 이상**을 판별합니다.
 - **서가 상태 판정** (`backend/analyzer.py`): Vision 결과, 가상 RFID, 가상 서가 정보를 교차 검증해 **오배열 · 누락 · 오배가 · 인식 실패** 같은 **위치 이상**을 판정합니다.
   - 책 한 권을 놓쳐도 뒤의 책들이 줄줄이 오배열로 나오지 않도록 LIS(최장 증가 부분수열) 방식으로 판정합니다.
   - 인식이 크게 틀린 세션은 개별 알림 대신 **"재촬영 필요"** 로 안내합니다.
@@ -32,14 +32,16 @@
 ## 📂 프로젝트 구조
 ```
 CECD/
-├── ach/                      # Vision AI 파트
-│   ├── app/                  #   탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
-│   ├── model/                #   YOLO 가중치 (yolo11m_seg_v5.pt)
-│   ├── dataset/normal/       #   (예전) 정상 상태 기준 이미지 — 서버는 DB에 저장된 층별 기준 이미지를 사용
-│   ├── dataset/test/         #   JsonTesting.py를 직접 실행할 때의 입력 이미지 (서버는 건드리지 않음)
-│   ├── JsonTesting.py        #   정상 이미지와 비교해 도서별 상태를 판별하고 JSON으로 출력
-│   ├── pipeline_outputs/     #   책등 크롭 작업 폴더 (분석마다 덮어씀)
-│   └── vision_output/test_results.json  # 분석 결과
+├── app/                      # Vision AI 파트: 탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
+├── model/                    #   YOLO 가중치 (현재 사용: yolo26l_1280_v3.pt, app/models.py 참고)
+├── dataset/                  #   시나리오별 테스트 이미지 (normal/, abnormal_*/) — 서버는 DB에 저장된 층별 기준 이미지를 사용
+│   └── test/                 #   MakeResult.py를 직접 실행할 때의 입력 이미지 (git 제외, 서버는 건드리지 않음)
+├── test/                     #   MakeResult.py 직접 실행용 테스트 사진 묶음 (dataset/의 사진과 동일)
+├── MakeResult.py             #   서가 상태 판정 v4 (백엔드 AI 작업 프로세스가 import) — 정상 사진과 전역 매칭해 도서별 상태 판정
+├── JsonTesting.py            #   (예전) 정상 이미지와 비교해 도서별 상태를 판별하고 JSON으로 출력
+├── detections_dump/          #   MakeResult.py가 남기는 검출 결과 덤프 (튜닝용)
+├── pipeline_outputs/         #   책등 크롭 작업 폴더 (분석마다 덮어씀, git 제외)
+├── vision_output/test_results.json  # 분석 결과 (git 제외)
 ├── backend/                  # 백엔드 · 대시보드 파트 (자세한 내용은 backend/README.md)
 │   ├── main.py               #   FastAPI 서버 (API + 화면 호스팅)
 │   ├── pipeline_jobs.py      #   분석 작업 대기열 (AI 분석 → DB 적재 → 판정)
@@ -70,10 +72,10 @@ CECD/
 ```bash
 pip install -r requirements.txt
 ```
-> ⚠️ **백엔드 서버와 AI 분석은 같은 Python 환경을 써야 합니다.** 서버는 자신을 실행한 Python으로 `ach/JsonTesting.py`를 돌리기 때문에, AI 패키지(ultralytics, torch)가 없는 가상환경으로 서버를 띄우면 분석 단계에서 실패합니다.
+> ⚠️ **백엔드 서버와 AI 분석은 같은 Python 환경을 써야 합니다.** 서버는 자신을 실행한 Python으로 AI 작업 프로세스(`backend/ai_worker.py` → `MakeResult.py`)를 띄우기 때문에, AI 패키지(ultralytics, torch)가 없는 가상환경으로 서버를 띄우면 분석 단계에서 실패합니다.
 
 ### 2. AI 모델 파일
-`ach/model/yolo11m_seg_v5.pt`가 있어야 합니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
+`model/yolo26l_1280_v3.pt`가 있어야 합니다(`app/models.py`가 가리키는 파일). `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
 
 ### 3. 데이터베이스 (MySQL 8.0, Docker)
 ```bash
@@ -122,7 +124,7 @@ python manage_users.py create-library LIB003 "새 도서관"  # 새 도서관 + 
   - **이전 기준 사진으로 되돌리기**: 교체 · 삭제된 이전 사진도 층마다 최근 10장까지 DB에 보관되어 되돌릴 수 있습니다.
 - **처음 DB를 만들 때**: `setup_db.py`가 `backend/db_create/seed/normal_images/<도서관>/<구역>/<책꽂이>/<층>.jpg`의 사진을 기준 이미지가 없는 층에 넣습니다. (현재 `LIB001/A/A-01/A-01-3.jpg` 1장. 이미 기준 이미지가 있는 층은 건드리지 않음)
 - 기준 이미지가 없는 층은 분석이 실패하고, 대시보드 '정상 상태' 탭에서 등록하라고 안내합니다. 도서는 있는데 기준 사진이 없는 층은 서가 맵과 '확인이 필요한 층' 목록에 **기준 사진 없음**으로 표시됩니다.
-- 서버는 분석할 때 그 층의 기준 이미지를 DB에서 꺼내 작업 폴더(`backend/.normal_work`)에 쓰고, `NORMAL_DIR` 환경변수로 `ach/JsonTesting.py`에 넘깁니다. 환경변수 없이 `JsonTesting.py`를 직접 실행하면 예전처럼 `ach/dataset/normal`을 씁니다.
+- 서버는 분석할 때 그 층의 기준 이미지를 DB에서 꺼내 작업 폴더(`backend/.normal_work`)에 쓰고, AI 작업 프로세스에 기준 이미지 폴더로 넘깁니다. `MakeResult.py`를 직접 실행하면 `dataset/normal`을 씁니다.
 
 ---
 
@@ -189,7 +191,7 @@ cp -r LIB001 backend/patrol_inbox/            # Windows PowerShell: Copy-Item -R
   curl -c cookie.txt -H "Content-Type: application/json" -d '{"library_id":"LIB001","username":"librarian","password":"lib1234"}' http://127.0.0.1:8000/api/auth/login
   curl -b cookie.txt -F "file=@shelf.jpg" -F "shelf_id=LIB001-A-01-3" http://127.0.0.1:8000/api/pipeline/run
   ```
-- **`python run_master.py`**: 스크립트가 세션 시작 → AI 분석 → RFID·Vision 전송 → 판정 요청을 직접 하는 예전 흐름입니다(시연용 사서 계정으로 로그인). 서버의 분석 대기열을 거치지 않고 AI를 직접 실행하므로, 일괄 분석과 동시에 실행하지 마세요. 이 흐름은 `ach/dataset/normal`의 기준 이미지를 씁니다.
+- **`python run_master.py`**: 스크립트가 세션 시작 → AI 분석 → RFID·Vision 전송 → 판정 요청을 직접 하는 예전 흐름입니다(시연용 사서 계정으로 로그인). 서버의 분석 대기열을 거치지 않고 AI를 직접 실행하므로, 일괄 분석과 동시에 실행하지 마세요. 이 흐름은 `dataset/normal`의 기준 이미지를 씁니다.
 
 ### 데이터 초기화
 ```bash
@@ -201,7 +203,7 @@ python reset_db.py
 ---
 
 ## 🤝 AI 파트와의 연동
-백엔드가 `ach/JsonTesting.py`를 호출하는 방식, 결과 JSON 형식, AI 코드를 바꿀 때 지켜야 할 규칙은 [docs/ai_backend_interface.md](docs/ai_backend_interface.md)에 정리되어 있습니다.
+백엔드가 AI 코드(`MakeResult.py`)를 호출하는 방식, 결과 JSON 형식, AI 코드를 바꿀 때 지켜야 할 규칙은 [docs/ai_backend_interface.md](docs/ai_backend_interface.md)에 정리되어 있습니다.
 
 ---
 

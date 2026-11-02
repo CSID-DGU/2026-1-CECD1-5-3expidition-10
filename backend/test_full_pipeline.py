@@ -20,7 +20,7 @@ SCAN_TIME_STR = CURRENT_TIME.strftime('%Y-%m-%d %H:%M:%S')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 판정 테스트용 고정 예시: A구역 1번 책꽂이 3층 사진 1장과, 그 사진을 AI가 분석한 결과 (backend/test_data/)
-# ach/dataset/test · ach/vision_output은 대시보드에서 분석할 때마다 마지막으로 분석한 사진으로 바뀌므로 쓰지 않습니다.
+# dataset/test · vision_output은 대시보드에서 분석할 때마다 마지막으로 분석한 사진으로 바뀌므로 쓰지 않습니다.
 TEST_DATA_DIR = os.path.join(BASE_DIR, "test_data")
 SAMPLE_PHOTO_PATH = os.path.join(TEST_DATA_DIR, "sample_A-01-3.jpg")
 SAMPLE_JSON_PATH = os.path.join(TEST_DATA_DIR, "sample_A-01-3_results.json")
@@ -93,7 +93,7 @@ def run_automation_test():
     print("-> 응답:", res_start.json())
 
     # 2. 데이터 변환
-    print("\n2️⃣ Edge AI(ach)가 분석한 JSON 결과를 서버 규격으로 변환합니다...")
+    print("\n2️⃣ Edge AI가 분석한 JSON 결과를 서버 규격으로 변환합니다...")
     vision_payload, rfid_payload = load_payloads_from_json() 
     
     if not vision_payload:
@@ -116,4 +116,4 @@ def run_automation_test():
 
 
 if __name__ == "__main__":
-    run_automation_test()
+    run_automation_test()

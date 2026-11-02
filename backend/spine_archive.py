@@ -3,7 +3,7 @@ import shutil
 from config import SPINE_STORE_DIR
 
 # AI 파이프라인이 매 분석마다 책등 크롭을 덮어쓰는 작업 폴더
-PIPELINE_OUTPUT_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ach", "pipeline_outputs"))
+PIPELINE_OUTPUT_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "pipeline_outputs"))
 
 
 def archive_original_image(session_id: str, src_path: str) -> str:

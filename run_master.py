@@ -20,7 +20,7 @@ from config import DEFAULT_SHELF_ID, DEMO_LOGIN
 api = requests.Session()   # 로그인 쿠키를 유지
 SHELF_ID = DEFAULT_SHELF_ID   # 분석할 층 (기본: A구역 1번 책꽂이 3층)
 
-ACH_DIR = "ach"
+AI_DIR = os.path.dirname(os.path.abspath(__file__))   # AI 코드(JsonTesting.py, app/, model/)가 있는 저장소 루트
 
 CURRENT_TIME = datetime.now()
 SESSION_ID = f"{SHELF_ID}_{CURRENT_TIME.strftime('%Y%m%d_%H%M%S_%f')}"
@@ -41,8 +41,8 @@ def main():
     # 1️⃣ 세션 시작
     # ---------------------------------------------------------
     print("\n1️⃣ 서버에 새로운 서고 스캔 세션을 생성합니다...")
-    # 순찰 사진(ach/dataset/test의 첫 이미지)을 세션 원본 사진으로 보관 → 대시보드 '서가 사진'에 표시
-    test_dir = os.path.join(ACH_DIR, "dataset", "test")
+    # 순찰 사진(dataset/test의 첫 이미지)을 세션 원본 사진으로 보관 → 대시보드 '서가 사진'에 표시
+    test_dir = os.path.join(AI_DIR, "dataset", "test")
     photos = sorted(glob.glob(os.path.join(test_dir, "*.jpg")) + glob.glob(os.path.join(test_dir, "*.png")))
     image_path = archive_original_image(SESSION_ID, photos[0]) if photos else None
     try:
@@ -64,7 +64,7 @@ def main():
     print("\n2️⃣ Edge AI 가동: 사진을 분석하여 책의 상태를 판별합니다...")
     script_name = "JsonTesting.py"
     
-    result = subprocess.run([sys.executable, script_name], cwd=ACH_DIR)
+    result = subprocess.run([sys.executable, script_name], cwd=AI_DIR)
     if result.returncode != 0:
         print("❌ [에러] Edge AI 분석 중 문제가 발생했습니다.")
         return
@@ -74,7 +74,7 @@ def main():
     # ---------------------------------------------------------
     print("\n3️⃣ AI가 분석한 JSON 결과를 서버 규격으로 조립합니다...")
     # 💡 AI 팀원이 변경한 새로운 파일명 적용
-    json_path = os.path.join(ACH_DIR, "vision_output", "test_results.json")
+    json_path = os.path.join(AI_DIR, "vision_output", "test_results.json")
     if not os.path.exists(json_path):
         print(f"❌ [에러] 결과 파일({json_path})이 생성되지 않았습니다.")
         return
@@ -151,4 +151,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()
