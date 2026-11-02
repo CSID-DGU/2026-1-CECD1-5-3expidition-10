@@ -301,7 +301,7 @@ def restore_legacy_inbox_photos(conn, photos: list):
         with open(path, "rb") as f:
             data = f.read()
         try:
-            if register_patrol_photo(conn, shelf, data, captured_at, original_name=os.path.basename(path)):
+            if register_patrol_photo(conn, shelf, data, captured_at, original_name=os.path.basename(path), keep_all=True):
                 moved += 1
         except PhotoRejected as e:
             print(f"  ⚠️ 수신함 사진 {os.path.relpath(path, BACKEND_DIR)}: {e}")

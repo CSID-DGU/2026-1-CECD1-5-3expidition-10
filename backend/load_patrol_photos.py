@@ -17,6 +17,7 @@ RFID_SUFFIX = ".rfid.json"
 #                (예: LIB001/A/A-01/A-01-3.jpg, LIB001/A/A-01/A-01-3_20261003_0930.jpg)
 #  - 도서관 ID는 폴더 이름으로 정합니다. (다르면 --library로 지정)
 #  - 원본 파일은 지우지 않습니다. 같은 사진이 아직 분석 전이면 다시 넣지 않습니다.
+#  - 한 층에 분석 전 사진은 가장 최신 한 장만 남습니다. 모두 넣으려면 --keep-all을 줍니다. (시연 시나리오용)
 #  - 촬영 시각은 파일 수정 시각입니다. (--now를 주면 지금 시각)
 #  - 사진 옆에 <사진 이름>.rfid.json이 있으면 RFID 리더값으로 함께 넣습니다. (예: A-01-3.rfid.json)
 #    내용은 등록번호 목록 또는 [{"reg_no": "...", "rssi": -45}] 목록. []는 '읽은 태그 없음'입니다.
@@ -47,7 +48,7 @@ def classify_photo(rel_path: str, library_id: str, shelves_by_code: dict):
     return shelf, None
 
 
-def load_photos(folder: str, library_id: str, use_now: bool = False) -> dict:
+def load_photos(folder: str, library_id: str, use_now: bool = False, keep_all: bool = False) -> dict:
     conn = get_db_connection()
     if not conn:
         raise RuntimeError("DB 연결 실패")
@@ -76,7 +77,8 @@ def load_photos(folder: str, library_id: str, use_now: bool = False) -> dict:
                     if os.path.exists(rfid_path):
                         with open(rfid_path, encoding="utf-8") as f:
                             rfid_items = json.load(f)
-                    photo_id = register_patrol_photo(conn, shelf, data, captured, original_name=rel_path, rfid_items=rfid_items)
+                    photo_id = register_patrol_photo(conn, shelf, data, captured, original_name=rel_path,
+                                                     rfid_items=rfid_items, keep_all=keep_all)
                 except json.JSONDecodeError as e:
                     rejected.append((rel_path, f"RFID 파일을 읽을 수 없습니다: {e}"))
                     continue
@@ -95,21 +97,22 @@ def main():
     parser.add_argument("folder", help="도서관 사진 폴더 (<폴더>/<구역>/<책꽂이>/<층 코드>*.jpg, 예: LIB001)")
     parser.add_argument("--library", help="도서관 ID (기본: 폴더 이름)")
     parser.add_argument("--now", action="store_true", help="촬영 시각을 파일 수정 시각 대신 지금 시각으로")
+    parser.add_argument("--keep-all", action="store_true", help="한 층의 사진을 덮어쓰지 않고 모두 넣음")
     args = parser.parse_args()
 
     folder = os.path.abspath(args.folder)
     if not os.path.isdir(folder):
         sys.exit(f"❌ 폴더가 없습니다: {folder}")
     library_id = args.library or os.path.basename(folder.rstrip(os.sep))
-    result = load_photos(folder, library_id, args.now)
+    result = load_photos(folder, library_id, args.now, args.keep_all)
 
     for rel_path in result["added"]:
         print(f"📥 [수신함에 추가] {library_id}/{rel_path}")
     for rel_path in result["duplicated"]:
-        print(f"⏭️ [이미 분석 대기 중] {library_id}/{rel_path}")
+        print(f"⏭️ [건너뜀: 같은 사진 또는 더 최신 사진이 대기 중] {library_id}/{rel_path}")
     for rel_path, reason in result["rejected"]:
         print(f"⚠️ [넣지 못함] {library_id}/{rel_path}: {reason}")
-    print(f"✨ {library_id}: 추가 {len(result['added'])}장 · 이미 대기 중 {len(result['duplicated'])}장 · "
+    print(f"✨ {library_id}: 추가 {len(result['added'])}장 · 건너뜀 {len(result['duplicated'])}장 · "
           f"넣지 못함 {len(result['rejected'])}장. 대시보드에서 '순찰 사진 일괄 분석'을 누르세요.")
 
 

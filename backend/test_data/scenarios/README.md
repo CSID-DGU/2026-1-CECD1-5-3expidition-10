@@ -5,9 +5,9 @@ A구역 1번 책꽂이 5층(`A-01-5`, 13권)의 사진과 RFID 리더값 묶음�
 ## 넣는 방법
 순찰 기록은 층마다 최근 2회만 남으므로, 9장을 모두 보려면 `backend/.env`에 `PATROL_KEEP_COUNT=0`을 넣고 서버를 켭니다. 시연이 끝나면 `2`로 되돌리세요. (다음 분석이 끝날 때 오래된 기록이 지워집니다)
 
-서버를 켠 뒤, 저장소 맨 위 폴더에서 실행합니다.
+서버를 켠 뒤, 저장소 맨 위 폴더에서 실행합니다. 9장이 같은 층이라 `--keep-all`이 없으면 마지막 1장만 남습니다.
 ```bash
-python backend/load_patrol_photos.py backend/test_data/scenarios/LIB001 --now
+python backend/load_patrol_photos.py backend/test_data/scenarios/LIB001 --now --keep-all
 ```
 대시보드에서 **순찰 사진 일괄 분석**을 누르면 9장이 분석됩니다(CPU에서 약 2분 30초). 끝나면 A구역 1번 책꽂이 5층을 고르고 **순찰 이력**에서 각 결과를 엽니다. 이력은 위에서부터 최신순이라 09번이 맨 위입니다.
 

@@ -82,13 +82,16 @@ def attach_rfid_tags(conn, library_id: str, photo_id: int, items) -> bool:
         cursor.close()
 
 
-def register_patrol_photo(conn, shelf: dict, data: bytes, captured_at: datetime,
-                          original_name: Optional[str] = None, rfid_items=None) -> Optional[int]:
+def register_patrol_photo(conn, shelf: dict, data: bytes, captured_at: datetime, original_name: Optional[str] = None,
+                          rfid_items=None, keep_all: bool = False) -> Optional[int]:
     """
     순찰 사진 1장을 수신함(PATROL_PHOTO)에 분석 대기(WAITING)로 넣습니다. 커밋은 호출하는 쪽에서 합니다.
     shelf: fetch_shelf_location(s) 결과 (도서가 등록된 층만 받음)
     같은 층에 같은 사진 · 같은 RFID 리더값이 아직 분석 전(대기 · 진행 · 실패)으로 있으면 넣지 않고 None을 반환합니다.
     (분석이 끝난 사진과 같은 사진은 다시 넣을 수 있음 — 같은 테스트 사진을 여러 번 분석하는 경우)
+    같은 층에 분석 전(대기 · 실패) 사진이 있으면 가장 최신 상태만 분석하도록 촬영 시각이 늦은 사진 한 장만 남깁니다.
+    (더 최신 사진이 이미 있으면 넣지 않고 None. 분석이 시작된 사진은 건드리지 않음)
+    keep_all: True면 같은 층의 사진을 덮어쓰지 않고 모두 넣습니다. (시연 시나리오용)
     rfid_items: 함께 스캔한 RFID 리더값. None이면 리더값 없음, []이면 리더가 읽은 태그 없음
     """
     if shelf["book_count"] == 0:
@@ -107,6 +110,16 @@ def register_patrol_photo(conn, shelf: dict, data: bytes, captured_at: datetime,
         )
         if cursor.fetchone()[0] > 0:
             return None
+        if not keep_all:
+            cursor.execute(
+                f"SELECT photo_id, captured_at FROM PATROL_PHOTO WHERE shelf_id = %s AND status IN ({_in(ANALYZABLE_STATUSES)})",
+                (shelf["shelf_id"],) + ANALYZABLE_STATUSES
+            )
+            waiting = cursor.fetchall()
+            if any(row[1] > captured_at.replace(microsecond=0) for row in waiting):
+                return None
+            for photo_id, _ in waiting:
+                cursor.execute("DELETE FROM PATROL_PHOTO WHERE photo_id = %s", (photo_id,))
         cursor.execute(
             """INSERT INTO PATROL_PHOTO (library_id, shelf_id, image_data, ext, sha256, original_name,
                                          captured_at, received_at, status, rfid_tags)
