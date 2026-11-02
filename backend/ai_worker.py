@@ -6,7 +6,7 @@ AI 분석 작업 프로세스 (서버가 자식 프로세스로 띄워 계속 �
   - 층별 기준 사진의 분석 결과(reference pool)를 메모리(최근 CACHE_SIZE개 층)와 DB(NORMAL_IMAGE_ANALYSIS)에 저장합니다.
     서버를 다시 켜도, 층이 많아도, 같은 DB를 쓰는 다른 컴퓨터에서도 다시 분석하지 않습니다.
     키 = 기준 이미지(image_id) + AI 코드 · 모델 파일 지문 → 기준 사진이나 AI 코드 · 모델이 바뀌면 자동으로 새로 분석합니다.
-분석 자체는 ach/MakeResult.py(v4)를 그대로 사용합니다. (AI 코드는 수정하지 않음)
+분석 자체는 저장소 루트의 MakeResult.py(v4)를 그대로 사용합니다. (AI 코드는 수정하지 않음)
   - 기준 사진 분석: MakeResult.build_normal_reference_pool()  (DB의 기준 이미지를 임시 폴더에 꺼내 MakeResult.NORMAL_DIR로 지정)
   - 사진 분석:     MakeResult.analyze_image_to_dict(image_path, pool)
 
@@ -35,8 +35,8 @@ from db import get_db_connection
 from normal_images import PoolUnpickler
 
 PROTOCOL_PREFIX = "@@AI@@"
-ACH_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ach"))
-RESULT_JSON_PATH = os.path.join(ACH_DIR, "vision_output", "test_results.json")
+AI_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))   # AI 코드(MakeResult.py, app/, model/)가 있는 저장소 루트
+RESULT_JSON_PATH = os.path.join(AI_DIR, "vision_output", "test_results.json")
 CACHE_SIZE = int(os.getenv("AI_REFERENCE_CACHE", "8"))   # 메모리에 기억해 둘 층(기준 사진) 수
 AI_ENTRY_FILES = ["MakeResult.py", "JsonTesting.py"]   # 지문에 넣을 AI 진입 파일 (있는 것만)
 
@@ -63,15 +63,15 @@ def ai_fingerprint() -> str:
     내용으로만 만들므로 줄바꿈 · 수정 시각이 달라도 같은 값 → 같은 DB를 쓰는 다른 컴퓨터도 분석 결과를 함께 씀
     """
     digest = hashlib.sha256()
-    entries = [os.path.join(ACH_DIR, n) for n in AI_ENTRY_FILES if os.path.exists(os.path.join(ACH_DIR, n))]
+    entries = [os.path.join(AI_DIR, n) for n in AI_ENTRY_FILES if os.path.exists(os.path.join(AI_DIR, n))]
     code = {}
-    for path in sorted(entries + glob.glob(os.path.join(ACH_DIR, "app", "*.py"))):
+    for path in sorted(entries + glob.glob(os.path.join(AI_DIR, "app", "*.py"))):
         with open(path, "rb") as f:
             code[os.path.basename(path)] = f.read().replace(b"\r\n", b"\n")
         digest.update(os.path.basename(path).encode() + code[os.path.basename(path)])
     # app/models.py가 불러오는 모델만 (컴퓨터마다 다를 수 있는 다른 .pt 파일은 지문에 넣지 않음)
     for name in sorted(set(re.findall(r"model/([\w.-]+\.pt)", code.get("models.py", b"").decode("utf-8")))):
-        path = os.path.join(ACH_DIR, "model", name)
+        path = os.path.join(AI_DIR, "model", name)
         if os.path.exists(path):
             digest.update(name.encode())
             with open(path, "rb") as f:
@@ -171,8 +171,8 @@ def get_pool(MakeResult, cache: OrderedDict, image_id: int, fingerprint: str) ->
 
 def main():
     started = time.perf_counter()
-    os.chdir(ACH_DIR)                       # MakeResult · app 모듈은 ach/ 기준 상대 경로를 씀
-    sys.path.insert(0, ACH_DIR)
+    os.chdir(AI_DIR)                        # MakeResult · app 모듈은 저장소 루트 기준 상대 경로를 씀
+    sys.path.insert(0, AI_DIR)
     import MakeResult                        # YOLO(app.pipeline import 시) 로드
     MakeResult.get_embedder()                # ResNet 로드 (첫 요청이 아니라 지금)
     cache = OrderedDict()                    # image_id → reference pool (메모리)

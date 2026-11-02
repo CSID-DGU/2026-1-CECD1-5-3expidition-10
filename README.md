@@ -5,7 +5,7 @@
 순찰 로봇이 서가를 촬영했다고 가정하고, **촬영된 서가 이미지를 정상 상태의 서가 이미지와 비교해 이상을 탐지**하고, 그 결과를 **사서에게 대시보드로 전달**하는 시스템입니다. 실제 로봇은 범위에 포함하지 않으며, 로봇이 찍은 사진이 서버 DB의 **수신함**(`PATROL_PHOTO`)에 들어왔다고 가정하고(로봇 대신 `load_patrol_photos.py`가 사진을 넣음) 그 이후 과정을 다룹니다.
 
 ## 🌟 주요 기능
-- **Vision AI 분석** (`ach/`): YOLO 세그멘테이션으로 책등을 찾고, ResNet 특징으로 정상 서가 이미지의 책과 매칭합니다. 누움 · 기울어짐 · 뒤집힘 · 책등 안 보임 같은 **외형 이상**을 판별합니다.
+- **Vision AI 분석** (`MakeResult.py`, `app/`): YOLO 세그멘테이션으로 책등을 찾고, ResNet 특징으로 정상 서가 이미지의 책과 매칭합니다. 누움 · 기울어짐 · 뒤집힘 · 책등 안 보임 같은 **외형 이상**을 판별합니다.
 - **서가 상태 판정** (`backend/analyzer.py`): Vision 결과, 가상 RFID, 도서 정보를 교차 검증해 **누락 · 오배가 · 상태이상 · 미분석 · 오배열 · 인식 실패** 같은 **위치 이상**을 판정합니다.
   - 판정 이름은 실제 도서관의 장서점검 용어(멘토 자료)를 따릅니다. 오배열 · 인식 실패 같은 영상 기반 판정은 우리 시스템에만 있는 기능입니다.
   - 도서 정보는 실제 도서관 시스템(KOLAS)의 테이블 구조(`BO_BOOK_TBL` 도서, `IDX_BO_TBL` 서지)를 따르고, 도서 ID는 **등록번호**(RFID 태그에 기록된 값)입니다.
@@ -38,15 +38,13 @@
 ## 📂 프로젝트 구조
 ```
 CECD/
-├── ach/                      # Vision AI 파트
-│   ├── app/                  #   탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
-│   ├── model/                #   YOLO 가중치 (서버는 yolo26l_1280_v3.pt 사용, app/models.py)
-│   ├── dataset/normal/       #   (예전) 정상 상태 기준 이미지 — 서버는 DB에 저장된 층별 기준 이미지를 사용
-│   ├── dataset/test/         #   JsonTesting.py를 직접 실행할 때의 입력 이미지 (서버는 건드리지 않음)
-│   ├── MakeResult.py         #   정상 이미지와 비교해 도서별 상태를 판별 (서버가 사용하는 분석 코드)
-│   ├── JsonTesting.py        #   예전 분석 코드 (AI_MODE=subprocess 또는 직접 실행할 때만 사용)
-│   ├── pipeline_outputs/     #   책등 크롭 작업 폴더 (분석마다 덮어씀)
-│   └── vision_output/test_results.json  # 분석 결과
+├── app/                      # Vision AI: 탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
+├── model/                    # YOLO 가중치 (서버는 yolo26l_1280_v3.pt 사용, app/models.py)
+├── MakeResult.py             # 정상 이미지와 비교해 도서별 상태를 판별 (서버가 사용하는 분석 코드)
+├── JsonTesting.py            # 예전 분석 코드 (AI_MODE=subprocess 또는 직접 실행할 때만 사용)
+├── dataset/                  # 정상 · 이상 시나리오별 테스트 사진 (dataset/test는 JsonTesting.py 입력)
+├── pipeline_outputs/         # 책등 크롭 작업 폴더 (분석마다 덮어씀, git 제외)
+├── vision_output/            # 분석 결과 test_results.json (git 제외)
 ├── backend/                  # 백엔드 · 대시보드 파트 (자세한 내용은 backend/README.md)
 │   ├── main.py               #   FastAPI 서버 (API + 화면 호스팅)
 │   ├── pipeline_jobs.py      #   분석 작업 대기열 (AI 분석 → DB 적재 → 판정)
@@ -77,10 +75,10 @@ CECD/
 ```bash
 pip install -r requirements.txt
 ```
-> ⚠️ **백엔드 서버와 AI 분석은 같은 Python 환경을 써야 합니다.** 서버는 자신을 실행한 Python으로 AI 작업 프로세스(`ach/MakeResult.py`)를 띄우기 때문에, AI 패키지(ultralytics, torch, pandas, scipy 등)가 없는 가상환경으로 서버를 띄우면 분석 단계에서 실패합니다.
+> ⚠️ **백엔드 서버와 AI 분석은 같은 Python 환경을 써야 합니다.** 서버는 자신을 실행한 Python으로 AI 작업 프로세스(`MakeResult.py`)를 띄우기 때문에, AI 패키지(ultralytics, torch, pandas, scipy 등)가 없는 가상환경으로 서버를 띄우면 분석 단계에서 실패합니다.
 
 ### 2. AI 모델 파일
-`ach/model/yolo26l_1280_v3.pt`가 있어야 합니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
+`model/yolo26l_1280_v3.pt`가 있어야 합니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
 
 ### 3. 데이터베이스 (MySQL 8.0, Docker)
 ```bash
@@ -170,7 +168,7 @@ python manage_users.py create-library LIB003 "새 도서관"  # 새 도서관 + 
 - **처음 DB를 만들 때**: `setup_db.py`가 `backend/db_create/seed/normal_images/<도서관>/<구역>/<책꽂이>/<층>.jpg`의 사진을 기준 이미지가 없는 층에 넣습니다. (현재 `LIB001`의 4개 층. 이미 기준 이미지가 있는 층은 건드리지 않음)
 - 기준 이미지가 없는 층은 분석이 실패하고, 대시보드 '정상 상태' 탭에서 등록하라고 안내합니다. 도서는 있는데 기준 사진이 없는 층은 서가 맵과 '확인이 필요한 층' 목록에 **기준 사진 없음**으로 표시됩니다.
 - 기준 사진의 분석 결과도 DB(`NORMAL_IMAGE_ANALYSIS`)에 저장해 재사용합니다. 기준 사진을 등록 · 교체 · 지정 · 되돌릴 때와 서버를 켤 때 미리 분석하므로, 순찰 사진 분석은 기준 사진을 다시 분석하지 않습니다. 기준 사진이나 AI 코드 · 모델이 바뀌면 자동으로 새로 분석합니다.
-- 서버는 분석할 때 그 층의 기준 이미지를 DB에서 꺼내 씁니다. `JsonTesting.py`를 직접 실행하면 `NORMAL_DIR` 환경변수의 폴더(없으면 `ach/dataset/normal`)를 씁니다.
+- 서버는 분석할 때 그 층의 기준 이미지를 DB에서 꺼내 씁니다. `JsonTesting.py`를 직접 실행하면 `NORMAL_DIR` 환경변수의 폴더(없으면 `dataset/normal`)를 씁니다.
 
 ---
 
@@ -263,7 +261,7 @@ python reset_db.py
 ---
 
 ## 🤝 AI 파트와의 연동
-백엔드가 AI(`ach/MakeResult.py`)를 호출하는 방식, 결과 JSON 형식, AI 코드를 바꿀 때 지켜야 할 규칙은 [docs/ai_backend_interface.md](docs/ai_backend_interface.md)에 정리되어 있습니다.
+백엔드가 AI(`MakeResult.py`)를 호출하는 방식, 결과 JSON 형식, AI 코드를 바꿀 때 지켜야 할 규칙은 [docs/ai_backend_interface.md](docs/ai_backend_interface.md)에 정리되어 있습니다.
 
 ---
 

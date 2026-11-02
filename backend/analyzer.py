@@ -89,7 +89,7 @@ def get_virtual_rfid_items(shelf_id: str, conn: mysql.connector.connection.MySQL
             if row['working_status'] == ON_SHELF_STATUS and row['tagged']]
 
 
-# Vision AI는 정상 기준 사진에서 왼쪽부터 n번째로 인식한 책을 'B00n'으로 돌려줍니다. (ach/JsonTesting.py)
+# Vision AI는 정상 기준 사진에서 왼쪽부터 n번째로 인식한 책을 'B00n'으로 돌려줍니다. (MakeResult.py)
 # 기준 사진의 n번째 책 = BOOK_LOCATION의 correct_order n 이므로, 적재할 때 그 책의 등록번호로 바꿉니다.
 VISION_BOOK_ID_RE = re.compile(r"^B(\d+)$")
 

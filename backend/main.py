@@ -40,7 +40,7 @@ app = FastAPI(title="도서관 지능형 서가 관리 자동화 API")
 # 화면(대시보드 · 리포트 · 로그인)과 API를 같은 서버가 제공하므로 CORS는 열지 않습니다. (쿠키 로그인 보호)
 
 # 세션 보관소(config.SPINE_STORE_DIR): spine_store/<session_id>/ 에 원본 사진(original.*)과 책등 크롭을 보관
-# 작업 폴더(ach/pipeline_outputs)는 다음 분석에서 덮어써지므로, 분석 직후 보관소로 복사해 둡니다.
+# 작업 폴더(저장소 루트의 pipeline_outputs/)는 다음 분석에서 덮어써지므로, 분석 직후 보관소로 복사해 둡니다.
 # 사진은 도서관 권한을 확인하는 /api/files/spine/... 으로만 내려줍니다.
 os.makedirs(PIPELINE_OUTPUT_DIR, exist_ok=True)
 os.makedirs(SPINE_STORE_DIR, exist_ok=True)

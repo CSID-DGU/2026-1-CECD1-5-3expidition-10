@@ -1,5 +1,5 @@
-# 백엔드 서버와 Vision AI(ach)는 같은 Python 환경에 설치해야 합니다.
-# (서버가 자신을 실행한 Python으로 AI 작업 프로세스를 띄우기 때문)
+# 백엔드 서버와 Vision AI(저장소 루트의 MakeResult.py · app/)는 같은 Python 환경에 설치해야 합니다.
+# (서버가 자신을 실행한 Python으로 AI 작업 프로세스(backend/ai_worker.py)를 띄워 MakeResult.py를 import하기 때문)
 # 버전 하한은 개발 환경에서 동작을 확인한 버전 기준입니다. (2026-10, Python 3.12)
 
 # ---- 백엔드 (backend/) ----
@@ -10,12 +10,12 @@ pydantic>=2.12
 mysql-connector-python>=9.7
 requests>=2.32                # test_full_pipeline.py, ILS 연동
 
-# ---- Vision AI (ach/) ----
+# ---- Vision AI (MakeResult.py, app/) ----
 ultralytics>=8.4
 torch>=2.11
 torchvision>=0.26
 opencv-python>=4.13
 pillow>=12.1
 numpy>=2.4
-pandas>=2.3                   # ach/MakeResult.py
-scipy>=1.17                   # ach/MakeResult.py (책 매칭)
+pandas>=2.3                   # MakeResult.py
+scipy>=1.17                   # MakeResult.py (책 매칭)
