@@ -24,7 +24,7 @@ RFID_SUFFIX = ".rfid.json"
 #  사진을 넣은 뒤 대시보드에서 '순찰 사진 일괄 분석'을 누르면 분석됩니다.
 #
 #  사용 예 (프로젝트 루트에서): python backend/load_patrol_photos.py LIB001
-#  저장소 루트의 LIB001/ 폴더에 테스트용 순찰 사진(A-01-3, A-02-3, A-03-3, B-01-2)이 있습니다.
+#  저장소 루트의 LIB001/ 폴더에 테스트용 순찰 사진(A-01-5, A-01-4, A-01-3)이 있습니다.
 
 
 def classify_photo(rel_path: str, library_id: str, shelves_by_code: dict):

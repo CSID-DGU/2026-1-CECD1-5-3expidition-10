@@ -82,7 +82,7 @@ dataset/test/ 를 비우고 분석할 사진 1장을 uploaded_target.jpg(또는 
 ### 책 ID 규칙
 - `book_id`는 **정상 기준 이미지에서 왼쪽부터 n번째로 인식된 책 = `B00n`** 입니다.
 - 백엔드는 `B00n`을 그 층의 배가 순서 n번째 도서(`BOOK_LOCATION.correct_order = n`)의 **등록번호**(`BO_BOOK_TBL.REG_NO`)로 바꿔 저장합니다(2026-10-25, 멘토 자료 기준 도서 구조). AI 쪽은 지금처럼 `B00n`을 돌려주면 되고, 바꿀 것은 없습니다.
-- 그래서 이 번호가 도서 정보(`backend/db_create/library_data.sql`의 `BOOK_LOCATION`)의 순서와 맞아야 합니다. 현재 A구역 1번 책꽂이 3층에는 실제 서가 순서대로 13권(B001 = 언리얼 엔진 4 … B013 = 지텔프)이 배정되어 있습니다.
+- 그래서 이 번호가 도서 정보(`backend/db_create/library_data.sql`의 `BOOK_LOCATION`)의 순서와 맞아야 합니다. 현재 A구역 1번 책꽂이 5층에는 실제 서가 순서대로 13권(B001 = 언리얼 엔진 4 … B013 = 지텔프)이 배정되어 있습니다.
 - **정상 기준 이미지에서 책 하나라도 인식되지 않으면 그 뒤 ID가 한 칸씩 밀려 다른 책의 등록번호와 연결됩니다.**
 
 ## 3. 백엔드 작업 중 `JsonTesting.py`에 추가한 변경 (3곳)
@@ -113,7 +113,7 @@ dataset/test/ 를 비우고 분석할 사진 1장을 uploaded_target.jpg(또는 
 
 - 백엔드는 이제 `dataset/normal`이 아니라 **DB(`NORMAL_IMAGE` 테이블)에 저장된 층별 기준 이미지**를 씁니다. 컴퓨터를 바꿔도 같은 DB를 쓰면 기준 이미지를 다시 옮길 필요가 없습니다.
 - AI 쪽에서 달라지는 것은 없습니다. 백엔드가 분석 직전에 DB의 이미지를 `backend/.normal_work/`에 파일로 써 주고, 지금처럼 `NORMAL_DIR`로 알려 줍니다.
-- 처음 DB를 만들 때는 `setup_db.py`가 `backend/db_create/seed/normal_images/LIB001/A/A-01/A-01-3.jpg`를 A구역 1번 책꽂이 3층의 기준 이미지로 넣습니다. 이 파일은 `dataset/normal/20260522_203503.jpg`를 **960×720으로 줄인 버전**입니다(테스트에 써 온 버전). GitHub의 `dataset/normal`에는 원본 4000×3000이 있습니다.
+- 처음 DB를 만들 때는 `setup_db.py`가 `backend/db_create/seed/normal_images/LIB001/A/A-01/A-01-5.jpg`를 A구역 1번 책꽂이 5층의 기준 이미지로 넣습니다. 이 파일은 `dataset/normal/20260522_203503.jpg`를 **960×720으로 줄인 버전**입니다(테스트에 써 온 버전). GitHub의 `dataset/normal`에는 원본 4000×3000이 있습니다.
 - 기준 이미지는 관리자 계정으로 대시보드 '정상 상태' 탭에서 바꿉니다(사진 올리기 · 최근 순찰 사진으로 교체 · 이전 사진으로 되돌리기).
 - **한 층에는 기준 이미지를 한 장만** 둡니다. 여러 장이면 이미지마다 `B001`부터 번호를 다시 매겨 책 ID가 겹치기 때문입니다.
 
@@ -133,7 +133,7 @@ docker-compose up -d                     # MySQL (처음 한 번)
 python setup_db.py                       # DB 구조 · 가상 데이터 · 계정 · 기준 이미지 준비 (매번 실행해도 안전)
 python -m uvicorn main:app --reload      # 서버
 # 다른 터미널 (루트)
-python backend/load_patrol_photos.py LIB001    # 테스트용 순찰 사진 4장(A-01-3, A-02-3, A-03-3, B-01-2)을 로봇 대신 수신함(DB)에 넣음
+python backend/load_patrol_photos.py LIB001    # 테스트용 순찰 사진 3장(A-01-5, A-01-4, A-01-3)을 로봇 대신 수신함(DB)에 넣음
 ```
 http://127.0.0.1:8000 에서 `LIB001` / `admin` / `admin1234`로 로그인한 뒤 **순찰 사진 일괄 분석**을 누르고, 분석이 끝나면 '확인이 필요한 층' 목록이나 서가 선택에서 층을 골라 결과를 확인합니다. 층별 사진 · 도서 수는 루트 README의 '테스트용 순찰 사진' 표를 참고하세요. 실패하면 순찰 바의 '실패'에 마우스를 올리면 AI 에러 내용이 보입니다.
 

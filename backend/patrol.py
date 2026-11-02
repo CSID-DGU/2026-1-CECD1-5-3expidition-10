@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from config import SPINE_STORE_DIR
+from retention import prune_old_patrols
 from db import get_db_connection
 from image_check import detect_image_ext
 from locations import fetch_shelf_locations, location_label
@@ -142,17 +143,19 @@ class BatchAlreadyRunning(Exception):
     pass
 
 
-def _photo_hooks(photo_id: int) -> dict:
+def _photo_hooks(photo_id: int, library_id: str) -> dict:
     def on_start(job):
         _update_photo(photo_id, "status = 'ANALYZING'", ())
 
     def on_done(job):
         _update_photo(photo_id, "status = 'DONE', analyzed_at = %s, error = NULL", (_now(),))
+        prune_old_patrols(library_id)   # 묶음의 마지막 사진이 끝났을 때만 실제로 지움
 
     def on_fail(job, error):
         # 실패한 세션은 pipeline_jobs.discard_session이 지움. 사진은 DB에 남아 다음 일괄 분석에서 다시 시도
         _update_photo(photo_id, "status = 'FAILED', analyzed_at = %s, error = %s, session_id = NULL",
                       (_now(), error[:2000]))
+        prune_old_patrols(library_id)
 
     return {"on_start": on_start, "on_done": on_done, "on_fail": on_fail}
 
@@ -206,7 +209,7 @@ def start_batch_analysis(conn, library_id: str) -> dict:
 
     for p, session_id, image_rel_path in jobs:
         pipeline_queue.submit(session_id, p["shelf_id"], image_rel_path,
-                              scan_time=p["captured_at"], hooks=_photo_hooks(p["photo_id"]))
+                              scan_time=p["captured_at"], hooks=_photo_hooks(p["photo_id"], library_id))
     print(f"📦 [일괄 분석 시작] {batch_id}: {library_id} 순찰 사진 {len(jobs)}장 (구역 → 책꽂이 → 층 순서)")
     return {"batch_id": batch_id if jobs else None, "photo_count": len(jobs)}
 

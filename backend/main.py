@@ -28,6 +28,7 @@ from normal_images import (delete_normal_image, get_normal_image_bytes, get_norm
 from patrol import (BatchAlreadyRunning, PhotoRejected, attach_rfid_tags, list_patrol_photos, patrol_status,
                     recover_interrupted_photos, start_batch_analysis)
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
+from retention import prune_old_patrols
 from spine_archive import PIPELINE_OUTPUT_DIR
 from vision_ai import prepare_reference_async, warm_up_async
 import accounts
@@ -343,7 +344,8 @@ def run_full_pipeline_from_ui(file: UploadFile = File(...), shelf_id: str = Form
         shutil.copyfileobj(file.file, buffer)
     print(f"📥 [분석 요청 접수] 세션 {session_id} ({shelf['location_label']})")
 
-    return pipeline_queue.submit(session_id, shelf_id, image_rel_path)
+    return pipeline_queue.submit(session_id, shelf_id, image_rel_path,
+                                 hooks={"on_done": lambda job: prune_old_patrols(ctx.library_id)})
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str = Path(...), ctx: AuthContext = Depends(require_user)):

@@ -26,8 +26,8 @@ DB_CONFIG = {
     'port': int(os.getenv('DB_PORT', '3306'))
 }
 
-# 테스트 스크립트가 기본으로 쓰는 층: LIB001 A구역 1번 책꽂이 3층 (정상 기준 이미지를 촬영한 칸)
-DEFAULT_SHELF_ID = os.getenv('DEFAULT_SHELF_ID', 'LIB001-A-01-3')
+# 테스트 스크립트가 기본으로 쓰는 층: LIB001 A구역 1번 책꽂이 5층 (정상 기준 이미지를 촬영한 칸)
+DEFAULT_SHELF_ID = os.getenv('DEFAULT_SHELF_ID', 'LIB001-A-01-5')
 
 # 시연용 계정의 비밀번호 (setup_db.py가 계정을 처음 만들 때만 사용, 이미 있는 계정의 비밀번호는 바꾸지 않음)
 DEMO_ADMIN_PASSWORD = os.getenv('DEMO_ADMIN_PASSWORD', 'admin1234')
@@ -44,6 +44,9 @@ DEMO_LOGIN = {
 RFID_MODE = os.getenv('RFID_MODE', 'virtual').lower()
 if RFID_MODE not in ('virtual', 'real'):
     raise ValueError("RFID_MODE는 virtual 또는 real이어야 합니다.")
+
+# 층마다 남길 순찰 횟수. 그 이전의 기록과 사진은 분석이 끝날 때 지웁니다. (0이면 지우지 않음, retention.py)
+PATROL_KEEP_COUNT = int(os.getenv('PATROL_KEEP_COUNT', '2'))
 
 # 로그인 쿠키를 HTTPS로만 보낼지 (HTTPS로 서비스할 때 1로 설정. HTTP로 접속하면 로그인이 유지되지 않음)
 COOKIE_SECURE = os.getenv('COOKIE_SECURE', '0').lower() in ('1', 'true', 'yes')

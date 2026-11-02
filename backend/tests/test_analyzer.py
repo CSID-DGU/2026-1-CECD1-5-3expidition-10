@@ -181,7 +181,7 @@ class UnknownPaperBookTest(unittest.TestCase):
         self.assertEqual(hint, {"unknown_count": 1, "candidates": [{"reg_no": "R2", "title": "책"}], "matched": True})
 
     def test_paper_and_unidentified_count_together(self):
-        """A-03-3: 책등 안 보임 1권 + 미확인 1권 = RFID에만 있는 책 2권"""
+        """책등 안 보임 1권 + 미확인 1권 = RFID에만 있는 책 2권"""
         results = [
             {"sequence_order": 5, "reg_no": "UNKNOWN", "title": None, "final_status": UNKNOWN_PAPER_STATUS},
             {"sequence_order": 13, "reg_no": "UNKNOWN", "title": None, "final_status": "미확인 도서 (육안 확인 필요)"},

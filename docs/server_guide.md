@@ -49,6 +49,7 @@ copy .env.example .env
 | `DEMO_ADMIN_PASSWORD` | 관리자 계정 비밀번호 |
 | `DEMO_LIBRARIAN_PASSWORD` | 사서 계정 비밀번호 |
 | `COOKIE_SECURE` | 터널로 접속하면 `1`, 이 컴퓨터에서만 쓰면 `0` |
+| `PATROL_KEEP_COUNT` | 층마다 남길 순찰 횟수 (기본 `2`, `0`이면 지우지 않음) |
 
 > - `.env`는 git에 올라가지 않습니다. 이 파일과 비밀번호를 저장소나 대화방에 올리지 마세요.
 > - `DB_PASSWORD`는 DB를 **처음 만들 때**, 계정 비밀번호는 계정을 **처음 만들 때**만 적용됩니다. 이미 만든 뒤에 바꾸려면 아래 7절을 보세요.
