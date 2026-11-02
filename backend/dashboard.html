@@ -6,30 +6,30 @@
     <title>VLM 지능형 서고 관리 플랫폼</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="/assets/common.js"></script>
+    <script src="/assets/common.js?v=20261101b"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-    <nav class="bg-white shadow-sm p-4 border-b border-slate-200 flex flex-wrap gap-3 justify-between items-center px-8">
-        <div class="text-xl font-bold text-blue-600 flex items-center gap-2">
+    <nav class="bg-white shadow-sm p-4 border-b border-slate-200 flex flex-wrap gap-3 justify-between items-center md:px-8">
+        <div class="text-lg md:text-xl font-bold text-blue-600 flex items-center gap-2">
             <i class="fa-solid fa-robot text-2xl"></i>
             <span>지능형 서고 모니터링 대시보드 (VLM)</span>
         </div>
-        <div class="flex items-center gap-4">
-            <span class="text-sm text-slate-500" id="current-session-id">확인할 서가를 선택하세요</span>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <span class="w-full md:w-auto text-sm text-slate-500" id="current-session-id">확인할 서가를 선택하세요</span>
             <button id="new-result" onclick="openNewResult()" class="hidden text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-lg items-center gap-1.5">
                 <i class="fa-solid fa-arrows-rotate"></i> 이 층의 새 순찰 결과 보기
             </button>
-            <a href="/report" target="_blank" class="text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
+            <a href="/report" target="_blank" class="whitespace-nowrap text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
                 <i class="fa-solid fa-file-lines"></i> 일일 리포트
             </a>
-            <div id="user-box" class="flex items-center gap-3 pl-3 border-l border-slate-200"></div>
+            <div id="user-box" class="flex flex-wrap items-center gap-x-3 gap-y-2 md:pl-3 md:border-l border-slate-200"></div>
         </div>
     </nav>
 
-    <div class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 items-stretch">
+    <div class="container mx-auto p-3 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 flex-1 items-stretch">
 
-        <!-- 순찰 사진 수신함(폴더) → 일괄 분석 -->
+        <!-- 순찰 사진 수신함(DB) → 일괄 분석 -->
         <div class="lg:col-span-12 bg-white px-5 py-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-x-6 gap-y-3">
             <div class="flex items-center gap-3 min-w-[260px]">
                 <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fa-solid fa-folder-open text-lg"></i></div>
@@ -49,8 +49,8 @@
 
             <!-- 도서관 지도 / 선택한 층의 현재 상태 사진 -->
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
-                <div class="mb-3 flex items-center justify-between gap-2">
-                    <div class="flex shrink-0 bg-slate-100 rounded-lg p-0.5 text-sm font-semibold">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex max-w-full bg-slate-100 rounded-lg p-0.5 text-sm font-semibold">
                         <button id="tab-map" onclick="showView('map')" class="px-3 py-1 rounded-md">
                             <i class="fa-solid fa-map"></i> 도서관 지도
                         </button>
@@ -120,19 +120,23 @@
                     <div class="text-sm text-slate-400 py-4">불러오는 중...</div>
                 </div>
                 <div id="status-legend" class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500"></div>
-                <div id="bulk-ref-row" class="hidden flex items-center gap-2 pt-2 border-t border-slate-100">
+                <div id="bulk-ref-row" class="hidden flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
                     <button id="bulk-ref-btn" onclick="bulkUpdateReferences()" disabled
                             class="shrink-0 whitespace-nowrap text-xs px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50 font-semibold flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
                         <i class="fa-solid fa-images"></i> <span id="bulk-ref-text">기준 사진 일괄 갱신</span>
                     </button>
-                    <span class="text-[11px] text-slate-400">최근 순찰이 정상이고 대출 도서가 없는 층(<span class="text-sky-600">●</span>)만 최근 순찰 사진으로 바꿉니다</span>
+                    <span class="flex-1 min-w-[200px] text-[11px] text-slate-400">최근 순찰이 정상이고 미비치(대출 등) 도서가 없는 층(<span class="text-sky-600">●</span>)만 최근 순찰 사진으로 바꿉니다</span>
+                    <button onclick="openPlacementModal()"
+                            class="shrink-0 whitespace-nowrap text-xs px-2.5 py-1.5 rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrow-down-1-9"></i> 배가 위치 자동 배정
+                    </button>
                 </div>
             </div>
 
             <!-- 순찰 이력 -->
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 min-h-[200px]">
                 <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-indigo-500"></i> 순찰 이력</span>
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-clock-rotate-left text-indigo-500"></i> 순찰 이력 <span class="text-[11px] font-normal text-slate-400">층마다 최근 순찰만 보관</span></span>
                     <span class="flex items-center gap-2">
                         <button id="history-filter" onclick="setHistoryFilter(null)" class="hidden text-[11px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full" title="필터 해제"></button>
                         <button onclick="refreshHistory()" class="text-xs text-slate-400 hover:text-slate-600" title="새로고침"><i class="fa-solid fa-rotate-right"></i></button>
@@ -148,9 +152,9 @@
         <div class="lg:col-span-7 flex flex-col gap-6">
 
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col flex-1 max-h-[640px]">
-                <h2 class="text-md font-bold text-slate-700 mb-3 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><i class="fa-solid fa-bell text-rose-500"></i> 사서 가이드 알림판
-                        <button id="back-to-list" onclick="clearSelection()" class="hidden text-xs font-normal text-slate-500 hover:text-slate-700 border border-slate-200 rounded-md px-2 py-0.5">
+                <h2 class="text-md font-bold text-slate-700 mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <span class="flex flex-wrap items-center gap-2"><i class="fa-solid fa-bell text-rose-500"></i> 사서 가이드 알림판
+                        <button id="back-to-list" onclick="clearSelection()" class="hidden whitespace-nowrap text-xs font-normal text-slate-500 hover:text-slate-700 border border-slate-200 rounded-md px-2 py-0.5">
                             <i class="fa-solid fa-list-check"></i> 확인 필요 목록</button></span>
                     <span class="text-xs font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full" id="issue-count">층 선택 전</span>
                 </h2>
@@ -176,7 +180,7 @@
     </div>
 
     <!-- 구조 편집 입력 창 (openFormModal) -->
-    <div id="form-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closeFormModal()">
+    <div id="form-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closeFormModal()">
         <form id="form-modal-form" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 flex flex-col gap-3" onclick="event.stopPropagation()">
             <div class="flex items-center justify-between">
                 <h3 id="form-modal-title" class="font-bold text-slate-700"></h3>
@@ -193,6 +197,30 @@
         </form>
     </div>
 
+    <!-- 배가 위치 자동 배정 (관리자) -->
+    <div id="placement-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closePlacementModal()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-5 flex flex-col gap-3 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-arrow-down-1-9 text-indigo-500"></i> 배가 위치 자동 배정</h3>
+                <button type="button" onclick="closePlacementModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">청구기호순 도서 목록을 기준 사진의 권수만큼 잘라 층에 배정합니다. RFID 리더값이 있는 층은 읽힌 책으로 정합니다. 층마다 <b>첫 책 · 마지막 책</b>이 사진과 맞는지 보고, 틀리면 권수를 고친 뒤 다시 계산하세요. 한 층이 틀리면 뒤 층이 모두 밀립니다.</p>
+            <label class="text-xs font-semibold text-slate-600 flex items-center gap-2">책꽂이 안의 배가 순서
+                <select id="placement-order" onchange="refreshPlacement()" class="font-normal text-sm border border-slate-200 rounded-lg px-2 py-1">
+                    <option value="top">위층부터</option>
+                    <option value="bottom">아래층부터</option>
+                </select>
+            </label>
+            <div id="placement-summary" class="text-xs text-slate-600"></div>
+            <div id="placement-floors" class="flex flex-col gap-2"></div>
+            <div class="flex items-center justify-end gap-2 pt-1">
+                <button type="button" id="placement-undo" onclick="undoPlacement()" class="hidden mr-auto text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">이전 배정으로 되돌리기</button>
+                <button type="button" onclick="refreshPlacement()" class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">다시 계산</button>
+                <button type="button" id="placement-apply" onclick="applyPlacement()" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">이 배정으로 저장</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 사서 계정 관리 (관리자) -->
     <div id="account-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closeAccountModal()">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
@@ -200,11 +228,11 @@
                 <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-users text-indigo-500"></i> 사서 계정 <span id="account-library" class="text-sm font-normal text-slate-400"></span></h3>
                 <button type="button" onclick="closeAccountModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="border border-slate-200 rounded-xl overflow-hidden">
-                <table class="w-full text-sm">
+            <div class="border border-slate-200 rounded-xl overflow-x-auto">
+                <table class="w-full text-sm whitespace-nowrap">
                     <thead class="bg-slate-50 text-xs text-slate-500">
-                        <tr><th class="text-left px-3 py-2">이름</th><th class="text-left px-3 py-2">아이디</th><th class="text-left px-3 py-2">권한</th>
-                            <th class="text-left px-3 py-2">마지막 로그인</th><th class="px-3 py-2"></th></tr>
+                        <tr><th class="text-left px-3 py-2">이름</th><th class="text-left px-3 py-2">아이디</th><th class="hidden sm:table-cell text-left px-3 py-2">권한</th>
+                            <th class="hidden sm:table-cell text-left px-3 py-2">마지막 로그인</th><th class="px-3 py-2"></th></tr>
                     </thead>
                     <tbody id="account-rows"></tbody>
                 </table>
@@ -252,7 +280,7 @@
     </div>
 
     <script>
-        // 순찰 사진은 수신함 폴더로 들어오므로, 화면은 주기적으로 새 사진 · 결과를 확인합니다.
+        // 순찰 사진은 수신함(PATROL_PHOTO)으로 들어오므로, 화면은 주기적으로 새 사진 · 결과를 확인합니다.
         const AUTO_REFRESH_MS = 20000;
 
         let currentSession = null;    // 화면에 표시 중인 세션 결과 (/api/dashboard/results 응답)
@@ -271,8 +299,12 @@
         // 알림 라벨별 사서 안내 문구 (라벨/그룹 분류는 서버가 결정)
         const MESSAGE_BY_LABEL = {
             "누락/분실":     r => `청구기호 명부에는 있으나, <b>${bookLabel(r)}</b> 도서가 영상과 RFID 모두에서 확인되지 않았습니다.`,
-            "오배가":        r => `<b>${bookLabel(r)}</b> 도서가 이 서가에 속하지 않습니다. 원래 서가로 반납해 주세요.`,
-            "오배열":        r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 청구기호 순서에서 벗어나 있습니다. 제자리로 옮겨주세요.`,
+            "오배가":        r => `<b>${bookTitle(r)}</b> 도서가 이 서가에 속하지 않습니다. ${r.home_location
+                ? `원래 위치 <b>${escapeHtml(r.home_location)}</b>로 옮겨 주세요.` : "배가 위치가 지정되지 않은 도서입니다. 도서 정보를 확인해 주세요."}`,
+            "상태이상":      r => `<b>${bookLabel(r)}</b> 도서는 대출 중(미비치)으로 되어 있는데 서가에서 발견되었습니다. 반납 처리를 확인해 주세요.`,
+            "미분석":        r => `RFID로 읽은 등록번호 <b>${escapeHtml(r.reg_no)}</b>의 도서 정보가 없습니다. 등록 여부를 확인해 주세요.`,
+            "오배열":        r => `<b>${seqLabel(r)}</b> 책(${bookTitle(r)})의 자리가 잘못되었습니다. ${r.move_to
+                ? `<b>${escapeHtml(r.move_to)}</b>로 옮겨 주세요.` : "제자리로 옮겨 주세요."}`,
             "인식 실패":     r => `<b>${bookLabel(r)}</b> 도서의 RFID는 감지되었으나 영상에서 찾지 못했습니다. 서가에서 직접 확인해 주세요.`,
             "미확인 도서":   r => `<b>${seqLabel(r)}</b> 책을 어떤 도서인지 식별하지 못했습니다. 직접 확인해 주세요.`,
             "중복 인식":     r => `<b>${seqLabel(r)}</b> 책이 다른 위치의 책과 같은 도서(${bookLabel(r)})로 인식되었습니다. 직접 확인해 주세요.`,
@@ -280,10 +312,12 @@
             "뒤집힘":        r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 거꾸로 회전되어 있습니다. 똑바로 세워주세요.`,
             "기울어짐":      r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 기울어져 있습니다. 정돈해 주세요.`,
             "가로로 누움":   r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 가로로 눕혀져 있거나 다른 책 위에 쌓여 있습니다. 세워서 꽂아주세요.`,
-            "종이 끼임 의심": r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)}) 주변에 종이나 이물질이 끼어 있는 것으로 보입니다. 확인해 주세요.`,
+            "책등 안 보임": r => `<b>${seqLabel(r)}</b> 책의 책등이 보이지 않아 어떤 책인지 알 수 없습니다. 거꾸로 꽂혔거나 종이가 끼어 있을 수 있으니 확인해 주세요.`,
         };
 
         // ===================== 공통 UI =====================
+        let batchFailureText = "";   // 마지막 일괄 분석의 실패 이유 (실패 장수를 누르면 표시)
+
         function openLightbox(imgUrl, title, status) {
             const lb = document.getElementById('lightbox');
             document.getElementById('lightbox-img').src = imgUrl;
@@ -294,7 +328,7 @@
             lb.classList.add('flex');
         }
 
-        document.addEventListener("keydown", e => { if (e.key === "Escape") { closeFormModal(); closeAccountModal(); } });
+        document.addEventListener("keydown", e => { if (e.key === "Escape") { closeFormModal(); closeAccountModal(); closePlacementModal(); } });
 
         function closeLightbox() {
             const lb = document.getElementById('lightbox');
@@ -314,7 +348,7 @@
             const on = "bg-white shadow-sm text-slate-800", off = "text-slate-500 hover:text-slate-700";
             VIEWS.forEach(v => {
                 document.getElementById(`${v}-view`).classList.toggle('hidden', v !== view);
-                document.getElementById(`tab-${v}`).className = `px-2.5 py-1 rounded-md whitespace-nowrap ${v === view ? on : off}`;
+                document.getElementById(`tab-${v}`).className = `px-2 sm:px-2.5 py-1 rounded-md whitespace-nowrap text-xs sm:text-sm ${v === view ? on : off}`;
             });
             document.getElementById('view-caption').textContent = viewCaptions[view];
             renderViewActions();
@@ -390,9 +424,19 @@
             const note = document.createElement("div");
             note.className = "w-full text-[11px] " + (ref.eligible ? "text-sky-700" : "text-slate-400");
             note.innerHTML = ref.eligible
-                ? `<i class="fa-solid fa-circle-check"></i> 최근 순찰이 정상이고 대출 도서가 없어, 최근 순찰 사진을 기준 사진으로 쓰기 좋습니다.`
+                ? `<i class="fa-solid fa-circle-check"></i> 최근 순찰이 정상이고 미비치(대출 등) 도서가 없어, 최근 순찰 사진을 기준 사진으로 쓰기 좋습니다.`
                 : `<i class="fa-solid fa-circle-info"></i> 일괄 갱신 대상 아님: ${ref.reasons.map(escapeHtml).join(" · ")}`;
             box.appendChild(note);
+            if (level.reference_mismatch) box.appendChild(buildReferenceWarning(level.reference_mismatch));
+        }
+
+        // 기준 사진의 권수와 연결된 책 수가 달라 AI의 책 번호가 어긋날 수 있을 때
+        function buildReferenceWarning(mismatch) {
+            const box = document.createElement("div");
+            box.className = "w-full p-3 rounded-xl border-l-4 border-amber-500 bg-amber-50 text-amber-800 shadow-sm text-sm";
+            box.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> 기준 사진의 책(${mismatch.detected}권)과 이 층에 연결된 책(${mismatch.expected}권)의 수가 달라, 책이 다른 도서로 판정될 수 있습니다. `
+                + (ME.is_admin ? "기준 사진을 확인하고 <b>배가 위치 자동 배정</b>을 다시 실행해 주세요." : "관리자에게 알려 주세요.");
+            return box;
         }
 
         async function sendForm(url, method, file) {
@@ -488,7 +532,7 @@
                 }
                 const targetList = preview.targets.map(t => `  · ${t.location_label}`).join("\n");
                 const skippedNote = preview.skipped.length
-                    ? `\n\n제외 ${preview.skipped.length}곳 (대출 도서 있음 · 문제 발견 · 순찰 기록 없음 등)` : "";
+                    ? `\n\n제외 ${preview.skipped.length}곳 (미비치 도서 있음 · 문제 발견 · 순찰 기록 없음 등)` : "";
                 if (!confirm(`다음 ${preview.targets.length}곳의 기준 사진을 최근 순찰 사진으로 바꿀까요?\n${targetList}${skippedNote}\n\n이전 기준 사진은 층마다 되돌릴 수 있습니다.`)) return;
                 const result = await post({ dry_run: false });
                 await afterNormalChanged();
@@ -572,14 +616,9 @@
         function renderPatrolStatus(st) {
             const lastReceived = st.last_received_at ? ` · 마지막 수신 ${formatTime(st.last_received_at)}` : "";
             const byZone = Object.entries(st.analyzable_by_zone || {}).map(([z, n]) => `${escapeHtml(z)}구역 ${n}`).join(" · ");
-            const unknown = st.unrecognized_files || [];
-            const unknownNote = unknown.length
-                ? `<br><span class="text-amber-700 cursor-help" title="${escapeHtml(unknown.map(f => `${f.file_path}: ${f.reason}`).join("\n"))}">
-                     <i class="fa-solid fa-triangle-exclamation"></i> 수신함에 규칙에 맞지 않는 파일 ${unknown.length}개 (마우스를 올리면 이유 표시)</span>`
-                : "";
             document.getElementById('patrol-summary').innerHTML = (st.analyzable_count > 0
                 ? `<b class="text-blue-600">분석 대기 ${st.analyzable_count}장</b> (${byZone})${st.failed_count ? ` · 이전 실패 ${st.failed_count}장 포함` : ""}${lastReceived}`
-                : `수신함 폴더에 새 순찰 사진이 없습니다${lastReceived}`) + unknownNote;
+                : `수신함에 새 순찰 사진이 없습니다${lastReceived}`);
 
             const box = document.getElementById('patrol-progress');
             const b = st.latest_batch;
@@ -591,10 +630,10 @@
                         ${b.current_location ? ` · 지금: ${escapeHtml(b.current_location)}` : " · 순서 대기 중"}</span><span>${pct}%</span></div>
                     <div class="h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-blue-500 transition-all" style="width:${pct}%"></div></div>`;
             } else if (b) {
-                const failures = b.failures.map(f => `${f.location_label}: ${f.error}`).join("\n");
+                batchFailureText = b.failures.map(f => `${f.location_label}: ${f.error}`).join("\n");
                 box.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-500"></i>
                     마지막 일괄 분석 ${formatTime(b.finished_at || b.started_at)} 완료 · ${b.total}장 중 <b class="text-emerald-700">${b.done}장 성공</b>`
-                    + (b.failed ? `, <b class="text-rose-600 cursor-help" title="${escapeHtml(failures)}">${b.failed}장 실패</b> (다음 분석 때 다시 시도)` : "");
+                    + (b.failed ? `, <button type="button" onclick="alert(batchFailureText)" class="text-rose-600 font-bold underline">${b.failed}장 실패</button> (다음 분석 때 다시 시도, 눌러서 이유 보기)` : "");
             } else {
                 box.innerHTML = "";
             }
@@ -787,7 +826,8 @@
                 col.title = `${bookcase.bookcase_no}번 책꽂이 · ${bookcase.bookcase_name || ""}`;
                 const head = editMode
                     ? `<button data-edit-bookcase class="text-[11px] font-semibold text-indigo-600 hover:underline text-center mb-1 whitespace-nowrap">${bookcase.bookcase_no}번 <i class="fa-solid fa-pen text-[9px]"></i></button>`
-                    : `<div class="text-[11px] font-semibold text-slate-600 text-center mb-1">${bookcase.bookcase_no}번</div>`;
+                    : `<div class="text-[11px] font-semibold text-slate-600 text-center mb-1">${bookcase.bookcase_no}번${bookcase.bookcase_name
+                        ? `<span class="lg:hidden block text-[10px] font-normal leading-tight text-slate-400 break-keep">${escapeHtml(bookcase.bookcase_name)}</span>` : ""}</div>`;
                 col.innerHTML = `${head}
                     <div class="border-2 border-amber-900/30 bg-amber-900/5 rounded-md p-0.5 flex flex-col gap-0.5" data-levels></div>`;
                 if (editMode) col.querySelector("[data-edit-bookcase]").addEventListener("click", () => openEditBookcase(zone, bookcase));
@@ -860,15 +900,21 @@
                         <td class="px-3 py-2 font-semibold text-slate-700">${escapeHtml(u.display_name)}${u.is_me ? ' <span class="text-[10px] text-slate-400">(나)</span>' : ""}
                             ${u.is_active ? "" : ' <span class="text-[10px] text-rose-500">로그인 중지</span>'}</td>
                         <td class="px-3 py-2 text-slate-600">${escapeHtml(u.username)}</td>
-                        <td class="px-3 py-2">${role}</td>
-                        <td class="px-3 py-2 text-xs text-slate-500">${u.last_login_at ? formatTime(u.last_login_at) : "-"}</td>
-                        <td class="px-3 py-2 text-right"></td>`;
+                        <td class="hidden sm:table-cell px-3 py-2">${role}</td>
+                        <td class="hidden sm:table-cell px-3 py-2 text-xs text-slate-500">${u.last_login_at ? formatTime(u.last_login_at) : "-"}</td>
+                        <td class="px-3 py-2"><div class="flex flex-col sm:flex-row items-end sm:items-center justify-end gap-1.5"></div></td>`;
                     if (u.role === "LIBRARIAN") {
+                        const actions = tr.querySelector("td:last-child div");
+                        const pwBtn = document.createElement("button");
+                        pwBtn.className = "text-xs px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50";
+                        pwBtn.innerHTML = `<i class="fa-solid fa-key"></i> 비밀번호`;
+                        pwBtn.addEventListener("click", () => openPasswordChange(u));
+                        actions.appendChild(pwBtn);
                         const btn = document.createElement("button");
                         btn.className = "text-xs px-2 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50";
                         btn.innerHTML = `<i class="fa-solid fa-trash"></i> 삭제`;
                         btn.addEventListener("click", () => deleteAccount(u));
-                        tr.lastElementChild.appendChild(btn);
+                        actions.appendChild(btn);
                     }
                     rows.appendChild(tr);
                 });
@@ -891,6 +937,159 @@
             const modal = document.getElementById('account-modal');
             modal.classList.add('hidden');
             modal.classList.remove('flex');
+        }
+
+        // ===================== 배가 위치 자동 배정 (관리자) =====================
+        function placementRequest() {
+            const counts = {};
+            document.querySelectorAll("#placement-floors input[data-shelf]").forEach(input => {
+                if (input.value !== "") counts[input.dataset.shelf] = Number(input.value);
+            });
+            return { top_down: document.getElementById('placement-order').value === "top", counts };
+        }
+
+        function placementBook(label, shelfId, book) {
+            if (!book) return `<div class="text-xs text-slate-400">${label}: 없음</div>`;
+            const url = `${API_BASE}/book-placement/spine/${encodeURIComponent(shelfId)}/${book.slot}`;
+            return `
+                <div class="flex items-center gap-2 min-w-0">
+                    <img src="${url}" alt="" onerror="this.classList.add('invisible')" class="h-20 w-10 object-contain bg-slate-100 rounded shrink-0">
+                    <div class="min-w-0 text-xs">
+                        <div class="text-slate-400">${label} · 기준 사진 ${book.slot}번째</div>
+                        <div class="font-semibold text-slate-700 break-words">${escapeHtml(book.title)}</div>
+                        <div class="text-slate-400">${escapeHtml(book.call_no)} · ${escapeHtml(book.reg_no)}</div>
+                    </div>
+                </div>`;
+        }
+
+        function placementFloor(floor) {
+            const count = floor.source === "RFID"
+                ? `<span class="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">RFID ${floor.book_count}권</span>`
+                : `<label class="text-xs text-slate-500 flex items-center gap-1">권수
+                       <input type="number" min="0" value="${floor.count}" data-shelf="${escapeHtml(floor.shelf_id)}" class="w-16 border border-slate-200 rounded px-1.5 py-0.5 text-sm">
+                   </label>
+                   ${floor.count === floor.detected ? "" : `<span class="text-[11px] text-amber-700">사진 인식 ${floor.detected ?? "-"}권</span>`}`;
+            const away = floor.away_count ? `<span class="text-[11px] text-slate-500">미비치 ${floor.away_count}권 포함</span>` : "";
+            const warnings = floor.warnings.map(w => `<div class="text-[11px] text-rose-700"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(w)}</div>`).join("");
+            return `
+                <div class="border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <b class="text-sm text-slate-700">${escapeHtml(floor.location_label)}</b>
+                        ${count}${away}
+                        <span class="ml-auto text-[11px] text-slate-400">지금과 다른 책 ${floor.changed_count}권</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        ${placementBook("첫 책", floor.shelf_id, floor.first)}
+                        ${placementBook("마지막 책", floor.shelf_id, floor.last)}
+                    </div>
+                    ${warnings}
+                </div>`;
+        }
+
+        function placementSummary(plan) {
+            const total = plan.floors.reduce((sum, f) => sum + f.book_count + f.away_count, 0);
+            const notes = [`${plan.floors.length}개 층에 ${total}권 배정`];
+            if (plan.unassigned.length) notes.push(`<span class="text-rose-700">배정되지 못한 책 ${plan.unassigned.length}권</span>`);
+            if (plan.no_call_number.length) notes.push(`<span class="text-rose-700">청구기호가 없어 뺀 책 ${plan.no_call_number.length}권</span>`);
+            if (plan.skipped_floors) notes.push(`기준 사진이 없어 건너뛴 층 ${plan.skipped_floors}곳`);
+            return notes.join(" · ");
+        }
+
+        async function refreshPlacement() {
+            const floors = document.getElementById('placement-floors');
+            const summary = document.getElementById('placement-summary');
+            const apply = document.getElementById('placement-apply');
+            apply.disabled = true;
+            summary.textContent = "계산 중...";
+            try {
+                const plan = await fetchJson(`${API_BASE}/book-placement/preview`, {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(placementRequest()),
+                });
+                summary.innerHTML = placementSummary(plan);
+                floors.innerHTML = plan.floors.map(placementFloor).join("");
+                apply.disabled = plan.floors.length === 0;
+                const undo = document.getElementById('placement-undo');
+                undo.classList.toggle('hidden', !plan.previous);
+                undo.title = plan.previous ? `${formatTime(plan.previous.saved_at)}에 보관한 배정 (${plan.previous.book_count}권)` : "";
+            } catch (e) {
+                summary.innerHTML = `<span class="text-rose-700">${escapeHtml(e.message)}</span>`;
+            }
+        }
+
+        async function applyPlacement() {
+            if (!confirm("이 배정으로 배가 위치를 다시 만듭니다. 다음 분석부터 적용되고, 지난 순찰 결과는 바뀌지 않습니다.")) return;
+            try {
+                const result = await fetchJson(`${API_BASE}/book-placement/apply`, {
+                    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(placementRequest()),
+                });
+                alert(`✅ ${result.saved_count}권의 배가 위치를 저장했습니다.`);
+                closePlacementModal();
+                refreshLocations();
+            } catch (e) {
+                alert(`❌ 저장 실패: ${e.message}`);
+            }
+        }
+
+        async function undoPlacement() {
+            if (!confirm("지금 배정을 이전 배정으로 바꿉니다. 다시 누르면 지금 배정으로 돌아옵니다.")) return;
+            try {
+                const result = await fetchJson(`${API_BASE}/book-placement/undo`, { method: "POST" });
+                alert(`✅ ${result.restored_count}권의 배가 위치를 되돌렸습니다.`);
+                document.getElementById('placement-floors').innerHTML = "";
+                refreshPlacement();
+                refreshLocations();
+            } catch (e) {
+                alert(`❌ 되돌리기 실패: ${e.message}`);
+            }
+        }
+
+        function openPlacementModal() {
+            document.getElementById('placement-floors').innerHTML = "";
+            const modal = document.getElementById('placement-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            refreshPlacement();
+        }
+
+        function closePlacementModal() {
+            const modal = document.getElementById('placement-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function openMyPassword() {
+            openFormModal({
+                title: "내 비밀번호 변경",
+                info: "바꾸면 다른 기기의 로그인은 끊어지고, 이 기기는 로그인이 유지됩니다.",
+                fields: [
+                    { name: "current", label: "현재 비밀번호", type: "password", autocomplete: "current-password", required: true },
+                    { name: "password", label: "새 비밀번호", type: "password", placeholder: "8자 이상", required: true },
+                    { name: "password2", label: "새 비밀번호 확인", type: "password", required: true },
+                ],
+                submitLabel: "변경",
+                onSubmit: async v => {
+                    if (v.password !== v.password2) throw new Error("두 새 비밀번호가 다릅니다.");
+                    await sendJson(`${API_BASE}/auth/password`, "POST", { current_password: v.current, new_password: v.password });
+                    alert("비밀번호를 바꿨습니다.");
+                },
+            });
+        }
+
+        function openPasswordChange(u) {
+            openFormModal({
+                title: `${u.display_name}(${u.username}) 비밀번호 변경`,
+                info: "바꾸면 이 사서의 기존 로그인이 끊어집니다. 새 비밀번호를 사서에게 전달해 주세요.",
+                fields: [
+                    { name: "password", label: "새 비밀번호", type: "password", placeholder: "8자 이상", required: true },
+                    { name: "password2", label: "새 비밀번호 확인", type: "password", required: true },
+                ],
+                submitLabel: "변경",
+                onSubmit: async v => {
+                    if (v.password !== v.password2) throw new Error("두 비밀번호가 다릅니다.");
+                    await sendJson(`${API_BASE}/users/${u.user_id}/password`, "POST", { password: v.password });
+                    accountMessage(`${u.display_name}(${u.username})의 비밀번호를 바꿨습니다.`, true);
+                },
+            });
         }
 
         async function deleteAccount(u) {
@@ -966,6 +1165,7 @@
                 if (f.min !== undefined) input.min = f.min;
                 if (f.max !== undefined) input.max = f.max;
                 if (f.required) input.required = true;
+                if (input.type === "password") input.autocomplete = f.autocomplete || "new-password";
                 input.className = "font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300";
                 wrap.appendChild(input);
                 if (f.help) wrap.insertAdjacentHTML("beforeend", `<span class="font-normal text-[11px] text-slate-400">${f.help}</span>`);
@@ -1252,7 +1452,7 @@
                     + (selected ? "border-blue-400 bg-blue-50" : "border-slate-200 hover:bg-slate-50");
                 item.innerHTML = `
                     <span class="font-semibold text-slate-700 w-24 shrink-0">${formatTime(s.scan_time)}</span>
-                    <span class="text-slate-500 flex-1 truncate" title="${locationText(s)}">${locationText(s)}</span>
+                    <span class="text-slate-500 flex-1 min-w-0 sm:truncate" title="${locationText(s)}">${locationText(s)}</span>
                     <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full ${badgeClass}">${badgeText}</span>
                 `;
                 item.addEventListener("click", () => loadSession(s.session_id, { showPhoto: true }));
@@ -1271,7 +1471,7 @@
                 currentSession = payload;
                 document.getElementById('back-to-list').classList.remove('hidden');
                 document.getElementById('current-session-id').innerText =
-                    `${payload.location_label} · ${formatTime(payload.scan_time)} 순찰`;
+                    `${payload.location_label} · ${formatTime(payload.scan_time)} 순찰${rfidLabel(payload.rfid_source)}`;
                 if (shelfIndex[payload.shelf_id]) {
                     selectedShelfId = payload.shelf_id;
                     activeZoneId = shelfIndex[payload.shelf_id].zone.zone_id;
@@ -1399,10 +1599,19 @@
             return box;
         }
 
+        // 알 수 없는 책 알림 맨 위에 한 번만 보여 주는 RFID 후보 안내 (알림이 여러 건이어도 중복되지 않게)
+        function buildUnknownBooksHint(hint) {
+            const box = document.createElement("div");
+            box.className = "p-3 rounded-xl bg-sky-50 border-l-4 border-sky-400 text-sky-800 shadow-sm text-sm flex items-start gap-3";
+            box.innerHTML = `<i class="fa-solid fa-tower-broadcast text-base opacity-90 mt-0.5"></i><div class="flex-1 min-w-0 break-words">${unknownBooksMessage(hint)}</div>`;
+            return box;
+        }
+
         function buildSpineThumb(row) {
             const group = GROUP_INFO[row.issues[0].group];
             const url = spineUrl(row.spine_img_path);
-            const title = `${seqLabel(row)} [${row.book_id || "Unknown"}${row.title ? " " + row.title : ""}]`;
+            const name = row.reg_no === "UNKNOWN" ? "알 수 없는 책" : row.reg_no || "Unknown";
+            const title = `${seqLabel(row)} [${name}${row.title ? " " + row.title : ""}]`;
             const imgBox = document.createElement("div");
             imgBox.className = "relative bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shadow-sm flex flex-col items-center p-1 group";
             imgBox.innerHTML = `
@@ -1447,6 +1656,9 @@
                 countLabel.className = pill + "bg-emerald-100 text-emerald-700";
             }
 
+            const mismatch = shelfIndex[payload.shelf_id]?.level.reference_mismatch;
+            if (mismatch) taskContainer.appendChild(buildReferenceWarning(mismatch));
+
             // 인식 품질이 낮으면 재촬영 안내를 먼저 띄우고, 개별 판정은 접어서 참고용으로만 제공
             let listContainer = taskContainer;
             if (!reliable) {
@@ -1460,12 +1672,22 @@
                 }
             }
 
+            const unknownBooks = payload.unknown_books;
+            const hintGroup = unknownBooks ? pending.find(r => r.reg_no === "UNKNOWN")?.issues[0].group : null;
             ISSUE_GROUPS.forEach(group => {
                 const rows = pending.filter(r => r.issues[0].group === group.key);
                 if (rows.length === 0) return;
                 // '확인 필요'는 조치가 필요한 알림이 있을 때 기본으로 접어 둠
-                listContainer.appendChild(buildSection(group.title, group.badge, rows, group.key !== "check" || actionCount === 0));
+                const section = buildSection(group.title, group.badge, rows,
+                    group.key !== "check" || actionCount === 0 || group.key === hintGroup);
+                if (group.key === hintGroup) section.querySelector("div").prepend(buildUnknownBooksHint(unknownBooks));
+                listContainer.appendChild(section);
             });
+
+            // 알 수 없는 책 알림을 처리해도, 권수가 달랐던 후보는 따로 알림이 없으므로 안내를 남겨 둠
+            if (unknownBooks && !unknownBooks.matched && !hintGroup) {
+                listContainer.appendChild(buildUnknownBooksHint(unknownBooks));
+            }
 
             if (handled.length > 0) {
                 taskContainer.appendChild(buildSection("처리된 알림", "bg-emerald-100 text-emerald-700", handled, false));

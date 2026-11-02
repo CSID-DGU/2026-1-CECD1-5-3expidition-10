@@ -19,16 +19,16 @@ SCAN_TIME_STR = CURRENT_TIME.strftime('%Y-%m-%d %H:%M:%S')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 판정 테스트용 고정 예시: A구역 1번 책꽂이 3층 사진 1장과, 그 사진을 AI가 분석한 결과 (backend/test_data/)
+# 판정 테스트용 고정 예시: A구역 1번 책꽂이 5층 사진 1장과, 그 사진을 AI가 분석한 결과 (backend/test_data/)
 # dataset/test · vision_output은 대시보드에서 분석할 때마다 마지막으로 분석한 사진으로 바뀌므로 쓰지 않습니다.
 TEST_DATA_DIR = os.path.join(BASE_DIR, "test_data")
-SAMPLE_PHOTO_PATH = os.path.join(TEST_DATA_DIR, "sample_A-01-3.jpg")
-SAMPLE_JSON_PATH = os.path.join(TEST_DATA_DIR, "sample_A-01-3_results.json")
+SAMPLE_PHOTO_PATH = os.path.join(TEST_DATA_DIR, "sample_A-01-5.jpg")
+SAMPLE_JSON_PATH = os.path.join(TEST_DATA_DIR, "sample_A-01-5_results.json")
 
 
 def load_payloads_from_json():
     """
-    예시 AI 분석 결과(sample_A-01-3_results.json)를 읽어와서 서버 전송용(Vision, RFID) 데이터로 변환합니다.
+    예시 AI 분석 결과(sample_A-01-5_results.json)를 읽어와서 서버 전송용(Vision, RFID) 데이터로 변환합니다.
     """
     if not os.path.exists(SAMPLE_JSON_PATH):
         print(f"❌ [에러] 예시 AI 결과 파일({SAMPLE_JSON_PATH})을 찾을 수 없습니다.")
@@ -49,7 +49,7 @@ def load_payloads_from_json():
 
     vision_items = []
 
-    # JsonTesting이 이미 좌→우 순서(sequence_order)와 매칭된 book_id를 부여해 둡니다.
+    # AI가 이미 좌→우 순서(sequence_order)와 매칭된 book_id를 부여해 둡니다.
     for book in vision_results:
         seq_index = book["sequence_order"]
         vision_items.append({
@@ -61,7 +61,7 @@ def load_payloads_from_json():
             "visual_status": book.get("visual_status", "normal")
         })
 
-    # 가상 RFID 스캔 결과: 서버의 가상 도서 정보(BOOK_MASTER) 기준
+    # 가상 RFID 스캔 결과: 서버의 도서 정보 기준 (태그 값 = 등록번호, 미태깅 · 미비치 도서는 빠짐)
     res_tags = api.get(f"{BASE_URL}/api/shelves/{SHELF_ID}/virtual-rfid")
     if res_tags.status_code != 200:
         print(f"❌ [가상 RFID 조회 실패] 에러: {res_tags.text}")
@@ -116,4 +116,4 @@ def run_automation_test():
 
 
 if __name__ == "__main__":
-    run_automation_test()
+    run_automation_test()

@@ -8,7 +8,7 @@ uvicorn>=0.44
 python-multipart>=0.0.26      # 대시보드 사진 업로드(form-data)
 pydantic>=2.12
 mysql-connector-python>=9.7
-requests>=2.32                # run_master.py, test_full_pipeline.py, ILS 연동
+requests>=2.32                # test_full_pipeline.py, ILS 연동
 
 # ---- Vision AI (MakeResult.py, app/) ----
 ultralytics>=8.4
@@ -17,5 +17,5 @@ torchvision>=0.26
 opencv-python>=4.13
 pillow>=12.1
 numpy>=2.4
-pandas>=2.2                  # MakeResult.py (책별 리포트 CSV)
-scipy>=1.14                  # MakeResult.py (헝가리안 매칭 linear_sum_assignment)
+pandas>=2.3                   # MakeResult.py
+scipy>=1.17                   # MakeResult.py (책 매칭)
