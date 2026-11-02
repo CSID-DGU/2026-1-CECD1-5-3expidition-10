@@ -13,11 +13,11 @@ from analyzer import (analyze_shelf_session, get_virtual_rfid_items, get_vision_
 from config import RFID_MODE, SPINE_STORE_DIR
 from db import get_db_connection
 from locations import fetch_shelf_location
-from normal_images import get_normal_image_info, prepare_normal_work_dir
+from normal_images import get_normal_image_info
 from spine_archive import archive_spine_image
 from vision_ai import run_vision_ai   # AI 분석 호출 (작업 프로세스를 띄워 두고 재사용, vision_ai.py)
 
-# JsonTesting.py는 *.jpg / *.png 만 읽으므로 그 외 확장자는 맞춰서 저장합니다.
+# AI는 *.jpg / *.png 만 읽으므로 그 외 확장자는 맞춰서 저장합니다.
 ALLOWED_IMAGE_EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png"}
 
 MAX_KEPT_JOBS = 100   # 메모리에 보관할 최근 작업 수
@@ -56,14 +56,16 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
         loc = fetch_shelf_location(conn, shelf_id)
         if loc is None:
             raise RuntimeError(f"등록되지 않은 층입니다: {shelf_id}")
-        normal_dir = prepare_normal_work_dir(conn, loc)
-        normal_image_id = get_normal_image_info(conn, shelf_id)["image_id"]
+        normal_image = get_normal_image_info(conn, shelf_id)
+        if normal_image is None:
+            raise RuntimeError(f"{loc['location_label']}의 정상 상태 기준 이미지가 없습니다. "
+                               f"대시보드에서 층을 선택하고 '정상 상태' 탭에서 기준 사진을 등록해 주세요. (관리자)")
     finally:
         conn.close()
 
     # ① AI 분석 (세션 보관소의 원본 사진을 그대로 분석)
     print(f"\n▶️ [엔진 가동] 세션 {session_id} ({loc['location_label']}): Edge AI 분석 시작 (YOLO & ResNet)...")
-    ai_vision_items = run_vision_ai(os.path.join(SPINE_STORE_DIR, image_rel_path), normal_image_id, normal_dir)
+    ai_vision_items = run_vision_ai(os.path.join(SPINE_STORE_DIR, image_rel_path), normal_image["image_id"])
 
     # ② DB 적재 + 판정
     conn = get_db_connection()
@@ -88,7 +90,7 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
         for item in ai_vision_items:
             seq_idx = item.get("sequence_order")
             # pipeline.py는 탐지 순서로 크롭을 저장하고 sequence_order는 좌→우 정렬 후 순서라 서로 다르므로,
-            # JsonTesting이 넘겨준 실제 파일명을 세션 보관소로 복사해 사용합니다.
+            # AI가 넘겨준 실제 파일명을 세션 보관소로 복사해 사용합니다.
             spine_img_path = archive_spine_image(session_id, item.get("spine_img_file", ""))
             cursor.execute(
                 """INSERT INTO VISION_DATA

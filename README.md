@@ -41,8 +41,8 @@ CECD/
 ├── app/                      # Vision AI: 탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
 ├── model/                    # YOLO 가중치 (서버는 yolo26l_1280_v3.pt 사용, app/models.py)
 ├── MakeResult.py             # 정상 이미지와 비교해 도서별 상태를 판별 (서버가 사용하는 분석 코드)
-├── JsonTesting.py            # 예전 분석 코드 (AI_MODE=subprocess 또는 직접 실행할 때만 사용)
-├── dataset/                  # 정상 · 이상 시나리오별 테스트 사진 (dataset/test는 JsonTesting.py 입력)
+├── JsonTesting.py            # 예전 AI 분석 코드 (서버는 쓰지 않음, AI 파트 단독 실행용)
+├── dataset/                  # 정상 · 이상 시나리오별 테스트 사진
 ├── pipeline_outputs/         # 책등 크롭 작업 폴더 (분석마다 덮어씀, git 제외)
 ├── vision_output/            # 분석 결과 test_results.json (git 제외)
 ├── backend/                  # 백엔드 · 대시보드 파트 (자세한 내용은 backend/README.md)
@@ -169,7 +169,7 @@ python manage_users.py create-library LIB003 "새 도서관"  # 새 도서관 + 
 - **처음 DB를 만들 때**: `setup_db.py`가 `backend/db_create/seed/normal_images/<도서관>/<구역>/<책꽂이>/<층>.jpg`의 사진을 기준 이미지가 없는 층에 넣습니다. (현재 `LIB001`의 3개 층. 이미 기준 이미지가 있는 층은 건드리지 않음)
 - 기준 이미지가 없는 층은 분석이 실패하고, 대시보드 '정상 상태' 탭에서 등록하라고 안내합니다. 도서는 있는데 기준 사진이 없는 층은 서가 맵과 '확인이 필요한 층' 목록에 **기준 사진 없음**으로 표시됩니다.
 - 기준 사진의 분석 결과도 DB(`NORMAL_IMAGE_ANALYSIS`)에 저장해 재사용합니다. 기준 사진을 등록 · 교체 · 지정 · 되돌릴 때와 서버를 켤 때 미리 분석하므로, 순찰 사진 분석은 기준 사진을 다시 분석하지 않습니다. 기준 사진이나 AI 코드 · 모델이 바뀌면 자동으로 새로 분석합니다.
-- 서버는 분석할 때 그 층의 기준 이미지를 DB에서 꺼내 씁니다. `JsonTesting.py`를 직접 실행하면 `NORMAL_DIR` 환경변수의 폴더(없으면 `dataset/normal`)를 씁니다.
+- 서버는 분석할 때 그 층의 기준 이미지를 DB에서 꺼내 씁니다.
 
 ---
 

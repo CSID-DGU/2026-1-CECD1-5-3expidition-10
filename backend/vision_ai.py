@@ -1,21 +1,18 @@
 """
-서버 → AI 분석 호출 (저장소 루트의 MakeResult.py / JsonTesting.py)
+서버 → AI 분석 호출 (저장소 루트의 MakeResult.py)
 
-두 가지 방식이 있습니다. (환경변수 AI_MODE, 기본 worker)
-  - worker    : AI 작업 프로세스(ai_worker.py)를 하나 띄워 두고 계속 씁니다.
-                모델은 한 번만 불러오고, 층별 기준 사진 분석 결과도 DB에 저장해 두어 사진 한 장이 훨씬 빨리 끝납니다.
-                서버를 켤 때 미리 띄워 둡니다(warm_up). 작업 프로세스가 죽거나 응답이 없으면 다음 요청 때 다시 띄웁니다.
-                기준 사진은 분석을 기다리지 않고 미리 분석합니다: 서버를 켤 때(분석 결과가 없는 기준 사진만),
-                관리자가 등록 · 교체 · 지정 · 되돌릴 때(prepare_reference_async).
-                AI 코드(MakeResult.py, app/)를 고친 뒤에는 서버를 다시 시작해야 반영됩니다. (uvicorn --reload는 백엔드 파일 변경만 감지)
-  - subprocess: 예전 방식. 사진마다 `python JsonTesting.py`를 새로 실행합니다. (dataset/test 폴더 · 결과 파일 경유)
-두 방식 모두 analyze_image_to_dict의 결과(vision_items)를 돌려주며, 책등 크롭은 저장소 루트의 pipeline_outputs/에 남습니다.
+AI 작업 프로세스(ai_worker.py)를 하나 띄워 두고 계속 씁니다.
+모델은 한 번만 불러오고, 층별 기준 사진 분석 결과도 DB에 저장해 두어 사진 한 장이 훨씬 빨리 끝납니다.
+서버를 켤 때 미리 띄워 둡니다(warm_up). 작업 프로세스가 죽거나 응답이 없으면 다음 요청 때 다시 띄웁니다.
+기준 사진은 분석을 기다리지 않고 미리 분석합니다: 서버를 켤 때(분석 결과가 없는 기준 사진만),
+관리자가 등록 · 교체 · 지정 · 되돌릴 때(prepare_reference_async).
+AI 코드(MakeResult.py, app/)를 고친 뒤에는 서버를 다시 시작해야 반영됩니다. (uvicorn --reload는 백엔드 파일 변경만 감지)
+분석은 analyze_image_to_dict의 결과(vision_items)를 돌려주며, 책등 크롭은 저장소 루트의 pipeline_outputs/에 남습니다.
 """
 import atexit
 import json
 import os
 import queue
-import shutil
 import subprocess
 import sys
 import threading
@@ -28,11 +25,8 @@ from normal_images import clear_old_analyses, is_current_image, normal_images_to
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 AI_DIR = os.path.normpath(os.path.join(BACKEND_DIR, ".."))                  # AI 코드(MakeResult.py, app/, model/)가 있는 저장소 루트
-TEST_DIR = os.path.join(AI_DIR, "dataset", "test")                       # (subprocess 방식) JsonTesting.py 입력 폴더
-RESULT_JSON_PATH = os.path.join(AI_DIR, "vision_output", "test_results.json")
 WORKER_LOG_PATH = os.path.join(BACKEND_DIR, "logs", "ai_worker.log")     # 작업 프로세스의 AI 출력 (git 제외)
 
-AI_MODE = os.getenv("AI_MODE", "worker").lower()
 STARTUP_TIMEOUT = 300    # 작업 프로세스 준비(모델 로드) 최대 대기 초
 ANALYZE_TIMEOUT = 600    # 사진 한 장 분석 최대 대기 초
 REFERENCE_SOURCES = {"memory": "재사용(메모리)", "db": "재사용(DB)"}
@@ -157,8 +151,7 @@ _reference_queue = queue.Queue()   # 미리 분석할 기준 이미지 (image_id
 
 def prepare_reference_async(image_id: int):
     """기준 사진을 백그라운드에서 미리 분석합니다. 기다리지 않으며, 일괄 분석과 같은 작업 프로세스를 차례로 씁니다."""
-    if AI_MODE == "worker":
-        _reference_queue.put(image_id)
+    _reference_queue.put(image_id)
 
 
 def _queue_unanalyzed_references():
@@ -195,9 +188,6 @@ def warm_up_async():
     서버 시작 시 AI 작업 프로세스를 미리 띄워 두고(첫 분석 대기 시간 단축), 기준 사진 미리 분석 요청을 처리합니다.
     실패해도 서버는 계속 동작합니다. 미리 분석하지 못한 기준 사진은 첫 분석 때 분석합니다.
     """
-    if AI_MODE != "worker":
-        return
-
     def run():
         try:
             worker.ensure_started()
@@ -213,34 +203,10 @@ def warm_up_async():
     threading.Thread(target=run, daemon=True, name="ai-worker-warmup").start()
 
 
-def _run_subprocess(image_path: str, normal_dir: str) -> dict:
-    """예전 방식: 입력 폴더를 이 사진 하나로 바꾸고 JsonTesting.py를 새 프로세스로 실행"""
-    if os.path.exists(TEST_DIR):
-        shutil.rmtree(TEST_DIR)
-    os.makedirs(TEST_DIR, exist_ok=True)
-    shutil.copy2(image_path, os.path.join(TEST_DIR, "uploaded_target" + os.path.splitext(image_path)[1]))
-    result = subprocess.run(
-        [sys.executable, "JsonTesting.py"], cwd=AI_DIR, capture_output=True, text=True,
-        encoding="utf-8", errors="replace", env={**os.environ, **CHILD_ENV, "NORMAL_DIR": normal_dir},
-    )
-    if result.returncode != 0:
-        error_log = result.stderr if result.stderr else result.stdout
-        print(f"\n❌ [Edge AI 엔진 에러] ❌\n{error_log}\n")
-        raise RuntimeError(f"AI 엔진 내부 에러 발생:\n{error_log}")
-    if not os.path.exists(RESULT_JSON_PATH):
-        raise FileNotFoundError(f"AI 분석은 끝났으나 결과 파일({RESULT_JSON_PATH})이 생성되지 않았습니다.")
-    with open(RESULT_JSON_PATH, "r", encoding="utf-8") as f:
-        test_results = json.load(f).get("test_results", [])
-    if not test_results:
-        raise ValueError("AI 분석 결과가 비어 있습니다. (이미지를 읽지 못했거나 분석에 실패)")
-    return test_results[0]
-
-
-def run_vision_ai(image_path: str, image_id: int, normal_dir: str) -> list:
+def run_vision_ai(image_path: str, image_id: int) -> list:
     """
     사진 한 장을 분석해 vision_items(왼쪽부터 정렬된 책 목록)를 반환합니다.
-    image_path: 분석할 사진 (절대 경로) / image_id: 그 층의 기준 이미지 (worker 방식)
-    normal_dir: 그 층의 정상 상태 기준 사진 폴더 (subprocess 방식)
+    image_path: 분석할 사진 (절대 경로) / image_id: 그 층의 기준 이미지
     """
-    result = worker.analyze(image_path, image_id) if AI_MODE == "worker" else _run_subprocess(image_path, normal_dir)
+    result = worker.analyze(image_path, image_id)
     return result.get("vision_items", [])

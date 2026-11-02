@@ -97,7 +97,7 @@ def register_patrol_photo(conn, shelf: dict, data: bytes, captured_at: datetime,
     if shelf["book_count"] == 0:
         raise PhotoRejected(f"{shelf['location_label']}에는 등록된 도서가 없어 분석할 수 없습니다")
     try:
-        ext, _ = detect_image_ext(data, ("JPEG", "PNG"))   # AI(JsonTesting.py)는 .jpg / .png만 읽음
+        ext, _ = detect_image_ext(data, ("JPEG", "PNG"))   # AI는 .jpg / .png만 읽음
     except ValueError as e:
         raise PhotoRejected(str(e))
     sha256 = hashlib.sha256(data).hexdigest()

@@ -2,7 +2,6 @@ import hashlib
 import io
 import os
 import pickle
-import shutil
 from datetime import datetime
 from typing import Optional
 
@@ -11,9 +10,8 @@ from image_check import detect_image_ext
 # 층별 정상 상태 기준 이미지 (DB의 NORMAL_IMAGE 테이블)
 #  - 층마다 현재 기준 이미지 1장(is_current = 1) + 교체 · 삭제된 이전 이미지 이력(is_current = 0)
 #  - DB에 저장하므로 DB에 연결된 어느 컴퓨터에서 서버를 띄워도 같은 기준 이미지를 씁니다.
-#  - 분석할 때는 그 층의 기준 이미지만 작업 폴더에 꺼내 AI(JsonTesting.py)에 NORMAL_DIR로 넘깁니다.
+#  - 분석할 때는 AI 작업 프로세스(ai_worker.py)가 그 층의 기준 이미지를 DB에서 꺼내 씁니다.
 #  - 한 층에 기준 이미지를 여러 장 두면 AI 쪽 책 ID(B001~)가 겹치므로 항상 1장만 유지합니다.
-NORMAL_WORK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".normal_work")
 HISTORY_KEEP = 10   # 층마다 보관할 이전 기준 이미지 수 (오래된 것부터 삭제)
 INFO_COLUMNS = "image_id, shelf_id, ext, width, height, sha256, source, source_session_id, created_at, created_by"
 
@@ -109,7 +107,7 @@ def save_normal_image(conn, shelf_id: str, data: bytes, source: str,
     층의 기준 이미지를 새 사진으로 교체합니다. 이전 기준 이미지는 이력으로 내려가 되돌릴 수 있습니다.
     source: UPLOAD(직접 올림) / PATROL(순찰 사진 지정) / SEED(초기 데이터). jpg / png가 아니면 ValueError.
     """
-    ext, (width, height) = detect_image_ext(data, ("JPEG", "PNG"))   # AI(JsonTesting.py)는 jpg / png만 읽음
+    ext, (width, height) = detect_image_ext(data, ("JPEG", "PNG"))   # AI는 jpg / png만 읽음
     cursor = conn.cursor()
     try:
         _archive_current(cursor, shelf_id)
@@ -206,23 +204,3 @@ def is_current_normal_image(conn, shelf_id: str, path: str) -> bool:
         return False
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest() == info["sha256"]
-
-
-def prepare_normal_work_dir(conn, loc: dict) -> str:
-    """
-    이번에 분석할 층의 기준 이미지를 DB에서 꺼내 작업 폴더에 저장하고 그 절대 경로를 반환합니다.
-    기준 이미지가 없으면 등록 방법을 알려 주는 에러를 냅니다.
-    """
-    image = get_normal_image_bytes(conn, loc["shelf_id"])
-    if image is None:
-        raise RuntimeError(
-            f"{loc['location_label']}의 정상 상태 기준 이미지가 없습니다. "
-            f"대시보드에서 층을 선택하고 '정상 상태' 탭에서 기준 사진을 등록해 주세요. (관리자)"
-        )
-    data, ext = image
-    if os.path.exists(NORMAL_WORK_DIR):
-        shutil.rmtree(NORMAL_WORK_DIR)
-    os.makedirs(NORMAL_WORK_DIR)
-    with open(os.path.join(NORMAL_WORK_DIR, f"{loc['shelf_code']}_0{ext}"), "wb") as f:
-        f.write(data)
-    return NORMAL_WORK_DIR

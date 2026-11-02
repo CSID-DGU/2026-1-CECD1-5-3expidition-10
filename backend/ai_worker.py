@@ -38,7 +38,7 @@ PROTOCOL_PREFIX = "@@AI@@"
 AI_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))   # AI 코드(MakeResult.py, app/, model/)가 있는 저장소 루트
 RESULT_JSON_PATH = os.path.join(AI_DIR, "vision_output", "test_results.json")
 CACHE_SIZE = int(os.getenv("AI_REFERENCE_CACHE", "8"))   # 메모리에 기억해 둘 층(기준 사진) 수
-AI_ENTRY_FILES = ["MakeResult.py", "JsonTesting.py"]   # 지문에 넣을 AI 진입 파일 (있는 것만)
+AI_ENTRY_FILES = ["MakeResult.py"]   # 지문에 넣을 AI 진입 파일
 
 _proto = None   # 응답 전용 통로 (setup_channels)
 

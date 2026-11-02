@@ -49,7 +49,7 @@ def load_payloads_from_json():
 
     vision_items = []
 
-    # JsonTesting이 이미 좌→우 순서(sequence_order)와 매칭된 book_id를 부여해 둡니다.
+    # AI가 이미 좌→우 순서(sequence_order)와 매칭된 book_id를 부여해 둡니다.
     for book in vision_results:
         seq_index = book["sequence_order"]
         vision_items.append({

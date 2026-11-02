@@ -311,7 +311,7 @@ def require_analyzable_shelf(shelf_id: str, ctx: AuthContext) -> dict:
     return shelf
 
 def require_image_ext(file: UploadFile) -> str:
-    """업로드 파일의 저장 확장자 (.jpg / .png). JsonTesting.py가 읽을 수 있는 형식만 허용"""
+    """업로드 파일의 저장 확장자 (.jpg / .png). AI가 읽을 수 있는 형식만 허용"""
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_IMAGE_EXTS:
         raise HTTPException(status_code=400, detail=f"지원하지 않는 이미지 형식입니다: '{ext}' (jpg, jpeg, png만 가능)")
