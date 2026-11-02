@@ -41,7 +41,6 @@ CECD/
 ├── app/                      # Vision AI: 탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
 ├── model/                    # YOLO 가중치 (서버는 yolo26l_1280_v3.pt 사용, app/models.py)
 ├── MakeResult.py             # 정상 이미지와 비교해 도서별 상태를 판별 (서버가 사용하는 분석 코드)
-├── JsonTesting.py            # 예전 AI 분석 코드 (서버는 쓰지 않음, AI 파트 단독 실행용)
 ├── dataset/                  # 정상 · 이상 시나리오별 테스트 사진
 ├── pipeline_outputs/         # 책등 크롭 작업 폴더 (분석마다 덮어씀, git 제외)
 ├── vision_output/            # 분석 결과 test_results.json (git 제외)
