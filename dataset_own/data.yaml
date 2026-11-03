@@ -1,0 +1,5 @@
+﻿path: C:\Users\우리집컴\Desktop\dataset_own
+train: train.txt
+val: val.txt
+names:
+  0: book-spine

@@ -1,0 +1,5 @@
+- [User owns app/ AI pipeline](user-owns-app-pipeline.md) — 검사·수정 범위는 app/ 로 한정, 다른 폴더는 팀원 담당
+- [Own photos & dataset_own](own-photos-testcase.md) — Desktop\Testcase 45장, 작업본 Desktop\dataset_own(labelme 검수 중, book-spine/book-paper)
+- [Pipeline tilted-book fixes 2026-11](pipeline-tilted-fixes-2026-11.md) — 박스 NMS·최대성분·끝변 수직 등 5가지 수정(미커밋), 남은 모델 한계
+- [Training dataset findings](training-dataset-findings.md) — P2 중복·누수·도메인 문제, 대안 CNU 312장, Roboflow 무료=Public 만·비공개 유지 결정
+- [Korean path gotcha](env-korean-path-gotcha.md) — Desktop 경로는 Bash 대신 PowerShell/ctypes 로

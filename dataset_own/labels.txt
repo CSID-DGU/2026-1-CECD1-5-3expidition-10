@@ -1,0 +1,3 @@
+﻿__ignore__
+book-spine
+book-paper
