@@ -173,7 +173,7 @@ def main():
     started = time.perf_counter()
     os.chdir(AI_DIR)                        # MakeResult · app 모듈은 저장소 루트 기준 상대 경로를 씀
     sys.path.insert(0, AI_DIR)
-    import MakeResult                        # YOLO(app.pipeline import 시) 로드
+    import shelf_audit as MakeResult         # v5: MakeResult.py 대신 shelf_audit 패키지 (쓰는 이름은 그대로)
     MakeResult.get_embedder()                # ResNet 로드 (첫 요청이 아니라 지금)
     cache = OrderedDict()                    # image_id → reference pool (메모리)
     fingerprint = ai_fingerprint()

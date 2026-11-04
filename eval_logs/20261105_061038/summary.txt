@@ -1,0 +1,1081 @@
+✅ 슬롯 13개 등록 | 기준: 20260522_203503.jpg (서가 키 20260522)
+   자동 임계값: 매칭 하한 0.420 / 확신 0.500 (타책 최고 유사도 0.339)
+   위아래 구분이 어려운 슬롯: 없음 | 시리즈 그룹: 없음
+   종이면(앞마구리)이 정상인 자리: 없음
+
+✅ 슬롯 31개 등록 | 기준: 20260522_203633.jpg (서가 키 20260522)
+   자동 임계값: 매칭 하한 0.477 / 확신 0.501 (타책 최고 유사도 0.453)
+   위아래 구분이 어려운 슬롯: 없음 | 시리즈 그룹: [[1, 2]]
+   종이면(앞마구리)이 정상인 자리: 없음
+   ⚠️ 기준 감사: 기준 사진 책들끼리 외형이 너무 비슷해 매칭 임계값 폭이 좁습니다(시리즈가 많거나 사진이 흐림).
+   ⚠️ 기준 감사: [1, 2]번은 비슷한 책등(시리즈)으로 묶였습니다. 구분 영역 비교로 짝을 정합니다.
+
+✅ 슬롯 14개 등록 | 기준: 20260522_204705.jpg (서가 키 20260522)
+   자동 임계값: 매칭 하한 0.546 / 확신 0.570 (타책 최고 유사도 0.522)
+   위아래 구분이 어려운 슬롯: 없음 | 시리즈 그룹: [[5, 9]]
+   종이면(앞마구리)이 정상인 자리: 없음
+   ⚠️ 기준 감사: 기준 사진 책들끼리 외형이 너무 비슷해 매칭 임계값 폭이 좁습니다(시리즈가 많거나 사진이 흐림).
+   ⚠️ 기준 감사: [5, 9]번은 비슷한 책등(시리즈)으로 묶였습니다. 구분 영역 비교로 짝을 정합니다.
+
+🔎 서가 간 구분 가능성 점검 (한 서가의 책을 다른 서가에 대 봤을 때 일치율)
+   20260522_203503.jpg -> 20260522_203633.jpg: 0.03
+   20260522_203503.jpg -> 20260522_204705.jpg: 0.00
+   20260522_203633.jpg -> 20260522_203503.jpg: 0.03
+   20260522_203633.jpg -> 20260522_204705.jpg: 0.00
+   20260522_204705.jpg -> 20260522_203503.jpg: 0.00
+   20260522_204705.jpg -> 20260522_203633.jpg: 0.00
+
+
+========================================================
+📁 검사 사진 36장 | 기준 20260522_203503.jpg(13권), 20260522_203633.jpg(31권), 20260522_204705.jpg(14권)
+========================================================
+
+🔍 분석 중: 20260522_203503.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 13권 | 정상 13 | 이상 0
+├─ ✅ 결과 : 이상 없음
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 전부 정상  → ✅ 일치
+
+🔍 분석 중: 20260522_203708.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 13권 | 정상 10 | 이상 3
+├─ ⚠️ 결과
+├─ ⚠️ 3번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 5번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 9번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 3,5,9번 뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_203732.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 13권 | 정상 10 | 이상 3
+├─ ⚠️ 결과
+├─ ⚠️ 1번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 5번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 10번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 1,5,10번 뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_203815.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 13권 | 정상 9 | 이상 4
+├─ ⚠️ 결과
+├─ ⚠️ 0번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 2번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 8번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 11번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 0,2,8,11번 뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_203952.jpg  [정답표: 2차-03 (1·7·11 뒤집힘)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 15권 | 정상 10 | 이상 4
+├─ ⚠️ 결과
+├─ ⚠️ 1번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 7번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 11번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 1,6,7,11번 뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_204046.jpg  [정답표: 2차-04 (0·2·3·10·12 뒤집힘)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 14권 | 정상 8 | 이상 6
+├─ ⚠️ 결과
+├─ ⚠️ 0번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 2번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 3번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 10번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 12번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 0,2,3,6,10,12번 뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_204131.jpg
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 14권 | 정상 10 | 이상 4
+├─ ⚠️ 결과
+├─ ⚠️ 4번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 5번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 8번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 10번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 4,5,8,10번 뒤집혀짐, 6번 normal  → ✅ 일치
+
+🔍 분석 중: 20260522_204231.jpg  [정답표: 3차-03 (5권 뒤집힘)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 32권 | 정상 26 | 이상 5
+├─ ⚠️ 결과
+├─ ⚠️ 5번 귀머거리 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 11번 뉴문 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 20번 STRUCT 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 21번 주체이론 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 24번 게임 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/31 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 5,11,20,21,24번 뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_204315.jpg  [정답표: 3차-01 (다른 각도, 믿음A·B·비교정치·독수리 거꾸로)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 33권 | 정상 27 | 이상 4
+├─ ⚠️ 결과
+├─ ⚠️ 1번 믿음A 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 2번 믿음B 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 12번 비교정치 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 15번 독수리 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 1/32 | 기준에 없는 책(미매칭 박스) 1 | 경고 ['fallback_boxes_added']
+├─ ℹ️ 기준에서 검출되지 않아 채점에서 뺀 책: CARROTS
+└─ 📌 정답 : 1,2,12,15번 뒤집혀짐, 30번 normal/기울어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_204416.jpg  [정답표: 3차-02 (10권 뒤집힘)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 32권 | 정상 21 | 이상 10
+├─ ⚠️ 결과
+├─ ⚠️ 3번 THINK 책: 판정불가 (unknown)
+├─ ⚠️ 4번 실크로드 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 5번 귀머거리 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 8번 밤하늘 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 14번 그건사랑 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 15번 독수리 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 17번 나는나를 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 25번 변증법 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 26번 글읽기 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 28번 덕혜옹주 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 2/32 | 기준에 없는 책(미매칭 박스) 1 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 3,4,5,8,14,15,17,25,26,28번 뒤집혀짐  → ❌ 불일치 1건 (놓침 1 · 오탐 0 · 유형 0)
+
+🔍 분석 중: 20260522_204705.jpg
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 14권 | 정상 14 | 이상 0
+├─ ✅ 결과 : 이상 없음
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 전부 정상  → ✅ 일치
+
+🔍 분석 중: 20260522_205058.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 14권 | 정상 12 | 이상 1
+├─ ⚠️ 결과 : 7번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 7번 엎어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_205117.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 14권 | 정상 12 | 이상 1
+├─ ⚠️ 결과 : 2번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 2번 엎어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_205137.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 14권 | 정상 9 | 이상 4
+├─ ⚠️ 결과
+├─ ⚠️ 6번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 10번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 11번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 12번 책: 기울어짐 (abnormal_tilted)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 6,10번 엎어짐, 11,12번 뒤집혀짐/기울어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_205210.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 13권 | 정상 11 | 이상 2
+├─ ⚠️ 결과
+├─ ⚠️ 0번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 1번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 0,1번 엎어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_205317.jpg  [정답표: 2차-07 (10 얹어짐)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 14권 | 정상 12 | 이상 2
+├─ ⚠️ 결과
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 10번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 6번 뒤집혀짐, 10번 엎어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_205455.jpg  [정답표: 2차-08 (8 얹어짐)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 15권 | 정상 12 | 이상 2
+├─ ⚠️ 결과
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 8번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 1/15 | 기준에 없는 책(미매칭 박스) 1
+└─ 📌 정답 : 6번 뒤집혀짐, 8번 엎어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_205515.jpg  [정답표: 2차-09 (0·3 얹어짐)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 13권 | 정상 11 | 이상 3
+├─ ⚠️ 결과
+├─ ⚠️ 0번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 3번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 0,3번 엎어짐, 6번 뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_205538.jpg  [정답표: 2차-10 (7·12 얹어짐)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 14권 | 정상 11 | 이상 3
+├─ ⚠️ 결과
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 7번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 12번 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 6번 뒤집혀짐, 7,12번 엎어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_205729.jpg  [정답표: 3차-08 (친구들·바보빅터 위에 눕힘)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 30권 | 정상 27 | 이상 4
+├─ ⚠️ 결과
+├─ ⚠️ 13번 친구들 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 19번 바보빅터 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 29번 신약성경 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 30번 Che 책: 판정불가 (unknown)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 1/31 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 13,19번 엎어짐/없음/unknown, 14번 normal/unknown, 15,16,17,18,20,21,22,23,24,25,26,27,28,29번 normal/기울어짐  → ❌ 불일치 1건 (놓침 0 · 오탐 1 · 유형 0)
+
+🔍 분석 중: 20260522_205820.jpg  [정답표: 3차-07 (STRUCT 위에 눕힘 + 그림책 1권 추가)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 32권 | 정상 27 | 이상 4
+├─ ⚠️ 결과
+├─ ⚠️ 8번 밤하늘 책: 판정불가 (unknown)
+├─ ⚠️ 20번 STRUCT 책: 위에 얹어짐/누움 (abnormal_stack)
+├─ ⚠️ 29번 신약성경 책: 판정불가 (unknown)
+├─ ⚠️ 30번 Che 책: 판정불가 (unknown)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 5/33 | 기준에 없는 책(미매칭 박스) 2 (예상 1)
+└─ 📌 정답 : 8번 normal/unknown, 20번 엎어짐/없음/unknown, 21,22,23,24,25,26,27,28,30번 normal/기울어짐  → ❌ 불일치 2건 (놓침 0 · 오탐 2 · 유형 0)
+
+🔍 분석 중: 20260522_210223.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 13권 | 정상 11 | 이상 2
+├─ ⚠️ 결과
+├─ ⚠️ 4번 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 11번 책: 종이가 보임 (abnormal_paper)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 4,11번 종이가 보임  → ✅ 일치
+
+🔍 분석 중: 20260522_210248.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 12권 | 정상 12 | 이상 1
+├─ ⚠️ 결과 : 10번 책: 종이가 보임 (abnormal_paper)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 10번 종이가 보임  → ✅ 일치
+
+🔍 분석 중: 20260522_210313.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 16권 | 정상 10 | 이상 3
+├─ ⚠️ 결과
+├─ ⚠️ 1번 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 8번 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 12번 책: 종이가 보임 (abnormal_paper)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 1/14 | 기준에 없는 책(미매칭 박스) 1 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 1,8,12번 종이가 보임  → ✅ 일치
+
+🔍 분석 중: 20260522_210344.jpg  [정답표: 2차-12 (5·10 종이면)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 15권 | 정상 11 | 이상 3
+├─ ⚠️ 결과
+├─ ⚠️ 5번 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 10번 책: 종이가 보임 (abnormal_paper)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 5,10번 종이가 보임, 6번 뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_210405.jpg  [정답표: 2차-13 (0~3 종이면+기울어짐, 11 종이면, 12 없음)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 10권 | 정상 7 | 이상 7
+├─ ⚠️ 결과
+├─ ⚠️ 0번 책: 판정불가 (unknown)
+├─ ⚠️ 1번 책: 판정불가 (unknown)
+├─ ⚠️ 2번 책: 판정불가 (unknown)
+├─ ⚠️ 3번 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 11번 책: 판정불가 (unknown)
+├─ ⚠️ 12번 책: 종이가 보임 (abnormal_paper)
+├─ 🧪 백엔드 품질: 낮음 (미확인 5 + 중복 0 / 15) | 미확인 5/15 | 기준에 없는 책(미매칭 박스) 1
+└─ 📌 정답 : 0번 종이가 보임/기울어짐, 1,2,3번 종이가 보임/기울어짐/unknown, 4,5,7,8,9번 normal/기울어짐, 6번 normal/기울어짐/뒤집혀짐, 11번 종이가 보임, 12번 없음/unknown/종이가 보임  → ❌ 불일치 2건 (놓침 2 · 오탐 0 · 유형 0)
+
+🔍 분석 중: 20260522_210436.jpg  [정답표: 2차-11 (4·12 종이면)]
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 15권 | 정상 11 | 이상 3
+├─ ⚠️ 결과
+├─ ⚠️ 4번 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 12번 책: 판정불가 (unknown)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 1/14 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 4,12번 종이가 보임, 6번 뒤집혀짐  → ❌ 불일치 1건 (놓침 1 · 오탐 0 · 유형 0)
+
+🔍 분석 중: 20260522_210604.jpg  [정답표: 3차-10 (추가 1권 표지, 종이면 3권, 공자 표지)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 33권 | 정상 25 | 이상 6
+├─ ⚠️ 결과
+├─ ⚠️ 1번 믿음A 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 2번 믿음B 책: 판정불가 (unknown)
+├─ ⚠️ 12번 비교정치 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 13번 친구들 책: 판정불가 (unknown)
+├─ ⚠️ 18번 공자 책: 판정불가 (unknown)
+├─ ⚠️ 20번 STRUCT 책: 판정불가 (unknown)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 6/33 | 기준에 없는 책(미매칭 박스) 2 (예상 2) | 경고 ['fallback_boxes_added']
+├─ ℹ️ 기준에서 검출되지 않아 채점에서 뺀 책: CARROTS
+└─ 📌 정답 : 1번 normal/종이가 보임/unknown, 2,19번 normal/unknown/없음, 3,14번 normal/unknown, 12,13,20번 종이가 보임, 18번 종이가 보임/unknown/없음/기울어짐/엎어짐  → ❌ 불일치 2건 (놓침 2 · 오탐 0 · 유형 0)
+
+🔍 분석 중: 20260522_210632.jpg  [정답표: 3차-11 (친구들·독수리 앞으로 빼 종이면, 추가 1권 표지)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 36권 | 정상 24 | 이상 7
+├─ ⚠️ 결과
+├─ ⚠️ 9번 북극 책: 판정불가 (unknown)
+├─ ⚠️ 13번 친구들 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 14번 그건사랑 책: 판정불가 (unknown)
+├─ ⚠️ 15번 독수리 책: 판정불가 (unknown)
+├─ ⚠️ 16번 시골의사 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 24번 게임 책: 판정불가 (unknown)
+├─ ⚠️ 26번 글읽기 책: 종이가 보임 (abnormal_paper)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 8/35 | 기준에 없는 책(미매칭 박스) 4 (예상 1) | 경고 ['fallback_boxes_added']
+├─ ℹ️ 기준에서 검출되지 않아 채점에서 뺀 책: CARROTS
+└─ 📌 정답 : 13번 종이가 보임/기울어짐/unknown/뒤집혀짐, 14,24,25,26,27번 normal/unknown/없음, 15번 종이가 보임/기울어짐/unknown, 16번 normal/종이가 보임/unknown  → ❌ 불일치 2건 (놓침 0 · 오탐 2 · 유형 0)
+
+🔍 분석 중: 20260522_210700.jpg  [정답표: 3차-09 (비교정치·독수리 종이면, 나무 표지)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 34권 | 정상 29 | 이상 2
+├─ ⚠️ 결과
+├─ ⚠️ 15번 독수리 책: 종이가 보임 (abnormal_paper)
+├─ ⚠️ 22번 나무 책: 판정불가 (unknown)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 2/32 | 기준에 없는 책(미매칭 박스) 1 (예상 1) | 경고 ['fallback_boxes_added']
+├─ ℹ️ 기준에서 검출되지 않아 채점에서 뺀 책: CARROTS
+└─ 📌 정답 : 4번 normal/unknown, 12,15번 종이가 보임/기울어짐/unknown, 22번 종이가 보임/unknown/없음/기울어짐/엎어짐  → ❌ 불일치 1건 (놓침 1 · 오탐 0 · 유형 0)
+
+🔍 분석 중: 20260522_210803.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 13권 | 정상 12 | 이상 1
+├─ ⚠️ 결과 : 2번 책: 기울어짐 (abnormal_tilted)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0
+└─ 📌 정답 : 2번 기울어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_210814.jpg
+├─ 기준: 20260522_203503.jpg (정답표 지정) | 총 14권 | 정상 12 | 이상 1
+├─ ⚠️ 결과 : 5번 책: 기울어짐 (abnormal_tilted)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/13 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 5번 기울어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_210824.jpg
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 16권 | 정상 4 | 이상 10
+├─ ⚠️ 결과
+├─ ⚠️ 0번 책: 판정불가 (unknown)
+├─ ⚠️ 1번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 2번 책: 판정불가 (unknown)
+├─ ⚠️ 3번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 4번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 5번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 7번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 8번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 9번 책: 기울어짐 (abnormal_tilted)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 3/15 | 기준에 없는 책(미매칭 박스) 1 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 0번 기울어짐/normal/unknown/종이가 보임, 1,3,4,5,7,8,9번 기울어짐, 2번 기울어짐/unknown/없음, 6번 기울어짐/뒤집혀짐  → ✅ 일치
+
+🔍 분석 중: 20260522_210840.jpg
+├─ 기준: 20260522_204705.jpg (정답표 지정) | 총 17권 | 정상 9 | 이상 5
+├─ ⚠️ 결과
+├─ ⚠️ 4번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 5번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 6번 책: 위아래 뒤집힘 (abnormal_upside)
+├─ ⚠️ 7번 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 8번 책: 기울어짐 (abnormal_tilted)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 0/14 | 기준에 없는 책(미매칭 박스) 0 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 4,5번 normal/기울어짐, 6번 normal/기울어짐/뒤집혀짐, 7,8번 기울어짐  → ✅ 일치
+
+🔍 분석 중: 20260522_210901.jpg  [정답표: 3차-06 (가운데 책들 쏠림)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 37권 | 정상 29 | 이상 2
+├─ ⚠️ 결과
+├─ ⚠️ 4번 실크로드 책: 판정불가 (unknown)
+├─ ⚠️ 9번 북극 책: 기울어짐 (abnormal_tilted)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 5/35 | 기준에 없는 책(미매칭 박스) 4 | 경고 ['fallback_boxes_added']
+├─ ℹ️ 기준에서 검출되지 않아 채점에서 뺀 책: CARROTS
+└─ 📌 정답 : 4번 normal/unknown/없음, 8,10,11,12,13,14,15,30번 normal/기울어짐, 9번 기울어짐, 22번 normal/unknown  → ✅ 일치
+
+🔍 분석 중: 20260522_210909.jpg  [정답표: 3차-05 (왼쪽부터 전체가 8~9° 쏠림)]
+├─ 기준: 20260522_203633.jpg (정답표 지정) | 총 34권 | 정상 28 | 이상 3
+├─ ⚠️ 결과
+├─ ⚠️ 26번 글읽기 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 29번 신약성경 책: 기울어짐 (abnormal_tilted)
+├─ ⚠️ 30번 Che 책: 기울어짐 (abnormal_tilted)
+├─ 🧪 백엔드 품질: 신뢰 | 미확인 1/32 | 기준에 없는 책(미매칭 박스) 1 | 경고 ['fallback_boxes_added']
+└─ 📌 정답 : 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28번 normal/기울어짐  → ❌ 불일치 2건 (놓침 0 · 오탐 2 · 유형 0)
+
+========================================================
+📊 전체 통계 (정답표가 있는 36장 / 책 661권)
+   이미지 단위 완전 일치 : 27/36
+   책 단위 정확도        : 647/661 (97.9%)
+   이상 책 맞힘          : 183/192  (이상→정상 놓침 8 · 유형 오분류 1)
+   정상 책을 이상으로 오탐 : 2/469  (정상→미확인 3)
+   백엔드 '인식 신뢰도 낮음' 이 뜨는 사진: 1장 ['20260522_210405.jpg']
+   기준별 사진 일치 : 20260522_203503.jpg 13/13 | 20260522_204705.jpg 11/13 | 20260522_203633.jpg 3/10
+   추가된 책(기준에 없는 책) 찾기 : 5/5 (사진 4장)
+   혼동 행렬 (정답 → 예측):
+      normal   → normal 464, unknown 3, tilted 2
+      upside   → upside 48, unknown 1
+      normal|tilted → normal 63, tilted 4, unknown 1
+      stack    → stack 12
+      tilted|upside → tilted 2, upside 1
+      absent|stack|unknown → stack 3
+      normal|unknown → normal 5, unknown 1
+      paper    → paper 10, unknown 4
+      paper|tilted → unknown 1
+      paper|tilted|unknown → unknown 3, paper 2, normal 1
+      normal|tilted|upside → upside 2
+      absent|paper|unknown → paper 1
+      normal|paper|unknown → paper 2
+      absent|normal|unknown → unknown 4, normal 3, paper 1
+      absent|paper|stack|tilted|unknown → unknown 2
+      paper|tilted|unknown|upside → paper 1
+      tilted   → tilted 12
+      normal|paper|tilted|unknown → unknown 1
+      absent|tilted|unknown → unknown 1
+   소요 97.4s | 로그: E:\MyGitHubs\OwnOSSProjectFile\2026-1-CECD1-5-3expidition-10\eval_logs\20261105_061038
+========================================================
+📋 기준 슬롯 · 책별 상세(증거값) 표는 eval_logs\20261105_061038\summary.txt 에 있습니다
+
+📋 기준 슬롯 (번호 = 왼쪽부터 0)
+   20260522_203503.jpg: 매칭 하한 0.420 / 확신 0.500
+   0:s w84 | 1:s w111 | 2:s w98 | 3:s w62 | 4:s w66 | 5:s w53 | 6:s w74 | 7:s w81 | 8:s w47 | 9:s w62 | 10:s w121 | 11:s w86 | 12:s w98
+   20260522_203633.jpg: 매칭 하한 0.477 / 확신 0.501
+   0:s w44 멈추면 | 1:s w45 믿음A | 2:s w38 믿음B | 3:s w14 THINK | 4:s w24 실크로드 | 5:s w36 귀머거리 | 6:s w35 외교관 | 7:s w31 토토 | 8:s w22 밤하늘 | 9:s w23 북극 | 10:s w25 색과빛 | 11:s w68 뉴문 | 12:s w44 비교정치 | 13:s w32 친구들 | 14:s w29 그건사랑 | 15:s w31 독수리 | 16:s w32 시골의사 | 17:s w32 나는나를 | 18:s w31 공자 | 19:s w32 바보빅터 | 20:s w38 STRUCT | 21:s w43 주체이론 | 22:s w35 나무 | 23:s w25 소나기 | 24:s w40 게임 | 25:s w30 변증법 | 26:s w23 글읽기 | 27:s w25 바보처럼 | 28:s w41 덕혜옹주 | 29:s w23 신약성경 | 30:s w53 Che
+   기준에서 검출되지 않은 책: CARROTS
+   - [warn] 기준 사진 책들끼리 외형이 너무 비슷해 매칭 임계값 폭이 좁습니다(시리즈가 많거나 사진이 흐림).
+   - [info] [1, 2]번은 비슷한 책등(시리즈)으로 묶였습니다. 구분 영역 비교로 짝을 정합니다.
+   20260522_204705.jpg: 매칭 하한 0.546 / 확신 0.570
+   0:s w31 | 1:s w44 | 2:s w33 | 3:s w50 | 4:s w48 | 5:s w35 | 6:s w46 | 7:s w71 | 8:s w41 | 9:s w32 | 10:s w67 | 11:s w81 | 12:s w87 | 13:s w52
+   - [warn] 기준 사진 책들끼리 외형이 너무 비슷해 매칭 임계값 폭이 좁습니다(시리즈가 많거나 사진이 흐림).
+   - [info] [5, 9]번은 비슷한 책등(시리즈)으로 묶였습니다. 구분 영역 비교로 짝을 정합니다.
+
+📋 책별 상세 (file | slot | 정답→예측 | OK | conf | 경로 | 플래그 | 핵심 증거)
+   20260522_203503.jpg |  0 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=386 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  1 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=328 tilt_signed=0.0 paper_score=0.254 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  2 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=233 tilt_signed=0.0 paper_score=0.132 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  3 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=109 tilt_signed=0.0 paper_score=0.301 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  4 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=518 tilt_signed=0.0 paper_score=0.164 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  5 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=350 tilt_signed=0.0 paper_score=0.202 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  6 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=169 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  7 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=160 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  8 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=701 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg |  9 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=313 tilt_signed=0.0 paper_score=0.222 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg | 10 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=368 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg | 11 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=195 tilt_signed=0.0 paper_score=0.247 paper_delta=0.0 aspect_rel=1.0
+   20260522_203503.jpg | 12 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=263 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_203708.jpg |  0 | normal→normal | O | 0.84 | appearance | - | best_score=0.8398 upside_total=-0.796 e_sift=-1 sift_inliers=231 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.046
+   20260522_203708.jpg |  1 | normal→normal | O | 0.878 | appearance | - | best_score=0.8777 upside_total=-0.917 e_sift=-1 sift_inliers=202 tilt_signed=0.41 paper_score=0.256 paper_delta=0.002 aspect_rel=1.019
+   20260522_203708.jpg |  2 | normal→normal | O | 0.807 | appearance | - | best_score=0.8068 upside_total=-0.915 e_sift=-1 sift_inliers=112 tilt_signed=1.08 paper_score=0.124 paper_delta=-0.008 aspect_rel=0.958
+   20260522_203708.jpg |  3 | upside→upside | O | 0.795 | appearance | orientation_by_sift_strong | best_score=0.7959 upside_total=1.0 e_sift=1 sift_inliers=39 tilt_signed=2.65 paper_score=0.314 paper_delta=0.013 aspect_rel=0.999
+   20260522_203708.jpg |  4 | normal→normal | O | 0.822 | appearance | - | best_score=0.8215 upside_total=-0.891 e_sift=-1 sift_inliers=275 tilt_signed=1.75 paper_score=0.148 paper_delta=-0.016 aspect_rel=1.033
+   20260522_203708.jpg |  5 | upside→upside | O | 0.945 | appearance | orientation_by_sift_strong | best_score=0.7582 upside_total=1.0 e_sift=1 sift_inliers=69 tilt_signed=1.74 paper_score=0.178 paper_delta=-0.024 aspect_rel=1.165
+   20260522_203708.jpg |  6 | normal→normal | O | 0.769 | appearance | - | best_score=0.7688 upside_total=-0.823 e_sift=-1 sift_inliers=74 tilt_signed=2.58 paper_score=0.0 paper_delta=0.0 aspect_rel=1.042
+   20260522_203708.jpg |  7 | normal→normal | O | 0.825 | appearance | - | best_score=0.8251 upside_total=-0.879 e_sift=-1 sift_inliers=59 tilt_signed=2.08 paper_score=0.0 paper_delta=0.0 aspect_rel=0.975
+   20260522_203708.jpg |  8 | normal→normal | O | 0.688 | appearance | - | best_score=0.688 upside_total=-0.18 sift_inliers=10 tilt_signed=1.91 paper_score=0.0 paper_delta=0.0 aspect_rel=0.827
+   20260522_203708.jpg |  9 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.7133 upside_total=1.0 e_sift=1 sift_inliers=106 tilt_signed=2.61 paper_score=0.253 paper_delta=0.032 aspect_rel=1.016
+   20260522_203708.jpg | 10 | normal→normal | O | 0.763 | appearance | - | best_score=0.7629 upside_total=-0.823 e_sift=-1 sift_inliers=144 tilt_signed=2.57 paper_score=0.0 paper_delta=0.0 aspect_rel=1.021
+   20260522_203708.jpg | 11 | normal→normal | O | 0.872 | appearance | - | best_score=0.8716 upside_total=-0.907 e_sift=-1 sift_inliers=123 tilt_signed=2.26 paper_score=0.274 paper_delta=0.027 aspect_rel=1.108
+   20260522_203708.jpg | 12 | normal→normal | O | 0.882 | appearance | - | best_score=0.8817 upside_total=-0.906 e_sift=-1 sift_inliers=150 tilt_signed=0.0 paper_score=0.138 paper_delta=0.138 aspect_rel=1.002
+   20260522_203732.jpg |  0 | normal→normal | O | 0.796 | appearance | - | best_score=0.7957 upside_total=-0.793 e_sift=-1 sift_inliers=175 tilt_signed=-2.43 paper_score=0.0 paper_delta=0.0 aspect_rel=1.022
+   20260522_203732.jpg |  1 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.6952 upside_total=1.0 e_sift=1 sift_inliers=157 tilt_signed=0.0 paper_score=0.243 paper_delta=-0.011 aspect_rel=1.032
+   20260522_203732.jpg |  2 | normal→normal | O | 0.705 | appearance | - | best_score=0.7051 upside_total=-0.915 e_sift=-1 sift_inliers=122 tilt_signed=-2.71 paper_score=0.124 paper_delta=-0.008 aspect_rel=0.944
+   20260522_203732.jpg |  3 | normal→normal | O | 0.701 | appearance | - | best_score=0.7009 upside_total=-0.794 e_sift=-1 sift_inliers=29 tilt_signed=-1.82 paper_score=0.291 paper_delta=-0.01 aspect_rel=1.029
+   20260522_203732.jpg |  4 | normal→normal | O | 0.804 | appearance | - | best_score=0.8043 upside_total=-0.913 e_sift=-1 sift_inliers=213 tilt_signed=-2.16 paper_score=0.138 paper_delta=-0.027 aspect_rel=1.091
+   20260522_203732.jpg |  5 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.7672 upside_total=1.0 e_sift=1 sift_inliers=126 tilt_signed=-2.0 paper_score=0.19 paper_delta=-0.012 aspect_rel=1.006
+   20260522_203732.jpg |  6 | normal→normal | O | 0.769 | appearance | - | best_score=0.769 upside_total=-0.835 e_sift=-1 sift_inliers=68 tilt_signed=-1.85 paper_score=0.0 paper_delta=0.0 aspect_rel=0.954
+   20260522_203732.jpg |  7 | normal→normal | O | 0.825 | appearance | - | best_score=0.8252 upside_total=-0.913 e_sift=-1 sift_inliers=62 tilt_signed=-1.25 paper_score=0.0 paper_delta=0.0 aspect_rel=0.975
+   20260522_203732.jpg |  8 | normal→normal | O | 0.611 | appearance | - | best_score=0.6112 upside_total=-0.668 e_sift=-1 sift_inliers=58 tilt_signed=0.89 paper_score=0.0 paper_delta=0.0 aspect_rel=0.615
+   20260522_203732.jpg |  9 | normal→normal | O | 0.757 | appearance | - | best_score=0.7568 upside_total=-0.871 e_sift=-1 sift_inliers=142 tilt_signed=-0.93 paper_score=0.24 paper_delta=0.018 aspect_rel=0.945
+   20260522_203732.jpg | 10 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.6719 upside_total=1.0 e_sift=1 sift_inliers=91 tilt_signed=-0.52 paper_score=0.0 paper_delta=0.0 aspect_rel=0.961
+   20260522_203732.jpg | 11 | normal→normal | O | 0.854 | appearance | - | best_score=0.8545 upside_total=-0.886 e_sift=-1 sift_inliers=104 tilt_signed=0.0 paper_score=0.257 paper_delta=0.01 aspect_rel=1.011
+   20260522_203732.jpg | 12 | normal→normal | O | 0.75 | appearance | - | best_score=0.7504 upside_total=-0.794 e_sift=-1 sift_inliers=65 tilt_signed=-1.44 paper_score=0.124 paper_delta=0.124 aspect_rel=1.044
+   20260522_203815.jpg |  0 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.5939 upside_total=1.0 e_sift=1 sift_inliers=140 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.041
+   20260522_203815.jpg |  1 | normal→normal | O | 0.791 | appearance | - | best_score=0.7909 upside_total=-0.846 e_sift=-1 sift_inliers=181 tilt_signed=1.17 paper_score=0.26 paper_delta=0.006 aspect_rel=0.921
+   20260522_203815.jpg |  2 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.6526 upside_total=1.0 e_sift=1 sift_inliers=89 tilt_signed=0.95 paper_score=0.0 paper_delta=-0.132 aspect_rel=0.875
+   20260522_203815.jpg |  3 | normal→normal | O | 0.796 | appearance | - | best_score=0.7964 upside_total=-0.843 e_sift=-1 sift_inliers=49 tilt_signed=1.26 paper_score=0.271 paper_delta=-0.03 aspect_rel=1.073
+   20260522_203815.jpg |  4 | normal→normal | O | 0.778 | appearance | - | best_score=0.7776 upside_total=-0.896 e_sift=-1 sift_inliers=270 tilt_signed=2.33 paper_score=0.133 paper_delta=-0.032 aspect_rel=1.019
+   20260522_203815.jpg |  5 | normal→normal | O | 0.829 | appearance | - | best_score=0.8295 upside_total=-0.887 e_sift=-1 sift_inliers=177 tilt_signed=1.04 paper_score=0.191 paper_delta=-0.011 aspect_rel=0.989
+   20260522_203815.jpg |  6 | normal→normal | O | 0.626 | appearance | - | best_score=0.6257 upside_total=-0.808 e_sift=-1 sift_inliers=67 tilt_signed=1.59 paper_score=0.0 paper_delta=0.0 aspect_rel=0.833
+   20260522_203815.jpg |  7 | normal→normal | O | 0.843 | appearance | - | best_score=0.8434 upside_total=-0.904 e_sift=-1 sift_inliers=75 tilt_signed=1.69 paper_score=0.0 paper_delta=0.0 aspect_rel=0.983
+   20260522_203815.jpg |  8 | upside→upside | O | 0.755 | appearance | orientation_by_sift_strong | best_score=0.761 upside_total=1.0 e_sift=1 sift_inliers=31 tilt_signed=1.74 paper_score=0.0 paper_delta=0.0 aspect_rel=0.806
+   20260522_203815.jpg |  9 | normal→normal | O | 0.795 | appearance | - | best_score=0.7951 upside_total=-0.902 e_sift=-1 sift_inliers=156 tilt_signed=1.72 paper_score=0.247 paper_delta=0.025 aspect_rel=0.96
+   20260522_203815.jpg | 10 | normal→normal | O | 0.731 | appearance | - | best_score=0.7307 upside_total=-0.814 e_sift=-1 sift_inliers=127 tilt_signed=1.57 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_203815.jpg | 11 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.7449 upside_total=1.0 e_sift=1 sift_inliers=99 tilt_signed=2.26 paper_score=0.302 paper_delta=0.056 aspect_rel=1.065
+   20260522_203815.jpg | 12 | normal→normal | O | 0.748 | appearance | - | best_score=0.7482 upside_total=-0.772 e_sift=-1 sift_inliers=86 tilt_signed=0.0 paper_score=0.163 paper_delta=0.163 aspect_rel=1.065
+   20260522_203952.jpg |  0 | normal→normal | O | 0.924 | appearance | - | best_score=0.9236 upside_total=-0.947 e_sift=-1 sift_inliers=279 tilt_signed=0.49 paper_score=0.0 paper_delta=0.0 aspect_rel=0.978
+   20260522_203952.jpg |  1 | upside→upside | O | 0.97 | appearance | orientation_by_sift_strong | best_score=0.6131 upside_total=1.0 e_sift=1 sift_inliers=74 tilt_signed=0.48 paper_score=0.0 paper_delta=-0.125 aspect_rel=0.942
+   20260522_203952.jpg |  2 | normal→normal | O | 0.526 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.5257 upside_total=-1.0 e_sift=-1 sift_inliers=21 tilt_signed=0.0 paper_score=0.133 paper_delta=0.002 aspect_rel=0.826
+   20260522_203952.jpg |  3 | normal→normal | O | 0.713 | appearance | - | best_score=0.7126 upside_total=-0.885 e_sift=-1 sift_inliers=120 tilt_signed=1.99 paper_score=0.148 paper_delta=-0.013 aspect_rel=0.954
+   20260522_203952.jpg |  4 | normal→normal | O | 0.657 | appearance | - | best_score=0.6568 upside_total=-0.885 e_sift=-1 sift_inliers=95 tilt_signed=1.32 paper_score=0.275 paper_delta=-0.04 aspect_rel=0.918
+   20260522_203952.jpg |  5 | normal→normal | O | 0.849 | series | series_resolved | best_score=0.8488 upside_total=-0.935 e_sift=-1 sift_inliers=283 tilt_signed=1.58 paper_score=0.0 paper_delta=0.0 aspect_rel=1.012
+   20260522_203952.jpg |  6 | upside→upside | O | 0.97 | appearance | orientation_by_sift_strong | best_score=0.6984 upside_total=1.0 e_sift=1 sift_inliers=74 tilt_signed=0.69 paper_score=0.0 paper_delta=0.0 aspect_rel=1.044
+   20260522_203952.jpg |  7 | upside→upside | O | 0.86 | appearance | orientation_by_sift_strong | best_score=0.7564 upside_total=1.0 e_sift=1 sift_inliers=52 tilt_signed=1.65 paper_score=0.124 paper_delta=-0.034 aspect_rel=1.112
+   20260522_203952.jpg |  8 | normal→normal | O | 0.674 | appearance | - | best_score=0.6736 upside_total=-0.904 e_sift=-1 sift_inliers=69 tilt_signed=2.12 paper_score=0.152 paper_delta=-0.023 aspect_rel=1.125
+   20260522_203952.jpg |  9 | normal→normal | O | 0.767 | series | series_resolved | best_score=0.7672 upside_total=-0.896 e_sift=-1 sift_inliers=161 tilt_signed=1.96 paper_score=0.0 paper_delta=-0.132 aspect_rel=1.052
+   20260522_203952.jpg | 10 | normal→normal | O | 0.812 | appearance | - | best_score=0.8125 upside_total=-0.814 e_sift=-1 sift_inliers=63 tilt_signed=2.45 paper_score=0.284 paper_delta=-0.021 aspect_rel=0.944
+   20260522_203952.jpg | 11 | upside→upside | O | 0.885 | appearance | orientation_by_sift_strong | best_score=0.7893 upside_total=1.0 e_sift=1 sift_inliers=57 tilt_signed=2.7 paper_score=0.142 paper_delta=-0.014 aspect_rel=0.998
+   20260522_203952.jpg | 12 | normal→normal | O | 0.425 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4247 upside_total=-1.0 e_sift=-1 sift_inliers=18 tilt_signed=0.78 paper_score=0.0 paper_delta=0.0 aspect_rel=0.506
+   20260522_203952.jpg | 13 | normal→normal | O | 0.706 | appearance | - | best_score=0.7057 upside_total=-0.91 e_sift=-1 sift_inliers=49 tilt_signed=0.0 paper_score=0.136 paper_delta=0.004 aspect_rel=0.899
+   20260522_204046.jpg |  0 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.5865 upside_total=1.0 e_sift=1 sift_inliers=90 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.323
+   20260522_204046.jpg |  1 | normal→normal | O | 0.775 | appearance | - | best_score=0.7753 upside_total=-0.888 e_sift=-1 sift_inliers=78 tilt_signed=-1.17 paper_score=0.126 paper_delta=0.0 aspect_rel=1.015
+   20260522_204046.jpg |  2 | upside→upside | O | 0.69 | appearance | orientation_by_sift_strong | best_score=0.6541 upside_total=1.0 e_sift=1 sift_inliers=18 tilt_signed=-2.38 paper_score=0.0 paper_delta=-0.131 aspect_rel=1.016
+   20260522_204046.jpg |  3 | upside→upside | O | 0.99 | sift | orientation_by_sift_only,orientation_by_sift_strong,matched_by_sift | best_score=0.5568 upside_total=1.0 e_sift=1 sift_inliers=97 tilt_signed=-1.47 paper_score=0.157 paper_delta=-0.005 aspect_rel=0.952
+   20260522_204046.jpg |  4 | normal→normal | O | 0.569 | appearance | orientation_by_sift_only,low_confidence | best_score=0.5685 upside_total=-1.0 e_sift=-1 sift_inliers=49 tilt_signed=-1.24 paper_score=0.282 paper_delta=-0.033 aspect_rel=0.875
+   20260522_204046.jpg |  5 | normal→normal | O | 0.852 | series | series_resolved | best_score=0.8517 upside_total=-0.933 e_sift=-1 sift_inliers=177 tilt_signed=-1.64 paper_score=0.0 paper_delta=0.0 aspect_rel=1.022
+   20260522_204046.jpg |  6 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.7566 upside_total=1.0 e_sift=1 sift_inliers=79 tilt_signed=-2.86 paper_score=0.0 paper_delta=0.0 aspect_rel=1.028
+   20260522_204046.jpg |  7 | normal→normal | O | 0.684 | appearance | - | best_score=0.6835 upside_total=-0.873 e_sift=-1 sift_inliers=45 tilt_signed=-1.71 paper_score=0.138 paper_delta=-0.02 aspect_rel=1.271
+   20260522_204046.jpg |  8 | normal→normal | O | 0.621 | appearance | - | best_score=0.6205 upside_total=-0.862 e_sift=-1 sift_inliers=29 tilt_signed=-0.6 paper_score=0.16 paper_delta=-0.015 aspect_rel=1.211
+   20260522_204046.jpg |  9 | normal→normal | O | 0.767 | series | series_resolved | best_score=0.7668 upside_total=-0.918 e_sift=-1 sift_inliers=201 tilt_signed=-1.83 paper_score=0.0 paper_delta=-0.132 aspect_rel=1.002
+   20260522_204046.jpg | 10 | upside→upside | O | 0.825 | appearance | orientation_by_sift_strong | best_score=0.702 upside_total=1.0 e_sift=1 sift_inliers=45 tilt_signed=-0.96 paper_score=0.306 paper_delta=0.001 aspect_rel=0.987
+   20260522_204046.jpg | 11 | normal→normal | O | 0.883 | appearance | - | best_score=0.8829 upside_total=-0.896 e_sift=-1 sift_inliers=57 tilt_signed=0.0 paper_score=0.141 paper_delta=-0.014 aspect_rel=1.097
+   20260522_204046.jpg | 12 | upside→upside | O | 0.688 | appearance | - | best_score=0.6209 upside_total=0.375 sift_inliers=21 tilt_signed=-1.75 paper_score=0.0 paper_delta=0.0 aspect_rel=0.799
+   20260522_204046.jpg | 13 | normal→normal | O | 0.829 | appearance | - | best_score=0.829 upside_total=-0.917 e_sift=-1 sift_inliers=47 tilt_signed=-1.06 paper_score=0.126 paper_delta=-0.006 aspect_rel=1.062
+   20260522_204131.jpg |  0 | normal→normal | O | 0.88 | appearance | - | best_score=0.8798 upside_total=-0.909 e_sift=-1 sift_inliers=189 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.133
+   20260522_204131.jpg |  1 | normal→normal | O | 0.878 | appearance | - | best_score=0.8779 upside_total=-0.883 e_sift=-1 sift_inliers=75 tilt_signed=-0.23 paper_score=0.126 paper_delta=0.001 aspect_rel=1.019
+   20260522_204131.jpg |  2 | normal→normal | O | 0.712 | appearance | - | best_score=0.7118 upside_total=-0.831 e_sift=-1 sift_inliers=24 tilt_signed=-0.32 paper_score=0.0 paper_delta=-0.131 aspect_rel=1.049
+   20260522_204131.jpg |  3 | normal→normal | O | 0.715 | appearance | - | best_score=0.7149 upside_total=-0.914 e_sift=-1 sift_inliers=105 tilt_signed=0.26 paper_score=0.158 paper_delta=-0.004 aspect_rel=1.036
+   20260522_204131.jpg |  4 | upside→upside | O | 0.765 | appearance | orientation_by_sift_strong | best_score=0.6174 upside_total=1.0 e_sift=1 sift_inliers=33 tilt_signed=-0.99 paper_score=0.327 paper_delta=0.012 aspect_rel=1.331
+   20260522_204131.jpg |  5 | upside→upside | O | 0.99 | series | orientation_by_sift_strong,series_resolved | best_score=0.7785 upside_total=1.0 e_sift=1 sift_inliers=216 tilt_signed=-1.81 paper_score=0.0 paper_delta=0.0 aspect_rel=1.069
+   20260522_204131.jpg |  6 | normal→normal | O | 0.81 | appearance | - | best_score=0.8095 upside_total=-0.93 e_sift=-1 sift_inliers=132 tilt_signed=-0.97 paper_score=0.0 paper_delta=0.0 aspect_rel=0.935
+   20260522_204131.jpg |  7 | normal→normal | O | 0.743 | appearance | - | best_score=0.7431 upside_total=-0.898 e_sift=-1 sift_inliers=47 tilt_signed=-0.77 paper_score=0.136 paper_delta=-0.022 aspect_rel=1.152
+   20260522_204131.jpg |  8 | upside→upside | O | 0.86 | sift | orientation_by_sift_only,orientation_by_sift_strong,matched_by_sift | best_score=0.4396 upside_total=1.0 e_sift=1 sift_inliers=52 tilt_signed=-0.14 paper_score=0.165 paper_delta=-0.01 aspect_rel=1.197
+   20260522_204131.jpg |  9 | normal→normal | O | 0.377 | series | orientation_by_sift_only,low_confidence,series_resolved | best_score=0.3766 sift_inliers=14 tilt_signed=-0.95 paper_score=0.129 paper_delta=-0.003 aspect_rel=0.993
+   20260522_204131.jpg | 10 | upside→upside | O | 0.82 | appearance | orientation_by_sift_strong | best_score=0.7368 upside_total=1.0 e_sift=1 sift_inliers=44 tilt_signed=-0.43 paper_score=0.299 paper_delta=-0.005 aspect_rel=1.004
+   20260522_204131.jpg | 11 | normal→normal | O | 0.861 | appearance | - | best_score=0.8608 upside_total=-0.89 e_sift=-1 sift_inliers=63 tilt_signed=0.0 paper_score=0.146 paper_delta=-0.009 aspect_rel=1.045
+   20260522_204131.jpg | 12 | normal→normal | O | 0.66 | appearance | - | best_score=0.66 upside_total=-0.837 e_sift=-1 sift_inliers=67 tilt_signed=-0.96 paper_score=0.0 paper_delta=0.0 aspect_rel=0.637
+   20260522_204131.jpg | 13 | normal→normal | O | 0.858 | appearance | - | best_score=0.8581 upside_total=-0.889 e_sift=-1 sift_inliers=44 tilt_signed=-0.43 paper_score=0.127 paper_delta=-0.005 aspect_rel=1.067
+   20260522_204231.jpg |  0 멈추면 | normal→normal | O | 0.845 | appearance | - | best_score=0.8455 upside_total=-0.911 e_sift=-1 sift_inliers=106 tilt_signed=0.0 paper_score=0.28 paper_delta=-0.001 aspect_rel=1.015
+   20260522_204231.jpg |  1 믿음A | normal→normal | O | 0.754 | series | series_resolved | best_score=0.7542 upside_total=-0.832 e_sift=-1 sift_inliers=36 tilt_signed=-0.37 paper_score=0.339 paper_delta=-0.002 aspect_rel=1.059
+   20260522_204231.jpg |  2 믿음B | normal→normal | O | 0.847 | series | series_resolved | best_score=0.8467 upside_total=-0.842 e_sift=-1 sift_inliers=78 tilt_signed=-0.51 paper_score=0.338 paper_delta=-0.001 aspect_rel=1.072
+   20260522_204231.jpg |  3 THINK | normal→normal | O | 0.882 | appearance | - | best_score=0.8821 upside_total=-0.925 e_sift=-1 sift_inliers=92 tilt_signed=-0.18 paper_score=0.268 paper_delta=0.004 aspect_rel=1.045
+   20260522_204231.jpg |  4 실크로드 | normal→normal | O | 0.732 | appearance | - | best_score=0.7322 upside_total=-0.822 e_sift=-1 sift_inliers=141 tilt_signed=0.47 paper_score=0.247 paper_delta=0.008 aspect_rel=0.818
+   20260522_204231.jpg |  5 귀머거리 | upside→upside | O | 0.92 | sift | orientation_by_sift_only,orientation_by_sift_strong,matched_by_sift | best_score=0.4389 upside_total=1.0 e_sift=1 sift_inliers=64 tilt_signed=0.04 paper_score=0.168 paper_delta=0.025 aspect_rel=0.789
+   20260522_204231.jpg |  6 외교관 | normal→normal | O | 0.723 | appearance | - | best_score=0.7229 upside_total=-0.932 e_sift=-1 sift_inliers=208 tilt_signed=-0.78 paper_score=0.242 paper_delta=-0.014 aspect_rel=1.18
+   20260522_204231.jpg |  7 토토 | normal→normal | O | 0.774 | appearance | - | best_score=0.7736 upside_total=-0.843 e_sift=-1 sift_inliers=78 tilt_signed=-0.83 paper_score=0.228 paper_delta=0.006 aspect_rel=1.011
+   20260522_204231.jpg |  8 밤하늘 | normal→normal | O | 0.507 | appearance | - | best_score=0.5065 upside_total=-0.759 e_sift=-1 sift_inliers=38 tilt_signed=-0.58 paper_score=0.156 paper_delta=0.026 aspect_rel=1.534
+   20260522_204231.jpg |  9 북극 | normal→normal | O | 0.788 | appearance | - | best_score=0.7884 upside_total=-0.888 e_sift=-1 sift_inliers=134 tilt_signed=-0.15 paper_score=0.134 paper_delta=-0.012 aspect_rel=1.151
+   20260522_204231.jpg | 10 색과빛 | normal→normal | O | 0.803 | appearance | - | best_score=0.803 upside_total=-0.689 e_sift=-1 sift_inliers=53 tilt_signed=-0.31 paper_score=0.227 paper_delta=-0.002 aspect_rel=1.079
+   20260522_204231.jpg | 11 뉴문 | upside→upside | O | 0.795 | appearance | orientation_by_sift_strong | best_score=0.7556 upside_total=1.0 e_sift=1 sift_inliers=39 tilt_signed=-1.69 paper_score=0.0 paper_delta=0.0 aspect_rel=0.88
+   20260522_204231.jpg | 12 비교정치 | normal→normal | O | 0.79 | appearance | - | best_score=0.7898 upside_total=-0.896 e_sift=-1 sift_inliers=65 tilt_signed=-2.28 paper_score=0.223 paper_delta=0.02 aspect_rel=0.946
+   20260522_204231.jpg | 13 친구들 | normal→normal | O | 0.844 | appearance | - | best_score=0.8436 upside_total=-0.909 e_sift=-1 sift_inliers=412 tilt_signed=-2.39 paper_score=0.21 paper_delta=-0.005 aspect_rel=1.02
+   20260522_204231.jpg | 14 그건사랑 | normal→normal | O | 0.726 | appearance | - | best_score=0.7261 upside_total=-0.875 e_sift=-1 sift_inliers=117 tilt_signed=-2.32 paper_score=0.323 paper_delta=0.005 aspect_rel=1.088
+   20260522_204231.jpg | 15 독수리 | normal→normal | O | 0.732 | appearance | - | best_score=0.7317 upside_total=-0.91 e_sift=-1 sift_inliers=119 tilt_signed=-2.25 paper_score=0.246 paper_delta=0.003 aspect_rel=0.991
+   20260522_204231.jpg | 16 시골의사 | normal→normal | O | 0.81 | appearance | - | best_score=0.8103 upside_total=-0.938 e_sift=-1 sift_inliers=100 tilt_signed=-2.39 paper_score=0.0 paper_delta=0.0 aspect_rel=1.074
+   20260522_204231.jpg | 17 나는나를 | normal→normal | O | 0.819 | appearance | - | best_score=0.8191 upside_total=-0.929 e_sift=-1 sift_inliers=313 tilt_signed=-2.49 paper_score=0.0 paper_delta=0.0 aspect_rel=0.982
+   20260522_204231.jpg | 18 공자 | normal→normal | O | 0.682 | appearance | - | best_score=0.682 upside_total=-0.825 e_sift=-1 sift_inliers=112 tilt_signed=-2.62 paper_score=0.323 paper_delta=0.006 aspect_rel=0.982
+   20260522_204231.jpg | 19 바보빅터 | normal→normal | O | 0.633 | appearance | - | best_score=0.6326 upside_total=-0.824 e_sift=-1 sift_inliers=179 tilt_signed=-2.28 paper_score=0.263 paper_delta=-0.01 aspect_rel=0.984
+   20260522_204231.jpg | 20 STRUCT | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.6937 upside_total=1.0 e_sift=1 sift_inliers=175 tilt_signed=-1.9 paper_score=0.125 paper_delta=-0.0 aspect_rel=0.949
+   20260522_204231.jpg | 21 주체이론 | upside→upside | O | 0.86 | appearance | orientation_by_sift_strong | best_score=0.8115 upside_total=1.0 e_sift=1 sift_inliers=52 tilt_signed=-1.65 paper_score=0.246 paper_delta=-0.011 aspect_rel=0.942
+   20260522_204231.jpg | 22 나무 | normal→normal | O | 0.816 | appearance | - | best_score=0.8164 upside_total=-0.94 e_sift=-1 sift_inliers=135 tilt_signed=-1.67 paper_score=0.255 paper_delta=-0.009 aspect_rel=1.021
+   20260522_204231.jpg | 23 소나기 | normal→normal | O | 0.703 | appearance | - | best_score=0.7032 upside_total=-0.907 e_sift=-1 sift_inliers=189 tilt_signed=-1.59 paper_score=0.0 paper_delta=0.0 aspect_rel=1.264
+   20260522_204231.jpg | 24 게임 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.8112 upside_total=1.0 e_sift=1 sift_inliers=127 tilt_signed=-1.68 paper_score=0.0 paper_delta=0.0 aspect_rel=0.941
+   20260522_204231.jpg | 25 변증법 | normal→normal | O | 0.376 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.3764 upside_total=-1.0 e_sift=-1 sift_inliers=40 tilt_signed=0.05 paper_score=0.0 paper_delta=0.0 aspect_rel=1.058
+   20260522_204231.jpg | 26 글읽기 | normal→normal | O | 0.532 | appearance | - | best_score=0.5319 upside_total=-0.608 sift_inliers=7 tilt_signed=0.79 paper_score=0.0 paper_delta=0.0 aspect_rel=1.588
+   20260522_204231.jpg | 27 바보처럼 | normal→normal | O | 0.822 | appearance | - | best_score=0.8223 upside_total=-0.897 e_sift=-1 sift_inliers=122 tilt_signed=-0.16 paper_score=0.28 paper_delta=0.004 aspect_rel=0.957
+   20260522_204231.jpg | 28 덕혜옹주 | normal→normal | O | 0.826 | appearance | - | best_score=0.8264 upside_total=-0.924 e_sift=-1 sift_inliers=72 tilt_signed=0.0 paper_score=0.199 paper_delta=-0.002 aspect_rel=0.976
+   20260522_204231.jpg | 29 신약성경 | normal→normal | O | 0.538 | appearance | - | best_score=0.5379 upside_total=-0.598 e_sift=-1 sift_inliers=13 tilt_signed=-0.31 paper_score=0.0 paper_delta=0.0 aspect_rel=1.387
+   20260522_204231.jpg | 30 Che | normal→normal | O | 0.651 | appearance | - | best_score=0.6507 upside_total=-0.73 e_sift=-1 sift_inliers=32 tilt_signed=-0.46 paper_score=0.0 paper_delta=0.0 aspect_rel=0.943
+   20260522_204315.jpg |  0 멈추면 | normal→normal | O | 0.685 | appearance | - | best_score=0.6845 upside_total=-0.859 e_sift=-1 sift_inliers=98 tilt_signed=0.25 paper_score=0.272 paper_delta=-0.008 aspect_rel=1.108
+   20260522_204315.jpg |  1 믿음A | upside→upside | O | 0.795 | series | orientation_by_sift_only,orientation_by_sift_strong,series_resolved | best_score=0.3144 upside_total=1.0 e_sift=1 sift_inliers=39 tilt_signed=0.0 paper_score=0.321 paper_delta=-0.02 aspect_rel=0.698
+   20260522_204315.jpg |  2 믿음B | upside→upside | O | 0.8 | series | orientation_by_sift_strong,series_resolved | best_score=0.6613 upside_total=1.0 e_sift=1 sift_inliers=40 tilt_signed=-0.21 paper_score=0.335 paper_delta=-0.004 aspect_rel=1.281
+   20260522_204315.jpg |  3 THINK | normal→normal | O | 0.567 | appearance | - | best_score=0.5673 upside_total=-0.808 e_sift=-1 sift_inliers=38 tilt_signed=-0.7 paper_score=0.207 paper_delta=-0.057 aspect_rel=1.402
+   20260522_204315.jpg |  4 실크로드 | normal→normal | O | 0.716 | appearance | - | best_score=0.7161 upside_total=-0.802 e_sift=-1 sift_inliers=128 tilt_signed=1.11 paper_score=0.266 paper_delta=0.027 aspect_rel=1.024
+   20260522_204315.jpg |  5 귀머거리 | normal→normal | O | 0.67 | appearance | - | best_score=0.6696 upside_total=-0.756 e_sift=-1 sift_inliers=106 tilt_signed=0.93 paper_score=0.161 paper_delta=0.018 aspect_rel=0.82
+   20260522_204315.jpg |  6 외교관 | normal→normal | O | 0.825 | appearance | - | best_score=0.8252 upside_total=-0.873 e_sift=-1 sift_inliers=177 tilt_signed=0.38 paper_score=0.236 paper_delta=-0.021 aspect_rel=1.095
+   20260522_204315.jpg |  7 토토 | normal→normal | O | 0.843 | appearance | - | best_score=0.8432 upside_total=-0.922 e_sift=-1 sift_inliers=145 tilt_signed=0.77 paper_score=0.233 paper_delta=0.011 aspect_rel=1.006
+   20260522_204315.jpg |  8 밤하늘 | normal→normal | O | 0.723 | appearance | - | best_score=0.7228 upside_total=-0.652 sift_inliers=14 tilt_signed=0.61 paper_score=0.0 paper_delta=-0.13 aspect_rel=0.905
+   20260522_204315.jpg |  9 북극 | normal→normal | O | 0.902 | appearance | - | best_score=0.9024 upside_total=-0.893 e_sift=-1 sift_inliers=201 tilt_signed=0.95 paper_score=0.154 paper_delta=0.008 aspect_rel=1.065
+   20260522_204315.jpg | 10 색과빛 | normal→normal | O | 0.739 | appearance | - | best_score=0.7387 upside_total=-0.69 e_sift=-1 sift_inliers=75 tilt_signed=0.76 paper_score=0.233 paper_delta=0.004 aspect_rel=1.104
+   20260522_204315.jpg | 11 뉴문 | normal→normal | O | 0.868 | appearance | - | best_score=0.868 upside_total=-0.938 e_sift=-1 sift_inliers=59 tilt_signed=-0.52 paper_score=0.0 paper_delta=0.0 aspect_rel=0.982
+   20260522_204315.jpg | 12 비교정치 | upside→upside | O | 0.775 | appearance | orientation_by_sift_strong | best_score=0.7734 upside_total=1.0 e_sift=1 sift_inliers=35 tilt_signed=-0.61 paper_score=0.191 paper_delta=-0.012 aspect_rel=0.979
+   20260522_204315.jpg | 13 친구들 | normal→normal | O | 0.757 | appearance | - | best_score=0.7575 upside_total=-0.884 e_sift=-1 sift_inliers=290 tilt_signed=0.33 paper_score=0.221 paper_delta=0.005 aspect_rel=1.101
+   20260522_204315.jpg | 14 그건사랑 | normal→normal | O | 0.797 | appearance | - | best_score=0.7969 upside_total=-0.887 e_sift=-1 sift_inliers=138 tilt_signed=0.43 paper_score=0.327 paper_delta=0.008 aspect_rel=1.066
+   20260522_204315.jpg | 15 독수리 | upside→upside | O | 0.915 | appearance | orientation_by_sift_strong | best_score=0.6009 upside_total=1.0 e_sift=1 sift_inliers=63 tilt_signed=0.11 paper_score=0.241 paper_delta=-0.002 aspect_rel=0.98
+   20260522_204315.jpg | 16 시골의사 | normal→normal | O | 0.7 | appearance | - | best_score=0.6995 upside_total=-0.873 e_sift=-1 sift_inliers=68 tilt_signed=0.43 paper_score=0.0 paper_delta=0.0 aspect_rel=1.244
+   20260522_204315.jpg | 17 나는나를 | normal→normal | O | 0.798 | appearance | - | best_score=0.7976 upside_total=-0.872 e_sift=-1 sift_inliers=227 tilt_signed=0.12 paper_score=0.0 paper_delta=0.0 aspect_rel=0.979
+   20260522_204315.jpg | 18 공자 | normal→normal | O | 0.734 | appearance | - | best_score=0.7342 upside_total=-0.825 e_sift=-1 sift_inliers=100 tilt_signed=-0.08 paper_score=0.313 paper_delta=-0.004 aspect_rel=1.129
+   20260522_204315.jpg | 19 바보빅터 | normal→normal | O | 0.66 | appearance | - | best_score=0.6604 upside_total=-0.851 e_sift=-1 sift_inliers=155 tilt_signed=-0.24 paper_score=0.284 paper_delta=0.01 aspect_rel=1.127
+   20260522_204315.jpg | 20 STRUCT | normal→normal | O | 0.72 | appearance | - | best_score=0.7195 upside_total=-0.848 e_sift=-1 sift_inliers=175 tilt_signed=0.19 paper_score=0.0 paper_delta=-0.125 aspect_rel=0.87
+   20260522_204315.jpg | 21 주체이론 | normal→normal | O | 0.828 | appearance | - | best_score=0.8278 upside_total=-0.845 e_sift=-1 sift_inliers=55 tilt_signed=0.72 paper_score=0.234 paper_delta=-0.024 aspect_rel=0.874
+   20260522_204315.jpg | 22 나무 | normal→normal | O | 0.474 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4744 upside_total=-1.0 e_sift=-1 sift_inliers=107 tilt_signed=0.41 paper_score=0.267 paper_delta=0.003 aspect_rel=0.827
+   20260522_204315.jpg | 23 소나기 | normal→normal | O | 0.749 | appearance | - | best_score=0.7492 upside_total=-0.873 e_sift=-1 sift_inliers=194 tilt_signed=0.01 paper_score=0.0 paper_delta=0.0 aspect_rel=1.007
+   20260522_204315.jpg | 24 게임 | normal→normal | O | 0.877 | appearance | - | best_score=0.8773 upside_total=-0.896 e_sift=-1 sift_inliers=156 tilt_signed=-0.08 paper_score=0.0 paper_delta=0.0 aspect_rel=0.912
+   20260522_204315.jpg | 25 변증법 | normal→normal | O | 0.445 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4454 upside_total=-1.0 e_sift=-1 sift_inliers=88 tilt_signed=-0.44 paper_score=0.0 paper_delta=0.0 aspect_rel=0.701
+   20260522_204315.jpg | 26 글읽기 | normal→normal | O | 0.567 | appearance | - | best_score=0.5667 upside_total=-0.835 e_sift=-1 sift_inliers=22 tilt_signed=0.24 paper_score=0.0 paper_delta=0.0 aspect_rel=1.275
+   20260522_204315.jpg | 27 바보처럼 | normal→normal | O | 0.637 | appearance | - | best_score=0.6371 upside_total=-0.761 e_sift=-1 sift_inliers=114 tilt_signed=0.0 paper_score=0.282 paper_delta=0.006 aspect_rel=0.809
+   20260522_204315.jpg | 28 덕혜옹주 | normal→normal | O | 0.772 | appearance | - | best_score=0.7723 upside_total=-0.88 e_sift=-1 sift_inliers=82 tilt_signed=0.75 paper_score=0.206 paper_delta=0.005 aspect_rel=1.059
+   20260522_204315.jpg | 29 신약성경 | normal→normal | O | 0.588 | appearance | - | best_score=0.5882 upside_total=0.378 sift_inliers=9 tilt_signed=0.44 paper_score=0.0 paper_delta=0.0 aspect_rel=1.816
+   20260522_204315.jpg | 30 Che | normal|tilted→normal | O | 0.699 | appearance | - | best_score=0.6985 upside_total=-0.728 e_sift=-1 sift_inliers=42 tilt_signed=2.36 paper_score=0.0 paper_delta=0.0 aspect_rel=1.258
+   20260522_204416.jpg |  0 멈추면 | normal→normal | O | 0.804 | appearance | - | best_score=0.8039 upside_total=-0.831 e_sift=-1 sift_inliers=105 tilt_signed=0.26 paper_score=0.28 paper_delta=-0.001 aspect_rel=0.992
+   20260522_204416.jpg |  1 믿음A | normal→normal | O | 0.819 | series | series_resolved | best_score=0.8194 upside_total=-0.84 e_sift=-1 sift_inliers=40 tilt_signed=0.0 paper_score=0.332 paper_delta=-0.008 aspect_rel=1.022
+   20260522_204416.jpg |  2 믿음B | normal→normal | O | 0.725 | series | series_resolved | best_score=0.7249 upside_total=-0.761 e_sift=-1 sift_inliers=49 tilt_signed=0.01 paper_score=0.33 paper_delta=-0.009 aspect_rel=1.192
+   20260522_204416.jpg |  3 THINK | upside→unknown | X | 0.3 | redetected | present_unmatched | best_score=0.2842 paper_score=0.254
+   20260522_204416.jpg |  4 실크로드 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.5583 upside_total=1.0 e_sift=1 sift_inliers=138 tilt_signed=0.92 paper_score=0.254 paper_delta=0.014 aspect_rel=1.042
+   20260522_204416.jpg |  5 귀머거리 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.5111 upside_total=1.0 e_sift=1 sift_inliers=80 tilt_signed=1.0 paper_score=0.167 paper_delta=0.025 aspect_rel=0.779
+   20260522_204416.jpg |  6 외교관 | normal→normal | O | 0.852 | appearance | - | best_score=0.852 upside_total=-0.923 e_sift=-1 sift_inliers=241 tilt_signed=0.99 paper_score=0.268 paper_delta=0.012 aspect_rel=1.001
+   20260522_204416.jpg |  7 토토 | normal→normal | O | 0.765 | appearance | - | best_score=0.7646 upside_total=-0.892 e_sift=-1 sift_inliers=106 tilt_signed=1.52 paper_score=0.271 paper_delta=0.049 aspect_rel=1.0
+   20260522_204416.jpg |  8 밤하늘 | upside→upside | O | 0.73 | appearance | orientation_by_sift_strong | best_score=0.5417 upside_total=1.0 e_sift=1 sift_inliers=26 tilt_signed=1.61 paper_score=0.146 paper_delta=0.016 aspect_rel=1.074
+   20260522_204416.jpg |  9 북극 | normal→normal | O | 0.837 | appearance | - | best_score=0.837 upside_total=-0.81 e_sift=-1 sift_inliers=155 tilt_signed=1.35 paper_score=0.158 paper_delta=0.012 aspect_rel=0.995
+   20260522_204416.jpg | 10 색과빛 | normal→normal | O | 0.758 | appearance | - | best_score=0.7582 upside_total=-0.656 e_sift=-1 sift_inliers=72 tilt_signed=1.25 paper_score=0.251 paper_delta=0.022 aspect_rel=1.021
+   20260522_204416.jpg | 11 뉴문 | normal→normal | O | 0.906 | appearance | - | best_score=0.9056 upside_total=-0.927 e_sift=-1 sift_inliers=66 tilt_signed=0.14 paper_score=0.0 paper_delta=0.0 aspect_rel=0.964
+   20260522_204416.jpg | 12 비교정치 | normal→normal | O | 0.857 | appearance | - | best_score=0.8568 upside_total=-0.925 e_sift=-1 sift_inliers=61 tilt_signed=-0.01 paper_score=0.206 paper_delta=0.004 aspect_rel=1.015
+   20260522_204416.jpg | 13 친구들 | normal→normal | O | 0.837 | appearance | - | best_score=0.8371 upside_total=-0.92 e_sift=-1 sift_inliers=384 tilt_signed=-0.01 paper_score=0.231 paper_delta=0.016 aspect_rel=1.046
+   20260522_204416.jpg | 14 그건사랑 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.5834 upside_total=1.0 e_sift=1 sift_inliers=98 tilt_signed=0.48 paper_score=0.319 paper_delta=0.0 aspect_rel=1.034
+   20260522_204416.jpg | 15 독수리 | upside→upside | O | 0.97 | appearance | orientation_by_sift_strong | best_score=0.5277 upside_total=1.0 e_sift=1 sift_inliers=74 tilt_signed=0.55 paper_score=0.239 paper_delta=-0.005 aspect_rel=0.944
+   20260522_204416.jpg | 16 시골의사 | normal→normal | O | 0.66 | appearance | - | best_score=0.6603 upside_total=-0.879 e_sift=-1 sift_inliers=73 tilt_signed=1.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.306
+   20260522_204416.jpg | 17 나는나를 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.6037 upside_total=1.0 e_sift=1 sift_inliers=202 tilt_signed=1.11 paper_score=0.0 paper_delta=0.0 aspect_rel=0.975
+   20260522_204416.jpg | 18 공자 | normal→normal | O | 0.66 | appearance | - | best_score=0.6596 upside_total=-0.831 e_sift=-1 sift_inliers=96 tilt_signed=1.21 paper_score=0.313 paper_delta=-0.005 aspect_rel=1.077
+   20260522_204416.jpg | 19 바보빅터 | normal→normal | O | 0.69 | appearance | - | best_score=0.6897 upside_total=-0.823 e_sift=-1 sift_inliers=156 tilt_signed=1.4 paper_score=0.283 paper_delta=0.009 aspect_rel=1.025
+   20260522_204416.jpg | 20 STRUCT | normal→normal | O | 0.841 | appearance | - | best_score=0.841 upside_total=-0.925 e_sift=-1 sift_inliers=253 tilt_signed=1.63 paper_score=0.129 paper_delta=0.004 aspect_rel=0.932
+   20260522_204416.jpg | 21 주체이론 | normal→normal | O | 0.882 | appearance | - | best_score=0.8817 upside_total=-0.88 e_sift=-1 sift_inliers=63 tilt_signed=1.78 paper_score=0.251 paper_delta=-0.006 aspect_rel=0.892
+   20260522_204416.jpg | 22 나무 | normal→normal | O | 0.511 | appearance | - | best_score=0.5109 upside_total=-0.76 e_sift=-1 sift_inliers=115 tilt_signed=1.48 paper_score=0.279 paper_delta=0.015 aspect_rel=0.808
+   20260522_204416.jpg | 23 소나기 | normal→normal | O | 0.766 | appearance | - | best_score=0.7662 upside_total=-0.863 e_sift=-1 sift_inliers=259 tilt_signed=0.44 paper_score=0.131 paper_delta=0.131 aspect_rel=0.974
+   20260522_204416.jpg | 24 게임 | normal→normal | O | 0.869 | appearance | - | best_score=0.8694 upside_total=-0.885 e_sift=-1 sift_inliers=159 tilt_signed=0.45 paper_score=0.0 paper_delta=0.0 aspect_rel=0.896
+   20260522_204416.jpg | 25 변증법 | upside→upside | O | 0.925 | sift | orientation_by_sift_only,orientation_by_sift_strong,matched_by_sift | best_score=0.2289 upside_total=1.0 e_sift=1 sift_inliers=65 tilt_signed=0.33 paper_score=0.0 paper_delta=0.0 aspect_rel=0.658
+   20260522_204416.jpg | 26 글읽기 | upside→upside | O | 0.81 | appearance | orientation_by_sift_strong | best_score=0.5585 upside_total=1.0 e_sift=1 sift_inliers=42 tilt_signed=0.93 paper_score=0.0 paper_delta=0.0 aspect_rel=1.253
+   20260522_204416.jpg | 27 바보처럼 | normal→normal | O | 0.586 | appearance | - | best_score=0.5863 upside_total=-0.689 e_sift=-1 sift_inliers=93 tilt_signed=0.67 paper_score=0.294 paper_delta=0.018 aspect_rel=0.832
+   20260522_204416.jpg | 28 덕혜옹주 | upside→upside | O | 0.875 | appearance | orientation_by_sift_strong | best_score=0.6623 upside_total=1.0 e_sift=1 sift_inliers=55 tilt_signed=0.0 paper_score=0.193 paper_delta=-0.008 aspect_rel=1.188
+   20260522_204416.jpg | 29 신약성경 | normal→normal | O | 0.357 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.3569 upside_total=-1.0 e_sift=-1 sift_inliers=12 tilt_signed=2.11 paper_score=0.0 paper_delta=0.0 aspect_rel=1.7
+   20260522_204416.jpg | 30 Che | normal→normal | O | 0.567 | appearance | - | best_score=0.5671 upside_total=-0.712 e_sift=-1 sift_inliers=22 tilt_signed=2.27 paper_score=0.0 paper_delta=0.0 aspect_rel=0.726
+   20260522_204705.jpg |  0 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=534 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  1 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=365 tilt_signed=0.0 paper_score=0.125 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  2 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=213 tilt_signed=0.0 paper_score=0.131 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  3 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=265 tilt_signed=0.0 paper_score=0.162 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  4 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=208 tilt_signed=0.0 paper_score=0.315 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  5 | normal→normal | O | 1.0 | series | series_resolved | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=593 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  6 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=428 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  7 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=130 tilt_signed=0.0 paper_score=0.158 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  8 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=209 tilt_signed=0.0 paper_score=0.175 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg |  9 | normal→normal | O | 1.0 | series | series_resolved | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=632 tilt_signed=0.0 paper_score=0.132 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg | 10 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=160 tilt_signed=0.0 paper_score=0.305 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg | 11 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=152 tilt_signed=0.0 paper_score=0.156 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg | 12 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=380 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_204705.jpg | 13 | normal→normal | O | 1.0 | appearance | - | best_score=1.0 upside_total=-1.0 e_sift=-1 sift_inliers=148 tilt_signed=0.0 paper_score=0.132 paper_delta=0.0 aspect_rel=1.0
+   20260522_205058.jpg |  0 | normal→normal | O | 0.698 | appearance | - | best_score=0.6975 upside_total=-0.782 e_sift=-1 sift_inliers=136 tilt_signed=-4.49 paper_score=0.0 paper_delta=0.0 aspect_rel=0.939
+   20260522_205058.jpg |  1 | normal→normal | O | 0.781 | appearance | - | best_score=0.7806 upside_total=-0.852 e_sift=-1 sift_inliers=175 tilt_signed=-2.5 paper_score=0.245 paper_delta=-0.009 aspect_rel=0.893
+   20260522_205058.jpg |  2 | normal→normal | O | 0.816 | appearance | - | best_score=0.8165 upside_total=-0.948 e_sift=-1 sift_inliers=116 tilt_signed=-1.65 paper_score=0.124 paper_delta=-0.008 aspect_rel=0.915
+   20260522_205058.jpg |  3 | normal→normal | O | 0.82 | appearance | - | best_score=0.8199 upside_total=-0.834 e_sift=-1 sift_inliers=50 tilt_signed=0.0 paper_score=0.293 paper_delta=-0.008 aspect_rel=0.895
+   20260522_205058.jpg |  4 | normal→normal | O | 0.731 | appearance | - | best_score=0.7307 upside_total=-0.824 e_sift=-1 sift_inliers=218 tilt_signed=1.34 paper_score=0.16 paper_delta=-0.004 aspect_rel=0.89
+   20260522_205058.jpg |  5 | normal→normal | O | 0.747 | appearance | - | best_score=0.7471 upside_total=-0.913 e_sift=-1 sift_inliers=151 tilt_signed=2.94 paper_score=0.2 paper_delta=-0.002 aspect_rel=0.949
+   20260522_205058.jpg |  6 | normal→normal | O | 0.584 | appearance | - | best_score=0.5842 upside_total=-0.779 e_sift=-1 sift_inliers=66 tilt_signed=4.04 paper_score=0.0 paper_delta=0.0 aspect_rel=0.897
+   20260522_205058.jpg |  7 | stack→stack | O | 0.9 | appearance | - | best_score=0.5972 sift_inliers=54 tilt_signed=79.84 aspect_rel=122.647
+   20260522_205058.jpg |  8 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.7825 upside_total=-0.722 e_sift=-1 sift_inliers=86 tilt_signed=12.95 paper_score=0.0 paper_delta=0.0 aspect_rel=0.836
+   20260522_205058.jpg |  9 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.7622 upside_total=-0.851 e_sift=-1 sift_inliers=151 tilt_signed=13.44 paper_score=0.276 paper_delta=0.054 aspect_rel=0.948
+   20260522_205058.jpg | 10 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.7806 upside_total=-0.789 e_sift=-1 sift_inliers=135 tilt_signed=13.68 paper_score=0.128 paper_delta=0.128 aspect_rel=1.027
+   20260522_205058.jpg | 11 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.772 upside_total=-0.84 e_sift=-1 sift_inliers=106 tilt_signed=17.99 paper_score=0.303 paper_delta=0.057 aspect_rel=0.913
+   20260522_205058.jpg | 12 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.7488 upside_total=-0.834 e_sift=-1 sift_inliers=123 tilt_signed=18.72 paper_score=0.168 paper_delta=0.168 aspect_rel=0.876
+   20260522_205117.jpg |  0 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.7461 upside_total=-0.815 e_sift=-1 sift_inliers=163 tilt_signed=-14.4 paper_score=0.0 paper_delta=0.0 aspect_rel=0.945
+   20260522_205117.jpg |  1 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.727 upside_total=-0.883 e_sift=-1 sift_inliers=154 tilt_signed=-12.5 paper_score=0.259 paper_delta=0.005 aspect_rel=0.884
+   20260522_205117.jpg |  2 | stack→stack | O | 0.9 | appearance | - | best_score=0.6638 sift_inliers=85 tilt_signed=-87.7 aspect_rel=70.322
+   20260522_205117.jpg |  3 | normal→normal | O | 0.792 | appearance | - | best_score=0.7917 upside_total=-0.829 e_sift=-1 sift_inliers=53 tilt_signed=-5.65 paper_score=0.301 paper_delta=-0.001 aspect_rel=0.9
+   20260522_205117.jpg |  4 | normal→normal | O | 0.782 | appearance | - | best_score=0.7817 upside_total=-0.897 e_sift=-1 sift_inliers=269 tilt_signed=-3.95 paper_score=0.169 paper_delta=0.004 aspect_rel=0.884
+   20260522_205117.jpg |  5 | normal→normal | O | 0.823 | appearance | - | best_score=0.8231 upside_total=-0.898 e_sift=-1 sift_inliers=157 tilt_signed=-3.25 paper_score=0.233 paper_delta=0.031 aspect_rel=0.899
+   20260522_205117.jpg |  6 | normal→normal | O | 0.55 | appearance | - | best_score=0.5503 upside_total=-0.813 e_sift=-1 sift_inliers=68 tilt_signed=-1.95 paper_score=0.0 paper_delta=0.0 aspect_rel=0.856
+   20260522_205117.jpg |  7 | normal→normal | O | 0.777 | appearance | - | best_score=0.7765 upside_total=-0.875 e_sift=-1 sift_inliers=78 tilt_signed=-0.63 paper_score=0.0 paper_delta=0.0 aspect_rel=1.005
+   20260522_205117.jpg |  8 | normal→normal | O | 0.765 | appearance | - | best_score=0.7654 upside_total=-0.746 e_sift=-1 sift_inliers=72 tilt_signed=0.63 paper_score=0.0 paper_delta=0.0 aspect_rel=0.829
+   20260522_205117.jpg |  9 | normal→normal | O | 0.714 | appearance | - | best_score=0.714 upside_total=-0.801 e_sift=-1 sift_inliers=112 tilt_signed=1.26 paper_score=0.278 paper_delta=0.056 aspect_rel=0.961
+   20260522_205117.jpg | 10 | normal→normal | O | 0.812 | appearance | - | best_score=0.8124 upside_total=-0.84 e_sift=-1 sift_inliers=156 tilt_signed=2.03 paper_score=0.0 paper_delta=0.0 aspect_rel=1.032
+   20260522_205117.jpg | 11 | normal→normal | O | 0.74 | appearance | - | best_score=0.7396 upside_total=-0.858 e_sift=-1 sift_inliers=102 tilt_signed=4.31 paper_score=0.309 paper_delta=0.062 aspect_rel=0.901
+   20260522_205117.jpg | 12 | normal→normal | O | 0.673 | appearance | - | best_score=0.6725 upside_total=-0.805 e_sift=-1 sift_inliers=125 tilt_signed=5.01 paper_score=0.165 paper_delta=0.165 aspect_rel=0.822
+   20260522_205137.jpg |  0 | normal→normal | O | 0.769 | appearance | - | best_score=0.7688 upside_total=-0.76 e_sift=-1 sift_inliers=150 tilt_signed=-4.27 paper_score=0.0 paper_delta=0.0 aspect_rel=0.986
+   20260522_205137.jpg |  1 | normal→normal | O | 0.787 | appearance | - | best_score=0.7869 upside_total=-0.875 e_sift=-1 sift_inliers=160 tilt_signed=-2.13 paper_score=0.252 paper_delta=-0.002 aspect_rel=0.897
+   20260522_205137.jpg |  2 | normal→normal | O | 0.815 | appearance | - | best_score=0.8148 upside_total=-0.905 e_sift=-1 sift_inliers=123 tilt_signed=-1.14 paper_score=0.141 paper_delta=0.009 aspect_rel=0.921
+   20260522_205137.jpg |  3 | normal→normal | O | 0.851 | appearance | - | best_score=0.8505 upside_total=-0.901 e_sift=-1 sift_inliers=56 tilt_signed=1.14 paper_score=0.314 paper_delta=0.013 aspect_rel=0.918
+   20260522_205137.jpg |  4 | normal→normal | O | 0.807 | appearance | - | best_score=0.8072 upside_total=-0.85 e_sift=-1 sift_inliers=257 tilt_signed=2.93 paper_score=0.175 paper_delta=0.011 aspect_rel=0.884
+   20260522_205137.jpg |  5 | normal→normal | O | 0.833 | appearance | - | best_score=0.8335 upside_total=-0.859 e_sift=-1 sift_inliers=128 tilt_signed=3.63 paper_score=0.241 paper_delta=0.039 aspect_rel=0.963
+   20260522_205137.jpg |  6 | stack→stack | O | 0.9 | appearance | - | best_score=0.5218 sift_inliers=69 tilt_signed=82.26 aspect_rel=116.894
+   20260522_205137.jpg |  7 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.7461 upside_total=-0.893 e_sift=-1 sift_inliers=77 tilt_signed=12.58 paper_score=0.133 paper_delta=0.133 aspect_rel=0.986
+   20260522_205137.jpg |  8 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.7379 upside_total=-0.729 e_sift=-1 sift_inliers=47 tilt_signed=14.02 paper_score=0.0 paper_delta=0.0 aspect_rel=0.797
+   20260522_205137.jpg |  9 | normal→normal | O | 0.6 | appearance | leaning_into_gap | best_score=0.702 upside_total=-0.848 e_sift=-1 sift_inliers=140 tilt_signed=14.75 paper_score=0.3 paper_delta=0.079 aspect_rel=0.951
+   20260522_205137.jpg | 10 | stack→stack | O | 0.9 | appearance | - | best_score=0.6762 sift_inliers=114 tilt_signed=79.56 aspect_rel=31.152
+   20260522_205137.jpg | 11 | tilted|upside→tilted | O | 0.99 | appearance | - | best_score=0.6373 upside_total=-0.767 e_sift=-1 sift_inliers=91 tilt_signed=32.64 paper_score=0.327 paper_delta=0.08 aspect_rel=0.922
+   20260522_205137.jpg | 12 | tilted|upside→tilted | O | 0.99 | appearance | - | best_score=0.604 upside_total=-0.73 e_sift=-1 sift_inliers=84 tilt_signed=33.34 paper_score=0.163 paper_delta=0.163 aspect_rel=0.85
+   20260522_205210.jpg |  0 | stack→stack | O | 0.9 | sift | matched_by_sift | best_score=0.4336 sift_inliers=88 tilt_signed=-77.41 aspect_rel=70.86
+   20260522_205210.jpg |  1 | stack→stack | O | 0.9 | sift | matched_by_sift | best_score=0.1601 sift_inliers=26 tilt_signed=-76.63 aspect_rel=89.385
+   20260522_205210.jpg |  2 | normal→normal | O | 0.73 | appearance | - | best_score=0.7302 upside_total=-0.918 e_sift=-1 sift_inliers=115 tilt_signed=0.0 paper_score=0.14 paper_delta=0.008 aspect_rel=0.919
+   20260522_205210.jpg |  3 | normal→normal | O | 0.755 | appearance | - | best_score=0.7555 upside_total=-0.796 e_sift=-1 sift_inliers=48 tilt_signed=1.22 paper_score=0.282 paper_delta=-0.019 aspect_rel=0.976
+   20260522_205210.jpg |  4 | normal→normal | O | 0.762 | appearance | - | best_score=0.762 upside_total=-0.787 e_sift=-1 sift_inliers=238 tilt_signed=-0.13 paper_score=0.174 paper_delta=0.01 aspect_rel=0.931
+   20260522_205210.jpg |  5 | normal→normal | O | 0.699 | appearance | - | best_score=0.6989 upside_total=-0.857 e_sift=-1 sift_inliers=171 tilt_signed=-0.03 paper_score=0.227 paper_delta=0.025 aspect_rel=0.929
+   20260522_205210.jpg |  6 | normal→normal | O | 0.599 | appearance | - | best_score=0.5987 upside_total=-0.814 e_sift=-1 sift_inliers=69 tilt_signed=0.6 paper_score=0.0 paper_delta=0.0 aspect_rel=0.863
+   20260522_205210.jpg |  7 | normal→normal | O | 0.768 | appearance | - | best_score=0.7678 upside_total=-0.881 e_sift=-1 sift_inliers=75 tilt_signed=0.91 paper_score=0.0 paper_delta=0.0 aspect_rel=0.967
+   20260522_205210.jpg |  8 | normal→normal | O | 0.672 | appearance | - | best_score=0.6724 upside_total=-0.719 e_sift=-1 sift_inliers=24 tilt_signed=1.09 paper_score=0.0 paper_delta=0.0 aspect_rel=0.728
+   20260522_205210.jpg |  9 | normal→normal | O | 0.581 | appearance | - | best_score=0.5812 upside_total=-0.765 e_sift=-1 sift_inliers=98 tilt_signed=1.08 paper_score=0.28 paper_delta=0.058 aspect_rel=0.93
+   20260522_205210.jpg | 10 | normal→normal | O | 0.694 | appearance | - | best_score=0.6942 upside_total=-0.794 e_sift=-1 sift_inliers=147 tilt_signed=0.0 paper_score=0.128 paper_delta=0.128 aspect_rel=0.974
+   20260522_205210.jpg | 11 | normal→normal | O | 0.606 | appearance | - | best_score=0.6059 upside_total=-0.802 e_sift=-1 sift_inliers=111 tilt_signed=1.56 paper_score=0.329 paper_delta=0.082 aspect_rel=0.897
+   20260522_205210.jpg | 12 | normal→normal | O | 0.733 | appearance | - | best_score=0.7326 upside_total=-0.858 e_sift=-1 sift_inliers=134 tilt_signed=1.34 paper_score=0.175 paper_delta=0.175 aspect_rel=0.853
+   20260522_205317.jpg |  0 | normal→normal | O | 0.742 | appearance | - | best_score=0.7422 upside_total=-0.878 e_sift=-1 sift_inliers=184 tilt_signed=0.0 paper_score=0.136 paper_delta=0.136 aspect_rel=1.135
+   20260522_205317.jpg |  1 | normal→normal | O | 0.658 | appearance | - | best_score=0.6579 upside_total=-0.767 e_sift=-1 sift_inliers=59 tilt_signed=-0.38 paper_score=0.134 paper_delta=0.008 aspect_rel=1.02
+   20260522_205317.jpg |  2 | normal→normal | O | 0.554 | appearance | orientation_by_sift_only,low_confidence | best_score=0.5545 upside_total=-1.0 e_sift=-1 sift_inliers=18 tilt_signed=-0.59 paper_score=0.337 paper_delta=0.206 aspect_rel=1.048
+   20260522_205317.jpg |  3 | normal→normal | O | 0.55 | appearance | orientation_by_sift_only,low_confidence | best_score=0.5498 upside_total=-1.0 e_sift=-1 sift_inliers=113 tilt_signed=0.48 paper_score=0.16 paper_delta=-0.002 aspect_rel=1.052
+   20260522_205317.jpg |  4 | normal→normal | O | 0.638 | appearance | - | best_score=0.6382 upside_total=-0.841 e_sift=-1 sift_inliers=59 tilt_signed=-0.77 paper_score=0.317 paper_delta=0.002 aspect_rel=1.221
+   20260522_205317.jpg |  5 | normal→normal | O | 0.691 | series | series_resolved | best_score=0.6909 upside_total=-0.887 e_sift=-1 sift_inliers=133 tilt_signed=-1.49 paper_score=0.0 paper_delta=0.0 aspect_rel=1.109
+   20260522_205317.jpg |  6 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.7357 upside_total=1.0 e_sift=1 sift_inliers=98 tilt_signed=-2.43 paper_score=0.0 paper_delta=0.0 aspect_rel=1.041
+   20260522_205317.jpg |  7 | normal→normal | O | 0.731 | appearance | - | best_score=0.731 upside_total=-0.908 e_sift=-1 sift_inliers=55 tilt_signed=-1.08 paper_score=0.175 paper_delta=0.017 aspect_rel=1.204
+   20260522_205317.jpg |  8 | normal→normal | O | 0.736 | appearance | - | best_score=0.7355 upside_total=-0.902 e_sift=-1 sift_inliers=59 tilt_signed=-0.89 paper_score=0.175 paper_delta=0.0 aspect_rel=1.112
+   20260522_205317.jpg |  9 | normal→normal | O | 0.45 | series | series_resolved,series_ambiguous | best_score=0.7352 upside_total=-0.881 e_sift=-1 sift_inliers=186 tilt_signed=-0.96 paper_score=0.134 paper_delta=0.001 aspect_rel=1.101
+   20260522_205317.jpg | 10 | stack→stack | O | 0.9 | appearance | - | best_score=0.6109 sift_inliers=48 tilt_signed=85.1 aspect_rel=109.545
+   20260522_205317.jpg | 11 | normal→normal | O | 0.835 | appearance | - | best_score=0.8353 upside_total=-0.863 e_sift=-1 sift_inliers=81 tilt_signed=0.0 paper_score=0.173 paper_delta=0.017 aspect_rel=1.075
+   20260522_205317.jpg | 12 | normal→normal | O | 0.824 | appearance | - | best_score=0.8235 upside_total=-0.912 e_sift=-1 sift_inliers=113 tilt_signed=-1.94 paper_score=0.135 paper_delta=0.135 aspect_rel=0.841
+   20260522_205317.jpg | 13 | normal→normal | O | 0.812 | appearance | - | best_score=0.8115 upside_total=-0.865 e_sift=-1 sift_inliers=46 tilt_signed=-2.08 paper_score=0.141 paper_delta=0.009 aspect_rel=1.122
+   20260522_205455.jpg |  0 | normal→normal | O | 0.783 | appearance | - | best_score=0.7826 upside_total=-0.905 e_sift=-1 sift_inliers=229 tilt_signed=-0.03 paper_score=0.0 paper_delta=0.0 aspect_rel=1.063
+   20260522_205455.jpg |  1 | normal→normal | O | 0.751 | appearance | - | best_score=0.7509 upside_total=-0.846 e_sift=-1 sift_inliers=102 tilt_signed=0.0 paper_score=0.124 paper_delta=-0.001 aspect_rel=0.914
+   20260522_205455.jpg |  2 | normal→normal | O | 0.5 | position | orientation_by_sift_only,low_confidence,matched_by_position,identity_by_color | best_score=0.5005 sift_inliers=9 tilt_signed=-0.03 paper_score=0.0 paper_delta=-0.131 aspect_rel=0.963
+   20260522_205455.jpg |  3 | normal→normal | O | 0.724 | appearance | - | best_score=0.7238 upside_total=-0.948 e_sift=-1 sift_inliers=133 tilt_signed=1.42 paper_score=0.168 paper_delta=0.006 aspect_rel=0.974
+   20260522_205455.jpg |  4 | normal→normal | O | 0.467 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4672 upside_total=-1.0 e_sift=-1 sift_inliers=41 tilt_signed=0.4 paper_score=0.287 paper_delta=-0.028 aspect_rel=1.267
+   20260522_205455.jpg |  5 | normal→normal | O | 0.643 | series | series_resolved | best_score=0.6425 upside_total=-0.863 e_sift=-1 sift_inliers=160 tilt_signed=-0.43 paper_score=0.0 paper_delta=0.0 aspect_rel=1.113
+   20260522_205455.jpg |  6 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.6151 upside_total=1.0 e_sift=1 sift_inliers=108 tilt_signed=-1.48 paper_score=0.0 paper_delta=0.0 aspect_rel=1.056
+   20260522_205455.jpg |  7 | normal→normal | O | 0.689 | appearance | - | best_score=0.6892 upside_total=-0.836 e_sift=-1 sift_inliers=51 tilt_signed=-0.21 paper_score=0.145 paper_delta=-0.013 aspect_rel=1.186
+   20260522_205455.jpg |  8 | stack→stack | O | 0.9 | sift | matched_by_sift | best_score=0.5461 sift_inliers=43 tilt_signed=-89.79 aspect_rel=274.558
+   20260522_205455.jpg |  9 | normal→normal | O | 0.604 | series | series_resolved | best_score=0.6036 upside_total=-0.826 e_sift=-1 sift_inliers=114 tilt_signed=-0.57 paper_score=0.0 paper_delta=-0.132 aspect_rel=1.292
+   20260522_205455.jpg | 10 | normal→normal | O | 0.819 | appearance | - | best_score=0.8187 upside_total=-0.852 e_sift=-1 sift_inliers=80 tilt_signed=0.66 paper_score=0.312 paper_delta=0.007 aspect_rel=1.163
+   20260522_205455.jpg | 11 | normal→normal | O | 0.809 | appearance | - | best_score=0.8086 upside_total=-0.835 e_sift=-1 sift_inliers=63 tilt_signed=0.0 paper_score=0.158 paper_delta=0.003 aspect_rel=1.158
+   20260522_205455.jpg | 12 | normal→normal | O | 0.698 | appearance | - | best_score=0.6981 upside_total=-0.823 e_sift=-1 sift_inliers=61 tilt_signed=-2.17 paper_score=0.0 paper_delta=0.0 aspect_rel=0.7
+   20260522_205455.jpg | 13 | normal→normal | O | 0.723 | appearance | - | best_score=0.7228 upside_total=-0.889 e_sift=-1 sift_inliers=41 tilt_signed=-2.21 paper_score=0.151 paper_delta=0.019 aspect_rel=1.116
+   20260522_205515.jpg |  0 | stack→stack | O | 0.55 | recovered_roi | present_unmatched,inferred_from_missing | best_score=0.2002 paper_score=0.0
+   20260522_205515.jpg |  1 | normal→normal | O | 0.696 | appearance | - | best_score=0.6957 upside_total=-0.819 e_sift=-1 sift_inliers=75 tilt_signed=0.0 paper_score=0.124 paper_delta=-0.001 aspect_rel=0.944
+   20260522_205515.jpg |  2 | normal→normal | O | 0.455 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4547 upside_total=-1.0 e_sift=-1 sift_inliers=13 tilt_signed=0.24 paper_score=0.194 paper_delta=0.063 aspect_rel=0.979
+   20260522_205515.jpg |  3 | stack→stack | O | 0.9 | sift | matched_by_sift | best_score=0.3403 sift_inliers=71 tilt_signed=84.92 aspect_rel=131.923
+   20260522_205515.jpg |  4 | normal→normal | O | 0.389 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.389 upside_total=-1.0 e_sift=-1 sift_inliers=32 tilt_signed=3.7 paper_score=0.301 paper_delta=-0.014 aspect_rel=1.352
+   20260522_205515.jpg |  5 | normal→normal | O | 0.576 | series | series_resolved | best_score=0.5755 upside_total=-0.895 e_sift=-1 sift_inliers=92 tilt_signed=3.11 paper_score=0.0 paper_delta=0.0 aspect_rel=1.203
+   20260522_205515.jpg |  6 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.6983 upside_total=1.0 e_sift=1 sift_inliers=100 tilt_signed=3.7 paper_score=0.0 paper_delta=0.0 aspect_rel=1.085
+   20260522_205515.jpg |  7 | normal→normal | O | 0.621 | appearance | - | best_score=0.6209 upside_total=-0.845 e_sift=-1 sift_inliers=54 tilt_signed=4.82 paper_score=0.0 paper_delta=-0.158 aspect_rel=1.279
+   20260522_205515.jpg |  8 | normal→normal | O | 0.542 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.5424 upside_total=-1.0 e_sift=-1 sift_inliers=27 tilt_signed=4.15 paper_score=0.175 paper_delta=0.0 aspect_rel=1.253
+   20260522_205515.jpg |  9 | normal→normal | O | 0.457 | series | orientation_by_sift_only,low_confidence,series_resolved | best_score=0.4566 upside_total=-1.0 e_sift=-1 sift_inliers=44 tilt_signed=3.5 paper_score=0.17 paper_delta=0.038 aspect_rel=0.764
+   20260522_205515.jpg | 10 | normal→normal | O | 0.828 | appearance | - | best_score=0.8279 upside_total=-0.857 e_sift=-1 sift_inliers=88 tilt_signed=3.4 paper_score=0.308 paper_delta=0.004 aspect_rel=1.166
+   20260522_205515.jpg | 11 | normal→normal | O | 0.816 | appearance | - | best_score=0.8162 upside_total=-0.862 e_sift=-1 sift_inliers=76 tilt_signed=3.12 paper_score=0.167 paper_delta=0.012 aspect_rel=1.075
+   20260522_205515.jpg | 12 | normal→normal | O | 0.533 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.5326 upside_total=-1.0 e_sift=-1 sift_inliers=27 tilt_signed=0.61 paper_score=0.0 paper_delta=0.0 aspect_rel=0.559
+   20260522_205515.jpg | 13 | normal→normal | O | 0.773 | appearance | - | best_score=0.773 upside_total=-0.862 e_sift=-1 sift_inliers=44 tilt_signed=0.0 paper_score=0.145 paper_delta=0.013 aspect_rel=1.148
+   20260522_205538.jpg |  0 | normal→normal | O | 0.841 | appearance | - | best_score=0.8407 upside_total=-0.869 e_sift=-1 sift_inliers=203 tilt_signed=0.0 paper_score=0.134 paper_delta=0.134 aspect_rel=1.024
+   20260522_205538.jpg |  1 | normal→normal | O | 0.738 | appearance | - | best_score=0.738 upside_total=-0.823 e_sift=-1 sift_inliers=99 tilt_signed=-0.67 paper_score=0.129 paper_delta=0.004 aspect_rel=0.924
+   20260522_205538.jpg |  2 | normal→normal | O | 0.477 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4768 upside_total=-1.0 e_sift=-1 sift_inliers=13 tilt_signed=-1.02 paper_score=0.123 paper_delta=-0.008 aspect_rel=0.966
+   20260522_205538.jpg |  3 | normal→normal | O | 0.704 | appearance | - | best_score=0.7041 upside_total=-0.9 e_sift=-1 sift_inliers=122 tilt_signed=-0.91 paper_score=0.175 paper_delta=0.013 aspect_rel=1.044
+   20260522_205538.jpg |  4 | normal→normal | O | 0.631 | appearance | - | best_score=0.6312 upside_total=-0.775 e_sift=-1 sift_inliers=61 tilt_signed=-2.62 paper_score=0.308 paper_delta=-0.007 aspect_rel=1.231
+   20260522_205538.jpg |  5 | normal→normal | O | 0.697 | series | series_resolved | best_score=0.6974 upside_total=-0.882 e_sift=-1 sift_inliers=123 tilt_signed=-3.76 paper_score=0.0 paper_delta=0.0 aspect_rel=1.125
+   20260522_205538.jpg |  6 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.6608 upside_total=1.0 e_sift=1 sift_inliers=104 tilt_signed=-3.24 paper_score=0.0 paper_delta=0.0 aspect_rel=0.992
+   20260522_205538.jpg |  7 | stack→stack | O | 0.9 | appearance | - | best_score=0.6584 sift_inliers=25 tilt_signed=86.26 aspect_rel=95.342
+   20260522_205538.jpg |  8 | normal→normal | O | 0.73 | appearance | - | best_score=0.7304 upside_total=-0.884 e_sift=-1 sift_inliers=55 tilt_signed=0.93 paper_score=0.175 paper_delta=0.0 aspect_rel=1.067
+   20260522_205538.jpg |  9 | normal→normal | O | 0.789 | series | series_resolved | best_score=0.7888 upside_total=-0.905 e_sift=-1 sift_inliers=175 tilt_signed=-0.19 paper_score=0.143 paper_delta=0.011 aspect_rel=1.056
+   20260522_205538.jpg | 10 | normal→normal | O | 0.801 | appearance | - | best_score=0.8012 upside_total=-0.822 e_sift=-1 sift_inliers=81 tilt_signed=0.0 paper_score=0.3 paper_delta=-0.004 aspect_rel=1.171
+   20260522_205538.jpg | 11 | normal→normal | O | 0.777 | appearance | - | best_score=0.7767 upside_total=-0.841 e_sift=-1 sift_inliers=51 tilt_signed=-1.43 paper_score=0.154 paper_delta=-0.002 aspect_rel=1.052
+   20260522_205538.jpg | 12 | stack→stack | O | 0.9 | appearance | - | best_score=0.711 sift_inliers=69 tilt_signed=-4.1 aspect_rel=22.587
+   20260522_205538.jpg | 13 | normal→normal | O | 0.72 | appearance | - | best_score=0.7203 upside_total=-0.916 e_sift=-1 sift_inliers=47 tilt_signed=-6.66 paper_score=0.17 paper_delta=0.038 aspect_rel=0.931
+   20260522_205729.jpg |  0 멈추면 | normal→normal | O | 0.797 | appearance | - | best_score=0.7965 upside_total=-0.909 e_sift=-1 sift_inliers=99 tilt_signed=0.0 paper_score=0.287 paper_delta=0.006 aspect_rel=1.002
+   20260522_205729.jpg |  1 믿음A | normal→normal | O | 0.736 | series | series_resolved | best_score=0.736 upside_total=-0.78 e_sift=-1 sift_inliers=51 tilt_signed=-0.77 paper_score=0.326 paper_delta=-0.014 aspect_rel=1.047
+   20260522_205729.jpg |  2 믿음B | normal→normal | O | 0.883 | series | series_resolved | best_score=0.8829 upside_total=-0.925 e_sift=-1 sift_inliers=83 tilt_signed=-1.33 paper_score=0.332 paper_delta=-0.007 aspect_rel=1.031
+   20260522_205729.jpg |  3 THINK | normal→normal | O | 0.66 | appearance | - | best_score=0.6596 upside_total=-0.838 e_sift=-1 sift_inliers=37 tilt_signed=-1.95 paper_score=0.262 paper_delta=-0.002 aspect_rel=1.447
+   20260522_205729.jpg |  4 실크로드 | normal→normal | O | 0.758 | appearance | - | best_score=0.7575 upside_total=-0.833 e_sift=-1 sift_inliers=128 tilt_signed=-1.16 paper_score=0.235 paper_delta=-0.005 aspect_rel=1.098
+   20260522_205729.jpg |  5 귀머거리 | normal→normal | O | 0.674 | appearance | - | best_score=0.6742 upside_total=-0.745 e_sift=-1 sift_inliers=91 tilt_signed=0.11 paper_score=0.162 paper_delta=0.02 aspect_rel=0.874
+   20260522_205729.jpg |  6 외교관 | normal→normal | O | 0.792 | appearance | - | best_score=0.7917 upside_total=-0.891 e_sift=-1 sift_inliers=208 tilt_signed=-0.25 paper_score=0.263 paper_delta=0.007 aspect_rel=1.046
+   20260522_205729.jpg |  7 토토 | normal→normal | O | 0.63 | appearance | - | best_score=0.6304 upside_total=-0.857 e_sift=-1 sift_inliers=98 tilt_signed=0.01 paper_score=0.23 paper_delta=0.008 aspect_rel=0.921
+   20260522_205729.jpg |  8 밤하늘 | normal→normal | O | 0.705 | appearance | - | best_score=0.7047 upside_total=-0.929 e_sift=-1 sift_inliers=63 tilt_signed=-0.34 paper_score=0.167 paper_delta=0.037 aspect_rel=1.098
+   20260522_205729.jpg |  9 북극 | normal→normal | O | 0.869 | appearance | - | best_score=0.8685 upside_total=-0.882 e_sift=-1 sift_inliers=162 tilt_signed=-0.62 paper_score=0.163 paper_delta=0.017 aspect_rel=1.075
+   20260522_205729.jpg | 10 색과빛 | normal→normal | O | 0.751 | appearance | - | best_score=0.7506 upside_total=-0.667 e_sift=-1 sift_inliers=52 tilt_signed=-0.46 paper_score=0.242 paper_delta=0.013 aspect_rel=1.059
+   20260522_205729.jpg | 11 뉴문 | normal→normal | O | 0.891 | appearance | - | best_score=0.8909 upside_total=-0.941 e_sift=-1 sift_inliers=74 tilt_signed=-1.97 paper_score=0.0 paper_delta=0.0 aspect_rel=0.964
+   20260522_205729.jpg | 12 비교정치 | normal→normal | O | 0.769 | appearance | - | best_score=0.7691 upside_total=-0.847 e_sift=-1 sift_inliers=67 tilt_signed=-2.7 paper_score=0.228 paper_delta=0.025 aspect_rel=0.872
+   20260522_205729.jpg | 13 친구들 | absent|stack|unknown→stack | O | 0.9 | appearance | - | best_score=0.5739 sift_inliers=23 tilt_signed=-75.16 aspect_rel=165.476
+   20260522_205729.jpg | 14 그건사랑 | normal|unknown→normal | O | 0.717 | appearance | - | best_score=0.7173 upside_total=-0.905 e_sift=-1 sift_inliers=115 tilt_signed=-2.43 paper_score=0.313 paper_delta=-0.005 aspect_rel=1.118
+   20260522_205729.jpg | 15 독수리 | normal|tilted→normal | O | 0.592 | appearance | - | best_score=0.5921 upside_total=-0.838 e_sift=-1 sift_inliers=71 tilt_signed=2.0 paper_score=0.247 paper_delta=0.003 aspect_rel=0.984
+   20260522_205729.jpg | 16 시골의사 | normal|tilted→normal | O | 0.695 | appearance | - | best_score=0.6953 upside_total=-0.859 e_sift=-1 sift_inliers=84 tilt_signed=1.51 paper_score=0.0 paper_delta=0.0 aspect_rel=1.118
+   20260522_205729.jpg | 17 나는나를 | normal|tilted→normal | O | 0.741 | appearance | - | best_score=0.7415 upside_total=-0.885 e_sift=-1 sift_inliers=187 tilt_signed=1.4 paper_score=0.0 paper_delta=0.0 aspect_rel=1.012
+   20260522_205729.jpg | 18 공자 | normal|tilted→normal | O | 0.643 | appearance | - | best_score=0.6431 upside_total=-0.821 e_sift=-1 sift_inliers=85 tilt_signed=3.45 paper_score=0.305 paper_delta=-0.012 aspect_rel=1.133
+   20260522_205729.jpg | 19 바보빅터 | absent|stack|unknown→stack | O | 0.9 | appearance | - | best_score=0.543 sift_inliers=156 tilt_signed=-88.11 aspect_rel=186.605
+   20260522_205729.jpg | 20 STRUCT | normal|tilted→normal | O | 0.688 | appearance | - | best_score=0.688 upside_total=-0.822 e_sift=-1 sift_inliers=190 tilt_signed=3.94 paper_score=0.132 paper_delta=0.007 aspect_rel=0.833
+   20260522_205729.jpg | 21 주체이론 | normal|tilted→normal | O | 0.84 | appearance | - | best_score=0.8403 upside_total=-0.835 e_sift=-1 sift_inliers=54 tilt_signed=4.11 paper_score=0.256 paper_delta=-0.001 aspect_rel=0.883
+   20260522_205729.jpg | 22 나무 | normal|tilted→normal | O | 0.485 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4845 upside_total=-1.0 e_sift=-1 sift_inliers=105 tilt_signed=3.32 paper_score=0.277 paper_delta=0.014 aspect_rel=0.818
+   20260522_205729.jpg | 23 소나기 | normal|tilted→normal | O | 0.779 | appearance | - | best_score=0.7793 upside_total=-0.907 e_sift=-1 sift_inliers=189 tilt_signed=2.23 paper_score=0.128 paper_delta=0.128 aspect_rel=1.06
+   20260522_205729.jpg | 24 게임 | normal|tilted→normal | O | 0.787 | appearance | - | best_score=0.7872 upside_total=-0.852 e_sift=-1 sift_inliers=132 tilt_signed=2.17 paper_score=0.0 paper_delta=0.0 aspect_rel=0.898
+   20260522_205729.jpg | 25 변증법 | normal|tilted→normal | O | 0.511 | appearance | - | best_score=0.5108 upside_total=-0.714 e_sift=-1 sift_inliers=64 tilt_signed=2.24 paper_score=0.0 paper_delta=0.0 aspect_rel=0.709
+   20260522_205729.jpg | 26 글읽기 | normal|tilted→normal | O | 0.634 | appearance | - | best_score=0.6344 upside_total=-0.864 e_sift=-1 sift_inliers=27 tilt_signed=2.59 paper_score=0.0 paper_delta=0.0 aspect_rel=1.361
+   20260522_205729.jpg | 27 바보처럼 | normal|tilted→normal | O | 0.707 | appearance | - | best_score=0.7074 upside_total=-0.719 e_sift=-1 sift_inliers=67 tilt_signed=1.49 paper_score=0.276 paper_delta=-0.001 aspect_rel=0.928
+   20260522_205729.jpg | 28 덕혜옹주 | normal|tilted→normal | O | 0.688 | appearance | - | best_score=0.6878 upside_total=-0.838 e_sift=-1 sift_inliers=48 tilt_signed=0.52 paper_score=0.199 paper_delta=-0.002 aspect_rel=1.166
+   20260522_205729.jpg | 29 신약성경 | normal|tilted→tilted | O | 0.738 | recovered_roi | orientation_by_sift_only,tilt_unchecked,recovered,identity_by_sift | best_score=0.2767 upside_total=-1.0 e_sift=-1 sift_inliers=13 paper_score=0.0 paper_delta=0.0 aspect_rel=0.914
+   20260522_205729.jpg | 30 Che | normal→unknown | X | 0.3 | position | orientation_by_sift_only,low_confidence,matched_by_position | best_score=0.4037 sift_inliers=0 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=0.465
+   20260522_205820.jpg |  0 멈추면 | normal→normal | O | 0.83 | appearance | - | best_score=0.8296 upside_total=-0.886 e_sift=-1 sift_inliers=98 tilt_signed=0.0 paper_score=0.282 paper_delta=0.002 aspect_rel=0.993
+   20260522_205820.jpg |  1 믿음A | normal→normal | O | 0.826 | series | series_resolved | best_score=0.8259 upside_total=-0.829 e_sift=-1 sift_inliers=58 tilt_signed=-0.64 paper_score=0.329 paper_delta=-0.011 aspect_rel=1.005
+   20260522_205820.jpg |  2 믿음B | normal→normal | O | 0.813 | series | series_resolved | best_score=0.8134 upside_total=-0.878 e_sift=-1 sift_inliers=83 tilt_signed=-0.99 paper_score=0.329 paper_delta=-0.01 aspect_rel=0.951
+   20260522_205820.jpg |  3 THINK | normal→normal | O | 0.365 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.3653 upside_total=-1.0 e_sift=-1 sift_inliers=34 tilt_signed=-1.87 paper_score=0.318 paper_delta=0.055 aspect_rel=2.157
+   20260522_205820.jpg |  4 실크로드 | normal→normal | O | 0.517 | appearance | - | best_score=0.5172 upside_total=-0.676 e_sift=-1 sift_inliers=94 tilt_signed=1.03 paper_score=0.244 paper_delta=0.004 aspect_rel=1.014
+   20260522_205820.jpg |  5 귀머거리 | normal→normal | O | 0.701 | appearance | - | best_score=0.7005 upside_total=-0.847 e_sift=-1 sift_inliers=167 tilt_signed=0.68 paper_score=0.157 paper_delta=0.014 aspect_rel=0.863
+   20260522_205820.jpg |  6 외교관 | normal→normal | O | 0.619 | appearance | - | best_score=0.6192 upside_total=-0.805 e_sift=-1 sift_inliers=117 tilt_signed=0.55 paper_score=0.262 paper_delta=0.006 aspect_rel=1.194
+   20260522_205820.jpg |  7 토토 | normal→normal | O | 0.652 | appearance | - | best_score=0.6517 upside_total=-0.814 e_sift=-1 sift_inliers=66 tilt_signed=0.63 paper_score=0.239 paper_delta=0.018 aspect_rel=0.932
+   20260522_205820.jpg |  8 밤하늘 | normal|unknown→unknown | O | 0.3 | redetected | present_unmatched | best_score=0.1821 paper_score=0.166
+   20260522_205820.jpg |  9 북극 | normal→normal | O | 0.702 | appearance | - | best_score=0.7016 upside_total=-0.824 e_sift=-1 sift_inliers=119 tilt_signed=0.71 paper_score=0.157 paper_delta=0.011 aspect_rel=1.034
+   20260522_205820.jpg | 10 색과빛 | normal→normal | O | 0.575 | appearance | - | best_score=0.5746 upside_total=-0.727 e_sift=-1 sift_inliers=51 tilt_signed=0.36 paper_score=0.263 paper_delta=0.034 aspect_rel=1.011
+   20260522_205820.jpg | 11 뉴문 | normal→normal | O | 0.814 | appearance | - | best_score=0.8142 upside_total=-0.899 e_sift=-1 sift_inliers=52 tilt_signed=-0.82 paper_score=0.0 paper_delta=0.0 aspect_rel=1.045
+   20260522_205820.jpg | 12 비교정치 | normal→normal | O | 0.742 | appearance | - | best_score=0.7419 upside_total=-0.856 e_sift=-1 sift_inliers=39 tilt_signed=-1.94 paper_score=0.205 paper_delta=0.002 aspect_rel=0.977
+   20260522_205820.jpg | 13 친구들 | normal→normal | O | 0.656 | appearance | - | best_score=0.6562 upside_total=-0.849 e_sift=-1 sift_inliers=175 tilt_signed=-2.24 paper_score=0.208 paper_delta=-0.007 aspect_rel=1.264
+   20260522_205820.jpg | 14 그건사랑 | normal→normal | O | 0.721 | appearance | - | best_score=0.7205 upside_total=-0.916 e_sift=-1 sift_inliers=136 tilt_signed=-2.23 paper_score=0.321 paper_delta=0.002 aspect_rel=1.106
+   20260522_205820.jpg | 15 독수리 | normal→normal | O | 0.437 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.437 upside_total=-1.0 e_sift=-1 sift_inliers=71 tilt_signed=-2.31 paper_score=0.251 paper_delta=0.008 aspect_rel=0.962
+   20260522_205820.jpg | 16 시골의사 | normal→normal | O | 0.584 | appearance | - | best_score=0.5837 upside_total=-0.891 e_sift=-1 sift_inliers=70 tilt_signed=-2.62 paper_score=0.0 paper_delta=0.0 aspect_rel=1.199
+   20260522_205820.jpg | 17 나는나를 | normal→normal | O | 0.731 | appearance | - | best_score=0.7312 upside_total=-0.909 e_sift=-1 sift_inliers=229 tilt_signed=-2.77 paper_score=0.0 paper_delta=0.0 aspect_rel=0.978
+   20260522_205820.jpg | 18 공자 | normal→normal | O | 0.642 | appearance | - | best_score=0.6422 upside_total=-0.851 e_sift=-1 sift_inliers=93 tilt_signed=-2.91 paper_score=0.297 paper_delta=-0.02 aspect_rel=1.152
+   20260522_205820.jpg | 19 바보빅터 | normal→normal | O | 0.513 | appearance | - | best_score=0.5132 upside_total=-0.665 e_sift=-1 sift_inliers=67 tilt_signed=-2.25 paper_score=0.258 paper_delta=-0.016 aspect_rel=1.506
+   20260522_205820.jpg | 20 STRUCT | absent|stack|unknown→stack | O | 0.9 | appearance | - | best_score=0.5854 sift_inliers=77 tilt_signed=-68.1 aspect_rel=200.276
+   20260522_205820.jpg | 21 주체이론 | normal|tilted→normal | O | 0.702 | appearance | - | best_score=0.7015 upside_total=-0.744 e_sift=-1 sift_inliers=41 tilt_signed=0.27 paper_score=0.227 paper_delta=-0.031 aspect_rel=1.195
+   20260522_205820.jpg | 22 나무 | normal|tilted→normal | O | 0.519 | appearance | - | best_score=0.5186 upside_total=-0.799 e_sift=-1 sift_inliers=98 tilt_signed=-0.33 paper_score=0.272 paper_delta=0.008 aspect_rel=0.884
+   20260522_205820.jpg | 23 소나기 | normal|tilted→normal | O | 0.516 | appearance | - | best_score=0.5158 upside_total=-0.806 e_sift=-1 sift_inliers=80 tilt_signed=-0.52 paper_score=0.132 paper_delta=0.132 aspect_rel=1.469
+   20260522_205820.jpg | 24 게임 | normal|tilted→normal | O | 0.764 | appearance | - | best_score=0.7643 upside_total=-0.83 e_sift=-1 sift_inliers=141 tilt_signed=-0.3 paper_score=0.0 paper_delta=0.0 aspect_rel=0.921
+   20260522_205820.jpg | 25 변증법 | normal|tilted→normal | O | 0.508 | appearance | - | best_score=0.5076 upside_total=-0.719 e_sift=-1 sift_inliers=79 tilt_signed=-0.65 paper_score=0.0 paper_delta=0.0 aspect_rel=0.848
+   20260522_205820.jpg | 26 글읽기 | normal|tilted→normal | O | 0.687 | appearance | - | best_score=0.6866 upside_total=-0.895 e_sift=-1 sift_inliers=34 tilt_signed=-0.36 paper_score=0.0 paper_delta=0.0 aspect_rel=1.207
+   20260522_205820.jpg | 27 바보처럼 | normal|tilted→normal | O | 0.7 | appearance | - | best_score=0.6999 upside_total=-0.785 e_sift=-1 sift_inliers=115 tilt_signed=-0.52 paper_score=0.288 paper_delta=0.012 aspect_rel=0.86
+   20260522_205820.jpg | 28 덕혜옹주 | normal|tilted→normal | O | 0.73 | appearance | - | best_score=0.7301 upside_total=-0.88 e_sift=-1 sift_inliers=76 tilt_signed=-1.49 paper_score=0.199 paper_delta=-0.001 aspect_rel=1.18
+   20260522_205820.jpg | 29 신약성경 | normal→unknown | X | 0.3 | position | orientation_by_sift_only,low_confidence,matched_by_position | best_score=0.2622 sift_inliers=3 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.227
+   20260522_205820.jpg | 30 Che | normal|tilted→unknown | X | 0.3 | position | orientation_by_sift_only,low_confidence,matched_by_position | best_score=0.2833 sift_inliers=0 tilt_signed=-1.72 paper_score=0.0 paper_delta=0.0 aspect_rel=0.846
+   20260522_210223.jpg |  0 | normal→normal | O | 0.699 | appearance | - | best_score=0.6986 upside_total=-0.711 e_sift=-1 sift_inliers=154 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=0.993
+   20260522_210223.jpg |  1 | normal→normal | O | 0.808 | appearance | - | best_score=0.8079 upside_total=-0.914 e_sift=-1 sift_inliers=194 tilt_signed=0.47 paper_score=0.249 paper_delta=-0.005 aspect_rel=0.934
+   20260522_210223.jpg |  2 | normal→normal | O | 0.791 | appearance | - | best_score=0.7913 upside_total=-0.898 e_sift=-1 sift_inliers=114 tilt_signed=-0.33 paper_score=0.141 paper_delta=0.01 aspect_rel=0.897
+   20260522_210223.jpg |  3 | normal→normal | O | 0.765 | appearance | - | best_score=0.7655 upside_total=-0.867 e_sift=-1 sift_inliers=44 tilt_signed=0.84 paper_score=0.312 paper_delta=0.011 aspect_rel=0.898
+   20260522_210223.jpg |  4 | paper→paper | O | 0.746 | position | matched_by_position | best_score=0.1272 sift_inliers=0 tilt_signed=1.41 paper_score=0.746 paper_delta=0.581 aspect_rel=1.012
+   20260522_210223.jpg |  5 | normal→normal | O | 0.775 | appearance | - | best_score=0.7753 upside_total=-0.876 e_sift=-1 sift_inliers=172 tilt_signed=1.74 paper_score=0.2 paper_delta=-0.002 aspect_rel=1.015
+   20260522_210223.jpg |  6 | normal→normal | O | 0.74 | appearance | - | best_score=0.7401 upside_total=-0.847 e_sift=-1 sift_inliers=63 tilt_signed=1.7 paper_score=0.0 paper_delta=0.0 aspect_rel=0.968
+   20260522_210223.jpg |  7 | normal→normal | O | 0.887 | appearance | - | best_score=0.8873 upside_total=-0.924 e_sift=-1 sift_inliers=84 tilt_signed=1.64 paper_score=0.0 paper_delta=0.0 aspect_rel=1.0
+   20260522_210223.jpg |  8 | normal→normal | O | 0.865 | appearance | - | best_score=0.8649 upside_total=-0.833 e_sift=-1 sift_inliers=192 tilt_signed=1.12 paper_score=0.0 paper_delta=0.0 aspect_rel=0.985
+   20260522_210223.jpg |  9 | normal→normal | O | 0.799 | appearance | - | best_score=0.7985 upside_total=-0.876 e_sift=-1 sift_inliers=162 tilt_signed=0.98 paper_score=0.22 paper_delta=-0.002 aspect_rel=0.984
+   20260522_210223.jpg | 10 | normal→normal | O | 0.743 | appearance | - | best_score=0.7427 upside_total=-0.82 e_sift=-1 sift_inliers=107 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.123
+   20260522_210223.jpg | 11 | paper→paper | O | 0.576 | position | detected_by_fallback,matched_by_position | best_score=0.1721 sift_inliers=6 tilt_signed=-0.12 paper_score=0.576 paper_delta=0.329 aspect_rel=1.549
+   20260522_210223.jpg | 12 | normal→normal | O | 0.384 | position | orientation_by_sift_only,low_confidence,matched_by_position,identity_weak | best_score=0.3838 sift_inliers=8 tilt_signed=-1.25 paper_score=0.0 paper_delta=0.0 aspect_rel=0.809
+   20260522_210248.jpg |  0 | normal→normal | O | 0.646 | appearance | - | best_score=0.6465 upside_total=-0.742 e_sift=-1 sift_inliers=134 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=0.973
+   20260522_210248.jpg |  1 | normal→normal | O | 0.837 | appearance | - | best_score=0.8372 upside_total=-0.874 e_sift=-1 sift_inliers=182 tilt_signed=-0.06 paper_score=0.255 paper_delta=0.001 aspect_rel=0.935
+   20260522_210248.jpg |  2 | normal→normal | O | 0.756 | appearance | - | best_score=0.7565 upside_total=-0.869 e_sift=-1 sift_inliers=86 tilt_signed=-0.77 paper_score=0.129 paper_delta=-0.003 aspect_rel=0.893
+   20260522_210248.jpg |  3 | normal→normal | O | 0.859 | appearance | - | best_score=0.8593 upside_total=-0.911 e_sift=-1 sift_inliers=55 tilt_signed=0.04 paper_score=0.289 paper_delta=-0.012 aspect_rel=0.978
+   20260522_210248.jpg |  4 | normal→normal | O | 0.808 | appearance | - | best_score=0.8083 upside_total=-0.875 e_sift=-1 sift_inliers=257 tilt_signed=0.13 paper_score=0.161 paper_delta=-0.003 aspect_rel=0.929
+   20260522_210248.jpg |  5 | normal→normal | O | 0.811 | appearance | - | best_score=0.8111 upside_total=-0.833 e_sift=-1 sift_inliers=124 tilt_signed=0.12 paper_score=0.219 paper_delta=0.017 aspect_rel=0.893
+   20260522_210248.jpg |  6 | normal→normal | O | 0.711 | appearance | - | best_score=0.7107 upside_total=-0.846 e_sift=-1 sift_inliers=67 tilt_signed=0.37 paper_score=0.0 paper_delta=0.0 aspect_rel=0.829
+   20260522_210248.jpg |  7 | normal→normal | O | 0.826 | appearance | - | best_score=0.8262 upside_total=-0.897 e_sift=-1 sift_inliers=74 tilt_signed=0.01 paper_score=0.0 paper_delta=0.0 aspect_rel=0.938
+   20260522_210248.jpg |  8 | normal→normal | O | 0.697 | appearance | - | best_score=0.6973 upside_total=-0.645 e_sift=-1 sift_inliers=47 tilt_signed=-0.18 paper_score=0.0 paper_delta=0.0 aspect_rel=0.812
+   20260522_210248.jpg |  9 | normal→normal | O | 0.785 | appearance | - | best_score=0.7853 upside_total=-0.864 e_sift=-1 sift_inliers=140 tilt_signed=0.0 paper_score=0.22 paper_delta=-0.002 aspect_rel=0.951
+   20260522_210248.jpg | 10 | paper→paper | O | 0.85 | fallback_band | recovered | best_score=0.2452 paper_score=0.85
+   20260522_210248.jpg | 11 | normal→normal | O | 0.352 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.3522 upside_total=-1.0 e_sift=-1 sift_inliers=16 tilt_signed=0.82 paper_score=0.209 paper_delta=-0.038 aspect_rel=0.731
+   20260522_210248.jpg | 12 | normal→normal | O | 0.69 | appearance | - | best_score=0.6898 upside_total=-0.859 e_sift=-1 sift_inliers=130 tilt_signed=0.77 paper_score=0.0 paper_delta=0.0 aspect_rel=0.859
+   20260522_210313.jpg |  0 | normal→normal | O | 0.637 | appearance | - | best_score=0.637 upside_total=-0.749 e_sift=-1 sift_inliers=150 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=0.993
+   20260522_210313.jpg |  1 | paper→paper | O | 0.956 | position | matched_by_position | best_score=0.1525 sift_inliers=6 tilt_signed=-1.76 paper_score=0.956 paper_delta=0.702 aspect_rel=1.057
+   20260522_210313.jpg |  2 | normal→normal | O | 0.716 | appearance | - | best_score=0.7165 upside_total=-0.873 e_sift=-1 sift_inliers=83 tilt_signed=-2.29 paper_score=0.0 paper_delta=-0.132 aspect_rel=0.938
+   20260522_210313.jpg |  3 | normal→normal | O | 0.791 | appearance | - | best_score=0.7907 upside_total=-0.85 e_sift=-1 sift_inliers=41 tilt_signed=-1.7 paper_score=0.279 paper_delta=-0.022 aspect_rel=1.062
+   20260522_210313.jpg |  4 | normal→normal | O | 0.802 | appearance | - | best_score=0.8025 upside_total=-0.812 e_sift=-1 sift_inliers=208 tilt_signed=-2.0 paper_score=0.147 paper_delta=-0.018 aspect_rel=0.924
+   20260522_210313.jpg |  5 | normal→normal | O | 0.819 | appearance | - | best_score=0.8195 upside_total=-0.837 e_sift=-1 sift_inliers=103 tilt_signed=-2.04 paper_score=0.217 paper_delta=0.015 aspect_rel=0.877
+   20260522_210313.jpg |  6 | normal→normal | O | 0.737 | appearance | - | best_score=0.737 upside_total=-0.822 e_sift=-1 sift_inliers=57 tilt_signed=-1.99 paper_score=0.0 paper_delta=0.0 aspect_rel=0.859
+   20260522_210313.jpg |  7 | normal→normal | O | 0.79 | appearance | - | best_score=0.7896 upside_total=-0.884 e_sift=-1 sift_inliers=86 tilt_signed=-2.45 paper_score=0.0 paper_delta=0.0 aspect_rel=0.931
+   20260522_210313.jpg |  8 | paper→paper | O | 0.663 | position | matched_by_position | best_score=0.2068 sift_inliers=17 tilt_signed=-2.21 paper_score=0.663 paper_delta=0.663 aspect_rel=1.084
+   20260522_210313.jpg |  9 | normal→normal | O | 0.684 | appearance | - | best_score=0.6843 upside_total=-0.89 e_sift=-1 sift_inliers=169 tilt_signed=-1.92 paper_score=0.238 paper_delta=0.016 aspect_rel=0.98
+   20260522_210313.jpg | 10 | normal→normal | O | 0.717 | appearance | - | best_score=0.7167 upside_total=-0.81 e_sift=-1 sift_inliers=149 tilt_signed=-0.75 paper_score=0.0 paper_delta=0.0 aspect_rel=0.946
+   20260522_210313.jpg | 11 | normal→normal | O | 0.559 | appearance | - | best_score=0.5591 upside_total=-0.749 e_sift=-1 sift_inliers=63 tilt_signed=0.0 paper_score=0.205 paper_delta=-0.042 aspect_rel=0.859
+   20260522_210313.jpg | 12 | paper→paper | O | 0.968 | position | matched_by_position | best_score=0.0496 sift_inliers=0 tilt_signed=-1.4 paper_score=0.968 paper_delta=0.968 aspect_rel=0.735
+   20260522_210344.jpg |  0 | normal→normal | O | 0.864 | appearance | - | best_score=0.8637 upside_total=-0.935 e_sift=-1 sift_inliers=250 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.13
+   20260522_210344.jpg |  1 | normal→normal | O | 0.793 | appearance | - | best_score=0.7927 upside_total=-0.871 e_sift=-1 sift_inliers=79 tilt_signed=-0.35 paper_score=0.0 paper_delta=-0.125 aspect_rel=1.101
+   20260522_210344.jpg |  2 | normal→normal | O | 0.826 | appearance | - | best_score=0.8262 upside_total=-0.882 e_sift=-1 sift_inliers=38 tilt_signed=0.34 paper_score=0.0 paper_delta=-0.131 aspect_rel=1.102
+   20260522_210344.jpg |  3 | normal→normal | O | 0.745 | appearance | - | best_score=0.7446 upside_total=-0.917 e_sift=-1 sift_inliers=107 tilt_signed=0.86 paper_score=0.156 paper_delta=-0.006 aspect_rel=0.988
+   20260522_210344.jpg |  4 | normal→normal | O | 0.629 | appearance | - | best_score=0.6286 upside_total=-0.818 e_sift=-1 sift_inliers=60 tilt_signed=0.88 paper_score=0.27 paper_delta=-0.045 aspect_rel=0.876
+   20260522_210344.jpg |  5 | paper→paper | O | 0.5 | position | matched_by_position | best_score=-0.1195 sift_inliers=5 tilt_signed=-0.58 paper_score=0.489 paper_delta=0.489 aspect_rel=1.276
+   20260522_210344.jpg |  6 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.7136 upside_total=1.0 e_sift=1 sift_inliers=88 tilt_signed=-1.84 paper_score=0.0 paper_delta=0.0 aspect_rel=1.071
+   20260522_210344.jpg |  7 | normal→normal | O | 0.692 | appearance | - | best_score=0.6925 upside_total=-0.883 e_sift=-1 sift_inliers=54 tilt_signed=-1.15 paper_score=0.129 paper_delta=-0.029 aspect_rel=1.305
+   20260522_210344.jpg |  8 | normal→normal | O | 0.763 | appearance | - | best_score=0.7633 upside_total=-0.9 e_sift=-1 sift_inliers=48 tilt_signed=-0.78 paper_score=0.16 paper_delta=-0.015 aspect_rel=1.121
+   20260522_210344.jpg |  9 | normal→normal | O | 0.835 | series | series_resolved | best_score=0.8349 upside_total=-0.918 e_sift=-1 sift_inliers=281 tilt_signed=-0.69 paper_score=0.127 paper_delta=-0.005 aspect_rel=1.098
+   20260522_210344.jpg | 10 | paper→paper | O | 0.982 | position | matched_by_position | best_score=0.1658 sift_inliers=0 tilt_signed=0.03 paper_score=0.982 paper_delta=0.677 aspect_rel=1.15
+   20260522_210344.jpg | 11 | normal→normal | O | 0.829 | appearance | - | best_score=0.8289 upside_total=-0.809 e_sift=-1 sift_inliers=51 tilt_signed=0.0 paper_score=0.137 paper_delta=-0.018 aspect_rel=1.138
+   20260522_210344.jpg | 12 | normal→normal | O | 0.835 | appearance | - | best_score=0.8353 upside_total=-0.873 e_sift=-1 sift_inliers=139 tilt_signed=-0.78 paper_score=0.0 paper_delta=0.0 aspect_rel=1.024
+   20260522_210344.jpg | 13 | normal→normal | O | 0.721 | appearance | - | best_score=0.7212 upside_total=-0.883 e_sift=-1 sift_inliers=33 tilt_signed=0.45 paper_score=0.0 paper_delta=-0.132 aspect_rel=1.121
+   20260522_210405.jpg |  0 | paper|tilted→unknown | X | 0.3 | recovered_roi | present_unmatched | best_score=0.1971 paper_score=0.265
+   20260522_210405.jpg |  1 | paper|tilted|unknown→unknown | O | 0.3 | redetected | present_unmatched | best_score=0.152 paper_score=0.246
+   20260522_210405.jpg |  2 | paper|tilted|unknown→unknown | O | 0.3 | recovered_roi | present_unmatched | best_score=0.2578 paper_score=0.28
+   20260522_210405.jpg |  3 | paper|tilted|unknown→paper | O | 0.5 | redetected | recovered | best_score=0.2685 paper_score=0.316
+   20260522_210405.jpg |  4 | normal|tilted→normal | O | 0.633 | appearance | - | best_score=0.6325 upside_total=-0.795 e_sift=-1 sift_inliers=63 tilt_signed=2.88 paper_score=0.312 paper_delta=-0.003 aspect_rel=1.071
+   20260522_210405.jpg |  5 | normal|tilted→normal | O | 0.825 | series | series_resolved | best_score=0.8252 upside_total=-0.94 e_sift=-1 sift_inliers=263 tilt_signed=1.5 paper_score=0.0 paper_delta=0.0 aspect_rel=1.108
+   20260522_210405.jpg |  6 | normal|tilted|upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.7209 upside_total=1.0 e_sift=1 sift_inliers=78 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.074
+   20260522_210405.jpg |  7 | normal|tilted→normal | O | 0.675 | appearance | - | best_score=0.6748 upside_total=-0.876 e_sift=-1 sift_inliers=58 tilt_signed=0.94 paper_score=0.138 paper_delta=-0.021 aspect_rel=1.302
+   20260522_210405.jpg |  8 | normal|tilted→normal | O | 0.756 | appearance | - | best_score=0.7557 upside_total=-0.905 e_sift=-1 sift_inliers=46 tilt_signed=1.6 paper_score=0.168 paper_delta=-0.007 aspect_rel=1.115
+   20260522_210405.jpg |  9 | normal|tilted→normal | O | 0.813 | series | series_resolved | best_score=0.8133 upside_total=-0.904 e_sift=-1 sift_inliers=188 tilt_signed=1.26 paper_score=0.144 paper_delta=0.012 aspect_rel=0.946
+   20260522_210405.jpg | 10 | normal→normal | O | 0.652 | appearance | - | best_score=0.6521 upside_total=-0.764 e_sift=-1 sift_inliers=36 tilt_signed=1.9 paper_score=0.291 paper_delta=-0.014 aspect_rel=1.151
+   20260522_210405.jpg | 11 | paper→unknown | X | 0.3 | redetected | present_unmatched | best_score=0.1934 paper_score=0.286
+   20260522_210405.jpg | 12 | absent|paper|unknown→paper | O | 0.847 | position | matched_by_position | best_score=0.1993 sift_inliers=0 tilt_signed=0.0 paper_score=0.847 paper_delta=0.847 aspect_rel=0.825
+   20260522_210405.jpg | 13 | normal→normal | O | 0.754 | appearance | - | best_score=0.754 upside_total=-0.851 e_sift=-1 sift_inliers=40 tilt_signed=1.66 paper_score=0.0 paper_delta=-0.132 aspect_rel=1.12
+   20260522_210436.jpg |  0 | normal→normal | O | 0.882 | appearance | - | best_score=0.8822 upside_total=-0.913 e_sift=-1 sift_inliers=249 tilt_signed=0.0 paper_score=0.128 paper_delta=0.128 aspect_rel=1.054
+   20260522_210436.jpg |  1 | normal→normal | O | 0.78 | appearance | - | best_score=0.7802 upside_total=-0.838 e_sift=-1 sift_inliers=78 tilt_signed=-0.23 paper_score=0.133 paper_delta=0.008 aspect_rel=0.963
+   20260522_210436.jpg |  2 | normal→normal | O | 0.594 | appearance | - | best_score=0.5939 upside_total=-0.762 e_sift=-1 sift_inliers=19 tilt_signed=-0.01 paper_score=0.135 paper_delta=0.004 aspect_rel=1.0
+   20260522_210436.jpg |  3 | normal→normal | O | 0.71 | appearance | - | best_score=0.7096 upside_total=-0.926 e_sift=-1 sift_inliers=135 tilt_signed=1.2 paper_score=0.16 paper_delta=-0.002 aspect_rel=0.983
+   20260522_210436.jpg |  4 | paper→paper | O | 0.972 | position | matched_by_position | best_score=0.2116 sift_inliers=3 tilt_signed=0.24 paper_score=0.972 paper_delta=0.657 aspect_rel=1.429
+   20260522_210436.jpg |  5 | normal→normal | O | 0.683 | series | series_resolved | best_score=0.6828 upside_total=-0.877 e_sift=-1 sift_inliers=205 tilt_signed=-1.01 paper_score=0.0 paper_delta=0.0 aspect_rel=1.163
+   20260522_210436.jpg |  6 | upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.7414 upside_total=1.0 e_sift=1 sift_inliers=81 tilt_signed=-1.19 paper_score=0.0 paper_delta=0.0 aspect_rel=1.056
+   20260522_210436.jpg |  7 | normal→normal | O | 0.697 | appearance | - | best_score=0.6967 upside_total=-0.896 e_sift=-1 sift_inliers=52 tilt_signed=-0.71 paper_score=0.137 paper_delta=-0.021 aspect_rel=1.28
+   20260522_210436.jpg |  8 | normal→normal | O | 0.706 | appearance | - | best_score=0.7065 upside_total=-0.886 e_sift=-1 sift_inliers=49 tilt_signed=-0.13 paper_score=0.17 paper_delta=-0.005 aspect_rel=1.132
+   20260522_210436.jpg |  9 | normal→normal | O | 0.735 | series | series_resolved | best_score=0.7345 upside_total=-0.88 e_sift=-1 sift_inliers=141 tilt_signed=-0.82 paper_score=0.135 paper_delta=0.003 aspect_rel=0.88
+   20260522_210436.jpg | 10 | normal→normal | O | 0.813 | appearance | - | best_score=0.8129 upside_total=-0.816 e_sift=-1 sift_inliers=65 tilt_signed=-0.32 paper_score=0.294 paper_delta=-0.011 aspect_rel=1.129
+   20260522_210436.jpg | 11 | normal→normal | O | 0.828 | appearance | - | best_score=0.8284 upside_total=-0.811 e_sift=-1 sift_inliers=59 tilt_signed=0.0 paper_score=0.153 paper_delta=-0.003 aspect_rel=1.134
+   20260522_210436.jpg | 12 | paper→unknown | X | 0.3 | position | orientation_by_sift_only,low_confidence,matched_by_position | best_score=0.2596 upside_total=-1.0 e_sift=-1 sift_inliers=10 tilt_signed=-1.37 paper_score=0.0 paper_delta=0.0 aspect_rel=0.414
+   20260522_210436.jpg | 13 | normal→normal | O | 0.765 | appearance | - | best_score=0.7649 upside_total=-0.903 e_sift=-1 sift_inliers=47 tilt_signed=-1.09 paper_score=0.135 paper_delta=0.004 aspect_rel=0.962
+   20260522_210604.jpg |  0 멈추면 | normal→normal | O | 0.464 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4641 upside_total=-1.0 e_sift=-1 sift_inliers=37 tilt_signed=0.54 paper_score=0.313 paper_delta=0.032 aspect_rel=0.757
+   20260522_210604.jpg |  1 믿음A | normal|paper|unknown→paper | O | 0.758 | position | matched_by_position | best_score=0.2193 sift_inliers=12 tilt_signed=0.0 paper_score=0.758 paper_delta=0.418 aspect_rel=1.247
+   20260522_210604.jpg |  2 믿음B | absent|normal|unknown→unknown | O | 0.3 | position | orientation_by_sift_only,low_confidence,detected_by_fallback,matched_by_position | best_score=0.1027 sift_inliers=3 tilt_signed=0.32 paper_score=0.191 paper_delta=-0.148 aspect_rel=1.061
+   20260522_210604.jpg |  3 THINK | normal|unknown→normal | O | 0.485 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4852 upside_total=-1.0 e_sift=-1 sift_inliers=18 tilt_signed=1.8 paper_score=0.247 paper_delta=-0.017 aspect_rel=1.486
+   20260522_210604.jpg |  4 실크로드 | normal→normal | O | 0.499 | appearance | orientation_by_sift_only,low_confidence | best_score=0.499 upside_total=-1.0 e_sift=-1 sift_inliers=17 tilt_signed=2.36 paper_score=0.283 paper_delta=0.043 aspect_rel=0.752
+   20260522_210604.jpg |  5 귀머거리 | normal→normal | O | 0.738 | appearance | - | best_score=0.738 upside_total=-0.884 e_sift=-1 sift_inliers=204 tilt_signed=1.85 paper_score=0.175 paper_delta=0.032 aspect_rel=0.884
+   20260522_210604.jpg |  6 외교관 | normal→normal | O | 0.787 | appearance | - | best_score=0.7874 upside_total=-0.877 e_sift=-1 sift_inliers=176 tilt_signed=1.77 paper_score=0.289 paper_delta=0.033 aspect_rel=1.062
+   20260522_210604.jpg |  7 토토 | normal→normal | O | 0.74 | appearance | - | best_score=0.74 upside_total=-0.823 e_sift=-1 sift_inliers=67 tilt_signed=1.78 paper_score=0.231 paper_delta=0.009 aspect_rel=0.927
+   20260522_210604.jpg |  8 밤하늘 | normal→normal | O | 0.666 | appearance | - | best_score=0.6656 upside_total=-0.869 e_sift=-1 sift_inliers=51 tilt_signed=1.54 paper_score=0.158 paper_delta=0.028 aspect_rel=1.129
+   20260522_210604.jpg |  9 북극 | normal→normal | O | 0.819 | appearance | - | best_score=0.8192 upside_total=-0.843 e_sift=-1 sift_inliers=126 tilt_signed=1.95 paper_score=0.175 paper_delta=0.029 aspect_rel=0.959
+   20260522_210604.jpg | 10 색과빛 | normal→normal | O | 0.686 | appearance | - | best_score=0.6862 upside_total=-0.662 e_sift=-1 sift_inliers=60 tilt_signed=1.57 paper_score=0.274 paper_delta=0.045 aspect_rel=0.989
+   20260522_210604.jpg | 11 뉴문 | normal→normal | O | 0.759 | appearance | - | best_score=0.7593 upside_total=-0.886 e_sift=-1 sift_inliers=53 tilt_signed=0.27 paper_score=0.0 paper_delta=0.0 aspect_rel=0.93
+   20260522_210604.jpg | 12 비교정치 | paper→paper | O | 0.885 | fallback_band | recovered | best_score=0.1922 paper_score=0.885
+   20260522_210604.jpg | 13 친구들 | paper→unknown | X | 0.3 | redetected | present_unmatched | best_score=0.1233 paper_score=0.262
+   20260522_210604.jpg | 14 그건사랑 | normal|unknown→normal | O | 0.52 | appearance | - | best_score=0.5197 upside_total=-0.776 e_sift=-1 sift_inliers=47 tilt_signed=0.27 paper_score=0.256 paper_delta=-0.062 aspect_rel=0.926
+   20260522_210604.jpg | 15 독수리 | normal→normal | O | 0.605 | appearance | - | best_score=0.6053 upside_total=-0.818 e_sift=-1 sift_inliers=66 tilt_signed=0.52 paper_score=0.263 paper_delta=0.02 aspect_rel=0.912
+   20260522_210604.jpg | 16 시골의사 | normal→normal | O | 0.796 | appearance | - | best_score=0.7961 upside_total=-0.923 e_sift=-1 sift_inliers=119 tilt_signed=0.2 paper_score=0.0 paper_delta=0.0 aspect_rel=1.012
+   20260522_210604.jpg | 17 나는나를 | normal→normal | O | 0.734 | appearance | - | best_score=0.7338 upside_total=-0.848 e_sift=-1 sift_inliers=192 tilt_signed=-0.21 paper_score=0.155 paper_delta=0.155 aspect_rel=0.921
+   20260522_210604.jpg | 18 공자 | absent|paper|stack|tilted|unknown→unknown | O | 0.3 | position | orientation_by_sift_only,low_confidence,matched_by_position | best_score=0.1421 sift_inliers=2 tilt_signed=-0.35 paper_score=0.248 paper_delta=-0.069 aspect_rel=1.582
+   20260522_210604.jpg | 19 바보빅터 | absent|normal|unknown→normal | O | 0.185 | sift | partial_view,orientation_by_sift_only,tilt_unchecked,low_confidence,matched_by_sift | best_score=0.1851 upside_total=-1.0 e_sift=-1 sift_inliers=64 paper_score=0.502 paper_delta=0.228 aspect_rel=5.039
+   20260522_210604.jpg | 20 STRUCT | paper→unknown | X | 0.3 | position | orientation_by_sift_only,low_confidence,matched_by_position | best_score=-0.0287 sift_inliers=4 tilt_signed=0.08 paper_score=0.266 paper_delta=0.141 aspect_rel=0.946
+   20260522_210604.jpg | 21 주체이론 | normal→normal | O | 0.775 | appearance | - | best_score=0.7754 upside_total=-0.811 e_sift=-1 sift_inliers=40 tilt_signed=0.99 paper_score=0.251 paper_delta=-0.007 aspect_rel=1.004
+   20260522_210604.jpg | 22 나무 | normal→normal | O | 0.601 | appearance | - | best_score=0.6013 upside_total=-0.673 e_sift=-1 sift_inliers=64 tilt_signed=1.05 paper_score=0.291 paper_delta=0.027 aspect_rel=1.011
+   20260522_210604.jpg | 23 소나기 | normal→normal | O | 0.6 | appearance | - | best_score=0.6001 upside_total=-0.834 e_sift=-1 sift_inliers=49 tilt_signed=1.16 paper_score=0.126 paper_delta=0.126 aspect_rel=1.465
+   20260522_210604.jpg | 24 게임 | normal→normal | O | 0.848 | appearance | - | best_score=0.8483 upside_total=-0.873 e_sift=-1 sift_inliers=114 tilt_signed=0.42 paper_score=0.0 paper_delta=0.0 aspect_rel=0.998
+   20260522_210604.jpg | 25 변증법 | normal→normal | O | 0.515 | appearance | - | best_score=0.5151 upside_total=-0.755 e_sift=-1 sift_inliers=34 tilt_signed=0.16 paper_score=0.0 paper_delta=0.0 aspect_rel=0.782
+   20260522_210604.jpg | 26 글읽기 | normal→normal | O | 0.613 | appearance | - | best_score=0.6135 upside_total=-0.801 e_sift=-1 sift_inliers=10 tilt_signed=0.46 paper_score=0.0 paper_delta=0.0 aspect_rel=1.306
+   20260522_210604.jpg | 27 바보처럼 | normal→normal | O | 0.457 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4572 upside_total=-1.0 e_sift=-1 sift_inliers=31 tilt_signed=0.2 paper_score=0.297 paper_delta=0.02 aspect_rel=0.651
+   20260522_210604.jpg | 28 덕혜옹주 | normal→normal | O | 0.79 | appearance | - | best_score=0.7897 upside_total=-0.884 e_sift=-1 sift_inliers=81 tilt_signed=0.43 paper_score=0.215 paper_delta=0.014 aspect_rel=1.055
+   20260522_210604.jpg | 29 신약성경 | normal→normal | O | 0.712 | appearance | - | best_score=0.7121 upside_total=-0.725 e_sift=-1 sift_inliers=17 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.237
+   20260522_210604.jpg | 30 Che | normal→normal | O | 0.619 | appearance | - | best_score=0.6188 upside_total=-0.694 e_sift=-1 sift_inliers=34 tilt_signed=0.06 paper_score=0.0 paper_delta=0.0 aspect_rel=1.095
+   20260522_210632.jpg |  0 멈추면 | normal→normal | O | 0.467 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4674 upside_total=-1.0 e_sift=-1 sift_inliers=48 tilt_signed=0.0 paper_score=0.318 paper_delta=0.038 aspect_rel=0.913
+   20260522_210632.jpg |  1 믿음A | normal→normal | O | 0.45 | series | orientation_by_sift_only,low_confidence,series_resolved,series_ambiguous | best_score=0.483 upside_total=-1.0 e_sift=-1 sift_inliers=24 tilt_signed=1.02 paper_score=0.334 paper_delta=-0.007 aspect_rel=1.243
+   20260522_210632.jpg |  2 믿음B | normal→normal | O | 0.638 | series | series_resolved | best_score=0.6378 upside_total=-0.81 e_sift=-1 sift_inliers=42 tilt_signed=1.48 paper_score=0.337 paper_delta=-0.002 aspect_rel=1.36
+   20260522_210632.jpg |  3 THINK | normal→normal | O | 0.391 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.391 upside_total=-1.0 e_sift=-1 sift_inliers=31 tilt_signed=0.62 paper_score=0.265 paper_delta=0.001 aspect_rel=1.577
+   20260522_210632.jpg |  4 실크로드 | normal→normal | O | 0.508 | appearance | - | best_score=0.5079 upside_total=-0.688 e_sift=-1 sift_inliers=36 tilt_signed=0.26 paper_score=0.258 paper_delta=0.018 aspect_rel=0.838
+   20260522_210632.jpg |  5 귀머거리 | normal→normal | O | 0.792 | appearance | - | best_score=0.7919 upside_total=-0.899 e_sift=-1 sift_inliers=126 tilt_signed=0.71 paper_score=0.169 paper_delta=0.026 aspect_rel=0.989
+   20260522_210632.jpg |  6 외교관 | normal→normal | O | 0.846 | appearance | - | best_score=0.8459 upside_total=-0.898 e_sift=-1 sift_inliers=222 tilt_signed=0.95 paper_score=0.268 paper_delta=0.012 aspect_rel=1.07
+   20260522_210632.jpg |  7 토토 | normal→normal | O | 0.731 | appearance | - | best_score=0.7309 upside_total=-0.87 e_sift=-1 sift_inliers=69 tilt_signed=1.01 paper_score=0.207 paper_delta=-0.015 aspect_rel=1.03
+   20260522_210632.jpg |  8 밤하늘 | normal→normal | O | 0.524 | appearance | - | best_score=0.5241 upside_total=-0.777 e_sift=-1 sift_inliers=36 tilt_signed=2.81 paper_score=0.179 paper_delta=0.049 aspect_rel=1.446
+   20260522_210632.jpg |  9 북극 | normal→unknown | X | 0.3 | position | orientation_by_sift_only,low_confidence,detected_by_fallback,matched_by_position | best_score=0.2611 sift_inliers=0 tilt_signed=1.67 paper_score=0.309 paper_delta=0.163 aspect_rel=1.203
+   20260522_210632.jpg | 10 색과빛 | normal→normal | O | 0.636 | appearance | - | best_score=0.6357 upside_total=-0.631 e_sift=-1 sift_inliers=45 tilt_signed=1.08 paper_score=0.257 paper_delta=0.027 aspect_rel=1.088
+   20260522_210632.jpg | 11 뉴문 | normal→normal | O | 0.788 | appearance | - | best_score=0.7878 upside_total=-0.916 e_sift=-1 sift_inliers=57 tilt_signed=-0.53 paper_score=0.0 paper_delta=0.0 aspect_rel=0.901
+   20260522_210632.jpg | 12 비교정치 | normal→normal | O | 0.811 | appearance | - | best_score=0.8107 upside_total=-0.863 e_sift=-1 sift_inliers=56 tilt_signed=-0.95 paper_score=0.232 paper_delta=0.03 aspect_rel=0.98
+   20260522_210632.jpg | 13 친구들 | paper|tilted|unknown|upside→paper | O | 0.723 | position | matched_by_position | best_score=-0.0491 sift_inliers=16 tilt_signed=1.76 paper_score=0.723 paper_delta=0.508 aspect_rel=1.818
+   20260522_210632.jpg | 14 그건사랑 | absent|normal|unknown→unknown | O | 0.3 | position | orientation_by_sift_only,low_confidence,detected_by_fallback,matched_by_position | best_score=0.0758 sift_inliers=4 tilt_signed=1.79 paper_score=0.19 paper_delta=-0.129 aspect_rel=1.128
+   20260522_210632.jpg | 15 독수리 | paper|tilted|unknown→unknown | O | 0.3 | position | orientation_by_sift_only,low_confidence,detected_by_fallback,matched_by_position | best_score=-0.0517 sift_inliers=0 tilt_signed=2.0 paper_score=0.235 paper_delta=-0.008 aspect_rel=0.63
+   20260522_210632.jpg | 16 시골의사 | normal|paper|unknown→paper | O | 0.5 | position | matched_by_position | best_score=-0.0202 sift_inliers=7 tilt_signed=2.72 paper_score=0.42 paper_delta=0.42 aspect_rel=1.41
+   20260522_210632.jpg | 17 나는나를 | normal→normal | O | 0.672 | appearance | - | best_score=0.6716 upside_total=-0.9 e_sift=-1 sift_inliers=113 tilt_signed=-0.15 paper_score=0.0 paper_delta=0.0 aspect_rel=1.206
+   20260522_210632.jpg | 18 공자 | normal→normal | O | 0.74 | appearance | - | best_score=0.7395 upside_total=-0.821 e_sift=-1 sift_inliers=119 tilt_signed=-0.3 paper_score=0.328 paper_delta=0.01 aspect_rel=1.012
+   20260522_210632.jpg | 19 바보빅터 | normal→normal | O | 0.676 | appearance | - | best_score=0.6758 upside_total=-0.784 e_sift=-1 sift_inliers=132 tilt_signed=0.01 paper_score=0.296 paper_delta=0.022 aspect_rel=0.972
+   20260522_210632.jpg | 20 STRUCT | normal→normal | O | 0.817 | appearance | - | best_score=0.8173 upside_total=-0.881 e_sift=-1 sift_inliers=179 tilt_signed=-0.14 paper_score=0.137 paper_delta=0.013 aspect_rel=1.057
+   20260522_210632.jpg | 21 주체이론 | normal→normal | O | 0.837 | appearance | - | best_score=0.8371 upside_total=-0.859 e_sift=-1 sift_inliers=60 tilt_signed=0.46 paper_score=0.25 paper_delta=-0.007 aspect_rel=0.908
+   20260522_210632.jpg | 22 나무 | normal→normal | O | 0.674 | appearance | - | best_score=0.6737 upside_total=-0.781 e_sift=-1 sift_inliers=91 tilt_signed=0.04 paper_score=0.285 paper_delta=0.021 aspect_rel=0.955
+   20260522_210632.jpg | 23 소나기 | normal→normal | O | 0.635 | appearance | - | best_score=0.6345 upside_total=-0.887 e_sift=-1 sift_inliers=118 tilt_signed=0.0 paper_score=0.138 paper_delta=0.138 aspect_rel=1.38
+   20260522_210632.jpg | 24 게임 | absent|normal|unknown→unknown | O | 0.3 | position | orientation_by_sift_only,low_confidence,matched_by_position | best_score=0.2339 sift_inliers=8 tilt_signed=-4.94 paper_score=0.0 paper_delta=0.0 aspect_rel=2.89
+   20260522_210632.jpg | 25 변증법 | absent|normal|unknown→normal | O | 0.119 | sift | partial_view,orientation_by_sift_only,tilt_unchecked,low_confidence,matched_by_sift | best_score=0.1193 upside_total=-1.0 e_sift=-1 sift_inliers=30 paper_score=0.0 paper_delta=0.0 aspect_rel=2.458
+   20260522_210632.jpg | 26 글읽기 | absent|normal|unknown→paper | X | 0.5 | position | matched_by_position | best_score=-0.0069 sift_inliers=3 tilt_signed=0.89 paper_score=0.5 paper_delta=0.5 aspect_rel=2.89
+   20260522_210632.jpg | 27 바보처럼 | absent|normal|unknown→normal | O | 0.169 | sift | partial_view,orientation_by_sift_only,tilt_unchecked,low_confidence,matched_by_sift | best_score=0.1686 upside_total=-1.0 e_sift=-1 sift_inliers=13 paper_score=0.259 paper_delta=-0.018 aspect_rel=2.67
+   20260522_210632.jpg | 28 덕혜옹주 | normal→normal | O | 0.634 | appearance | - | best_score=0.6339 upside_total=-0.851 e_sift=-1 sift_inliers=25 tilt_signed=2.22 paper_score=0.212 paper_delta=0.011 aspect_rel=0.894
+   20260522_210632.jpg | 29 신약성경 | normal→normal | O | 0.5 | position | orientation_by_sift_only,low_confidence,matched_by_position,identity_by_color | best_score=0.2931 sift_inliers=6 tilt_signed=2.07 paper_score=0.0 paper_delta=0.0 aspect_rel=1.965
+   20260522_210632.jpg | 30 Che | normal→normal | O | 0.661 | appearance | - | best_score=0.6614 upside_total=-0.707 e_sift=-1 sift_inliers=23 tilt_signed=1.96 paper_score=0.0 paper_delta=0.0 aspect_rel=1.096
+   20260522_210700.jpg |  0 멈추면 | normal→normal | O | 0.621 | appearance | - | best_score=0.6206 upside_total=-0.862 e_sift=-1 sift_inliers=84 tilt_signed=0.4 paper_score=0.314 paper_delta=0.034 aspect_rel=0.858
+   20260522_210700.jpg |  1 믿음A | normal→normal | O | 0.625 | series | series_resolved | best_score=0.6247 upside_total=-0.824 e_sift=-1 sift_inliers=53 tilt_signed=0.0 paper_score=0.34 paper_delta=-0.001 aspect_rel=1.044
+   20260522_210700.jpg |  2 믿음B | normal→normal | O | 0.671 | series | series_resolved | best_score=0.6706 upside_total=-0.695 e_sift=-1 sift_inliers=50 tilt_signed=0.03 paper_score=0.34 paper_delta=0.0 aspect_rel=1.185
+   20260522_210700.jpg |  3 THINK | normal→normal | O | 0.473 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4732 upside_total=-1.0 e_sift=-1 sift_inliers=39 tilt_signed=0.74 paper_score=0.248 paper_delta=-0.015 aspect_rel=1.708
+   20260522_210700.jpg |  4 실크로드 | normal|unknown→normal | O | 0.479 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4791 upside_total=-1.0 e_sift=-1 sift_inliers=15 tilt_signed=1.12 paper_score=0.259 paper_delta=0.019 aspect_rel=0.833
+   20260522_210700.jpg |  5 귀머거리 | normal→normal | O | 0.662 | appearance | - | best_score=0.6622 upside_total=-0.833 e_sift=-1 sift_inliers=83 tilt_signed=1.72 paper_score=0.159 paper_delta=0.016 aspect_rel=1.105
+   20260522_210700.jpg |  6 외교관 | normal→normal | O | 0.868 | appearance | - | best_score=0.868 upside_total=-0.915 e_sift=-1 sift_inliers=258 tilt_signed=1.5 paper_score=0.26 paper_delta=0.003 aspect_rel=1.046
+   20260522_210700.jpg |  7 토토 | normal→normal | O | 0.758 | appearance | - | best_score=0.7576 upside_total=-0.885 e_sift=-1 sift_inliers=80 tilt_signed=1.62 paper_score=0.195 paper_delta=-0.027 aspect_rel=0.976
+   20260522_210700.jpg |  8 밤하늘 | normal→normal | O | 0.617 | appearance | - | best_score=0.6171 upside_total=-0.785 e_sift=-1 sift_inliers=32 tilt_signed=1.36 paper_score=0.136 paper_delta=0.006 aspect_rel=1.154
+   20260522_210700.jpg |  9 북극 | normal→normal | O | 0.836 | appearance | - | best_score=0.8361 upside_total=-0.877 e_sift=-1 sift_inliers=153 tilt_signed=1.69 paper_score=0.167 paper_delta=0.021 aspect_rel=0.982
+   20260522_210700.jpg | 10 색과빛 | normal→normal | O | 0.725 | appearance | - | best_score=0.7252 upside_total=-0.715 e_sift=-1 sift_inliers=62 tilt_signed=1.49 paper_score=0.261 paper_delta=0.032 aspect_rel=0.976
+   20260522_210700.jpg | 11 뉴문 | normal→normal | O | 0.777 | appearance | - | best_score=0.7772 upside_total=-0.913 e_sift=-1 sift_inliers=54 tilt_signed=0.28 paper_score=0.0 paper_delta=0.0 aspect_rel=0.946
+   20260522_210700.jpg | 12 비교정치 | paper|tilted|unknown→normal | X | 0.116 | position | orientation_by_sift_only,low_confidence,detected_by_fallback,matched_by_position,identity_weak | best_score=0.1158 sift_inliers=20 tilt_signed=2.97 paper_score=0.266 paper_delta=0.064 aspect_rel=0.593
+   20260522_210700.jpg | 13 친구들 | normal→normal | O | 0.394 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.3942 upside_total=-1.0 e_sift=-1 sift_inliers=38 tilt_signed=0.46 paper_score=0.132 paper_delta=-0.083 aspect_rel=1.369
+   20260522_210700.jpg | 14 그건사랑 | normal→normal | O | 0.699 | appearance | - | best_score=0.6993 upside_total=-0.879 e_sift=-1 sift_inliers=118 tilt_signed=0.5 paper_score=0.318 paper_delta=-0.001 aspect_rel=1.099
+   20260522_210700.jpg | 15 독수리 | paper|tilted|unknown→paper | O | 0.532 | position | matched_by_position | best_score=-0.0719 sift_inliers=0 tilt_signed=2.4 paper_score=0.532 paper_delta=0.289 aspect_rel=1.77
+   20260522_210700.jpg | 16 시골의사 | normal→normal | O | 0.112 | sift | partial_view,orientation_by_sift_only,tilt_unchecked,low_confidence,matched_by_sift | best_score=0.1124 upside_total=-1.0 e_sift=-1 sift_inliers=44 paper_score=0.536 paper_delta=0.536 aspect_rel=5.796
+   20260522_210700.jpg | 17 나는나를 | normal→normal | O | 0.757 | appearance | - | best_score=0.7566 upside_total=-0.87 e_sift=-1 sift_inliers=190 tilt_signed=-0.24 paper_score=0.0 paper_delta=0.0 aspect_rel=0.928
+   20260522_210700.jpg | 18 공자 | normal→normal | O | 0.754 | appearance | - | best_score=0.7545 upside_total=-0.837 e_sift=-1 sift_inliers=112 tilt_signed=-0.4 paper_score=0.331 paper_delta=0.013 aspect_rel=1.021
+   20260522_210700.jpg | 19 바보빅터 | normal→normal | O | 0.647 | appearance | - | best_score=0.6466 upside_total=-0.791 e_sift=-1 sift_inliers=130 tilt_signed=-0.05 paper_score=0.296 paper_delta=0.022 aspect_rel=1.013
+   20260522_210700.jpg | 20 STRUCT | normal→normal | O | 0.709 | appearance | - | best_score=0.7086 upside_total=-0.832 e_sift=-1 sift_inliers=166 tilt_signed=0.36 paper_score=0.136 paper_delta=0.011 aspect_rel=0.994
+   20260522_210700.jpg | 21 주체이론 | normal→normal | O | 0.777 | appearance | - | best_score=0.7773 upside_total=-0.853 e_sift=-1 sift_inliers=37 tilt_signed=-0.12 paper_score=0.25 paper_delta=-0.007 aspect_rel=0.887
+   20260522_210700.jpg | 22 나무 | absent|paper|stack|tilted|unknown→unknown | O | 0.3 | recovered_roi | present_unmatched | best_score=-0.0294 paper_score=0.203
+   20260522_210700.jpg | 23 소나기 | normal→normal | O | 0.278 | sift | partial_view,orientation_by_sift_only,tilt_unchecked,low_confidence,matched_by_sift | best_score=0.278 upside_total=-1.0 e_sift=-1 sift_inliers=103 paper_score=0.0 paper_delta=0.0 aspect_rel=2.391
+   20260522_210700.jpg | 24 게임 | normal→normal | O | 0.454 | sift | partial_view,orientation_by_sift_only,tilt_unchecked,low_confidence,matched_by_sift | best_score=0.4536 upside_total=-1.0 e_sift=-1 sift_inliers=71 paper_score=0.0 paper_delta=0.0 aspect_rel=2.578
+   20260522_210700.jpg | 25 변증법 | normal→normal | O | 0.515 | appearance | - | best_score=0.5151 upside_total=-0.731 e_sift=-1 sift_inliers=84 tilt_signed=0.88 paper_score=0.0 paper_delta=0.0 aspect_rel=0.851
+   20260522_210700.jpg | 26 글읽기 | normal→normal | O | 0.602 | appearance | - | best_score=0.6022 upside_total=-0.84 e_sift=-1 sift_inliers=19 tilt_signed=1.31 paper_score=0.0 paper_delta=0.0 aspect_rel=1.289
+   20260522_210700.jpg | 27 바보처럼 | normal→normal | O | 0.592 | appearance | - | best_score=0.5924 upside_total=-0.762 e_sift=-1 sift_inliers=108 tilt_signed=1.09 paper_score=0.291 paper_delta=0.014 aspect_rel=0.752
+   20260522_210700.jpg | 28 덕혜옹주 | normal→normal | O | 0.804 | appearance | - | best_score=0.8043 upside_total=-0.902 e_sift=-1 sift_inliers=102 tilt_signed=0.0 paper_score=0.204 paper_delta=0.003 aspect_rel=1.121
+   20260522_210700.jpg | 29 신약성경 | normal→normal | O | 0.293 | sift | orientation_by_sift_only,low_confidence,detected_by_fallback,matched_by_sift | best_score=0.2927 upside_total=-1.0 e_sift=-1 sift_inliers=32 tilt_signed=0.99 paper_score=0.0 paper_delta=0.0 aspect_rel=0.586
+   20260522_210700.jpg | 30 Che | normal→normal | O | 0.639 | appearance | - | best_score=0.639 upside_total=-0.666 e_sift=-1 sift_inliers=47 tilt_signed=1.02 paper_score=0.0 paper_delta=0.0 aspect_rel=1.119
+   20260522_210803.jpg |  0 | normal→normal | O | 0.712 | appearance | - | best_score=0.7123 upside_total=-0.766 e_sift=-1 sift_inliers=147 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=0.976
+   20260522_210803.jpg |  1 | normal→normal | O | 0.76 | appearance | - | best_score=0.7599 upside_total=-0.826 e_sift=-1 sift_inliers=138 tilt_signed=1.35 paper_score=0.26 paper_delta=0.006 aspect_rel=0.945
+   20260522_210803.jpg |  2 | tilted→tilted | O | 0.581 | appearance | - | best_score=0.8342 upside_total=-0.959 e_sift=-1 sift_inliers=116 tilt_signed=10.42 paper_score=0.0 paper_delta=-0.132 aspect_rel=0.897
+   20260522_210803.jpg |  3 | normal→normal | O | 0.6 | appearance | leaning_with_neighbor | best_score=0.7677 upside_total=-0.848 e_sift=-1 sift_inliers=47 tilt_signed=8.76 paper_score=0.299 paper_delta=-0.002 aspect_rel=0.89
+   20260522_210803.jpg |  4 | normal→normal | O | 0.6 | appearance | leaning_with_neighbor | best_score=0.6819 upside_total=-0.741 e_sift=-1 sift_inliers=142 tilt_signed=8.02 paper_score=0.154 paper_delta=-0.01 aspect_rel=0.861
+   20260522_210803.jpg |  5 | normal→normal | O | 0.758 | appearance | - | best_score=0.7582 upside_total=-0.876 e_sift=-1 sift_inliers=160 tilt_signed=7.76 paper_score=0.207 paper_delta=0.005 aspect_rel=0.894
+   20260522_210803.jpg |  6 | normal→normal | O | 0.71 | appearance | - | best_score=0.7101 upside_total=-0.806 e_sift=-1 sift_inliers=66 tilt_signed=7.29 paper_score=0.0 paper_delta=0.0 aspect_rel=0.918
+   20260522_210803.jpg |  7 | normal→normal | O | 0.751 | appearance | - | best_score=0.7511 upside_total=-0.915 e_sift=-1 sift_inliers=54 tilt_signed=5.51 paper_score=0.0 paper_delta=0.0 aspect_rel=0.809
+   20260522_210803.jpg |  8 | normal→normal | O | 0.763 | appearance | - | best_score=0.7628 upside_total=-0.768 e_sift=-1 sift_inliers=68 tilt_signed=4.28 paper_score=0.0 paper_delta=0.0 aspect_rel=0.988
+   20260522_210803.jpg |  9 | normal→normal | O | 0.718 | appearance | - | best_score=0.7177 upside_total=-0.822 e_sift=-1 sift_inliers=120 tilt_signed=4.24 paper_score=0.274 paper_delta=0.052 aspect_rel=0.922
+   20260522_210803.jpg | 10 | normal→normal | O | 0.693 | appearance | - | best_score=0.6925 upside_total=-0.801 e_sift=-1 sift_inliers=99 tilt_signed=1.95 paper_score=0.0 paper_delta=0.0 aspect_rel=0.956
+   20260522_210803.jpg | 11 | normal→normal | O | 0.66 | appearance | - | best_score=0.6601 upside_total=-0.776 e_sift=-1 sift_inliers=73 tilt_signed=1.93 paper_score=0.266 paper_delta=0.019 aspect_rel=0.907
+   20260522_210803.jpg | 12 | normal→normal | O | 0.854 | appearance | - | best_score=0.8544 upside_total=-0.919 e_sift=-1 sift_inliers=140 tilt_signed=0.0 paper_score=0.151 paper_delta=0.151 aspect_rel=0.938
+   20260522_210814.jpg |  0 | normal→normal | O | 0.73 | appearance | - | best_score=0.7302 upside_total=-0.739 e_sift=-1 sift_inliers=142 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=0.992
+   20260522_210814.jpg |  1 | normal→normal | O | 0.724 | appearance | - | best_score=0.7242 upside_total=-0.772 e_sift=-1 sift_inliers=126 tilt_signed=-0.13 paper_score=0.252 paper_delta=-0.002 aspect_rel=0.937
+   20260522_210814.jpg |  2 | normal→normal | O | 0.792 | appearance | - | best_score=0.7924 upside_total=-0.93 e_sift=-1 sift_inliers=120 tilt_signed=0.24 paper_score=0.157 paper_delta=0.025 aspect_rel=0.895
+   20260522_210814.jpg |  3 | normal→normal | O | 0.788 | appearance | - | best_score=0.788 upside_total=-0.832 e_sift=-1 sift_inliers=25 tilt_signed=0.15 paper_score=0.288 paper_delta=-0.013 aspect_rel=1.112
+   20260522_210814.jpg |  4 | normal→normal | O | 0.744 | appearance | - | best_score=0.7438 upside_total=-0.873 e_sift=-1 sift_inliers=242 tilt_signed=0.72 paper_score=0.17 paper_delta=0.006 aspect_rel=0.96
+   20260522_210814.jpg |  5 | tilted→tilted | O | 0.564 | appearance | - | best_score=0.7068 upside_total=-0.831 e_sift=-1 sift_inliers=111 tilt_signed=9.91 paper_score=0.235 paper_delta=0.033 aspect_rel=0.901
+   20260522_210814.jpg |  6 | normal→normal | O | 0.6 | appearance | leaning_with_neighbor | best_score=0.7744 upside_total=-0.846 e_sift=-1 sift_inliers=69 tilt_signed=9.24 paper_score=0.0 paper_delta=0.0 aspect_rel=0.894
+   20260522_210814.jpg |  7 | normal→normal | O | 0.763 | appearance | - | best_score=0.7629 upside_total=-0.906 e_sift=-1 sift_inliers=76 tilt_signed=7.42 paper_score=0.0 paper_delta=0.0 aspect_rel=0.912
+   20260522_210814.jpg |  8 | normal→normal | O | 0.746 | appearance | - | best_score=0.7465 upside_total=-0.752 e_sift=-1 sift_inliers=47 tilt_signed=7.98 paper_score=0.0 paper_delta=0.0 aspect_rel=0.816
+   20260522_210814.jpg |  9 | normal→normal | O | 0.738 | appearance | - | best_score=0.738 upside_total=-0.803 e_sift=-1 sift_inliers=142 tilt_signed=4.91 paper_score=0.249 paper_delta=0.027 aspect_rel=1.011
+   20260522_210814.jpg | 10 | normal→normal | O | 0.776 | appearance | - | best_score=0.7758 upside_total=-0.855 e_sift=-1 sift_inliers=178 tilt_signed=2.03 paper_score=0.0 paper_delta=0.0 aspect_rel=0.968
+   20260522_210814.jpg | 11 | normal→normal | O | 0.719 | appearance | - | best_score=0.7186 upside_total=-0.764 e_sift=-1 sift_inliers=102 tilt_signed=3.7 paper_score=0.212 paper_delta=-0.034 aspect_rel=1.01
+   20260522_210814.jpg | 12 | normal→normal | O | 0.836 | appearance | - | best_score=0.8357 upside_total=-0.889 e_sift=-1 sift_inliers=162 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=0.992
+   20260522_210824.jpg |  0 | normal|paper|tilted|unknown→unknown | O | 0.3 | redetected | present_unmatched | best_score=0.1325 paper_score=0.0
+   20260522_210824.jpg |  1 | tilted→tilted | O | 0.99 | appearance | - | best_score=0.7576 upside_total=-0.919 e_sift=-1 sift_inliers=106 tilt_signed=29.14 paper_score=0.0 paper_delta=-0.125 aspect_rel=1.096
+   20260522_210824.jpg |  2 | absent|tilted|unknown→unknown | O | 0.3 | recovered_roi | present_unmatched | best_score=0.0451 paper_score=0.175
+   20260522_210824.jpg |  3 | tilted→tilted | O | 0.99 | appearance | - | best_score=0.6717 upside_total=-0.833 e_sift=-1 sift_inliers=118 tilt_signed=30.61 paper_score=0.175 paper_delta=0.013 aspect_rel=1.114
+   20260522_210824.jpg |  4 | tilted→tilted | O | 0.99 | sift | orientation_by_sift_only,matched_by_sift | best_score=0.5125 upside_total=-1.0 e_sift=-1 sift_inliers=40 tilt_signed=30.18 paper_score=0.316 paper_delta=0.001 aspect_rel=0.968
+   20260522_210824.jpg |  5 | tilted→tilted | O | 0.958 | redetected | orientation_by_sift_only,recovered,identity_by_sift | best_score=0.3988 upside_total=-1.0 e_sift=-1 sift_inliers=69 tilt_signed=21.74 paper_score=0.14 paper_delta=0.14 aspect_rel=1.33
+   20260522_210824.jpg |  6 | tilted|upside→upside | O | 0.94 | appearance | orientation_by_sift_only,orientation_by_sift_strong | best_score=0.5672 upside_total=1.0 e_sift=1 sift_inliers=68 tilt_signed=27.75 paper_score=0.0 paper_delta=0.0 aspect_rel=1.001
+   20260522_210824.jpg |  7 | tilted→tilted | O | 0.99 | appearance | - | best_score=0.5941 upside_total=-0.801 e_sift=-1 sift_inliers=33 tilt_signed=28.71 paper_score=0.144 paper_delta=-0.015 aspect_rel=1.067
+   20260522_210824.jpg |  8 | tilted→tilted | O | 0.99 | appearance | - | best_score=0.6651 upside_total=-0.91 e_sift=-1 sift_inliers=46 tilt_signed=27.12 paper_score=0.175 paper_delta=0.0 aspect_rel=1.1
+   20260522_210824.jpg |  9 | tilted→tilted | O | 0.99 | series | series_resolved | best_score=0.6367 upside_total=-0.887 e_sift=-1 sift_inliers=128 tilt_signed=24.97 paper_score=0.147 paper_delta=0.015 aspect_rel=1.141
+   20260522_210824.jpg | 10 | normal→normal | O | 0.855 | appearance | - | best_score=0.8547 upside_total=-0.872 e_sift=-1 sift_inliers=81 tilt_signed=1.94 paper_score=0.31 paper_delta=0.005 aspect_rel=0.962
+   20260522_210824.jpg | 11 | normal→normal | O | 0.796 | appearance | - | best_score=0.7956 upside_total=-0.761 e_sift=-1 sift_inliers=45 tilt_signed=1.01 paper_score=0.155 paper_delta=-0.0 aspect_rel=1.231
+   20260522_210824.jpg | 12 | normal→normal | O | 0.542 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.5418 upside_total=-1.0 e_sift=-1 sift_inliers=17 tilt_signed=-1.01 paper_score=0.0 paper_delta=0.0 aspect_rel=0.682
+   20260522_210824.jpg | 13 | normal→normal | O | 0.733 | appearance | - | best_score=0.7326 upside_total=-0.88 e_sift=-1 sift_inliers=20 tilt_signed=-1.22 paper_score=0.126 paper_delta=-0.006 aspect_rel=1.253
+   20260522_210840.jpg |  0 | normal→normal | O | 0.803 | appearance | - | best_score=0.8034 upside_total=-0.839 e_sift=-1 sift_inliers=139 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.145
+   20260522_210840.jpg |  1 | normal→normal | O | 0.76 | appearance | - | best_score=0.7598 upside_total=-0.81 e_sift=-1 sift_inliers=88 tilt_signed=-0.72 paper_score=0.0 paper_delta=-0.125 aspect_rel=0.954
+   20260522_210840.jpg |  2 | normal→normal | O | 0.6 | sift | orientation_by_sift_only,matched_by_sift,leaning_with_neighbor | best_score=0.3366 upside_total=-1.0 e_sift=-1 sift_inliers=14 tilt_signed=-9.54 paper_score=0.214 paper_delta=0.083 aspect_rel=1.548
+   20260522_210840.jpg |  3 | normal→normal | O | 0.571 | appearance | - | best_score=0.5711 upside_total=-0.846 e_sift=-1 sift_inliers=78 tilt_signed=-7.41 paper_score=0.17 paper_delta=0.008 aspect_rel=1.154
+   20260522_210840.jpg |  4 | normal|tilted→tilted | O | 0.758 | appearance | - | best_score=0.7696 upside_total=-0.827 e_sift=-1 sift_inliers=80 tilt_signed=-15.75 paper_score=0.317 paper_delta=0.002 aspect_rel=1.094
+   20260522_210840.jpg |  5 | normal|tilted→tilted | O | 0.736 | series | series_resolved | best_score=0.8373 upside_total=-0.94 e_sift=-1 sift_inliers=177 tilt_signed=-15.09 paper_score=0.0 paper_delta=0.0 aspect_rel=0.993
+   20260522_210840.jpg |  6 | normal|tilted|upside→upside | O | 0.99 | appearance | orientation_by_sift_strong | best_score=0.759 upside_total=1.0 e_sift=1 sift_inliers=108 tilt_signed=-24.0 paper_score=0.0 paper_delta=0.0 aspect_rel=1.017
+   20260522_210840.jpg |  7 | tilted→tilted | O | 0.99 | appearance | - | best_score=0.7398 upside_total=-0.868 e_sift=-1 sift_inliers=54 tilt_signed=-22.9 paper_score=0.162 paper_delta=0.004 aspect_rel=1.147
+   20260522_210840.jpg |  8 | tilted→tilted | O | 0.631 | appearance | - | best_score=0.6373 upside_total=-0.892 e_sift=-1 sift_inliers=61 tilt_signed=-11.92 paper_score=0.175 paper_delta=0.0 aspect_rel=1.07
+   20260522_210840.jpg |  9 | normal→normal | O | 0.6 | series | series_resolved,leaning_with_neighbor | best_score=0.6338 upside_total=-0.877 e_sift=-1 sift_inliers=129 tilt_signed=-10.75 paper_score=0.13 paper_delta=-0.002 aspect_rel=1.14
+   20260522_210840.jpg | 10 | normal→normal | O | 0.6 | appearance | leaning_with_neighbor | best_score=0.7908 upside_total=-0.81 e_sift=-1 sift_inliers=80 tilt_signed=-8.43 paper_score=0.311 paper_delta=0.007 aspect_rel=1.059
+   20260522_210840.jpg | 11 | normal→normal | O | 0.832 | appearance | - | best_score=0.8319 upside_total=-0.848 e_sift=-1 sift_inliers=68 tilt_signed=-5.72 paper_score=0.159 paper_delta=0.003 aspect_rel=1.073
+   20260522_210840.jpg | 12 | normal→normal | O | 0.716 | appearance | - | best_score=0.7156 upside_total=-0.71 e_sift=-1 sift_inliers=41 tilt_signed=-2.35 paper_score=0.0 paper_delta=0.0 aspect_rel=1.102
+   20260522_210840.jpg | 13 | normal→normal | O | 0.763 | appearance | - | best_score=0.763 upside_total=-0.931 e_sift=-1 sift_inliers=48 tilt_signed=0.0 paper_score=0.143 paper_delta=0.012 aspect_rel=0.967
+   20260522_210901.jpg |  0 멈추면 | normal→normal | O | 0.533 | appearance | - | best_score=0.533 upside_total=-0.801 e_sift=-1 sift_inliers=69 tilt_signed=-6.95 paper_score=0.297 paper_delta=0.017 aspect_rel=0.847
+   20260522_210901.jpg |  1 믿음A | normal→normal | O | 0.45 | series | orientation_by_sift_only,low_confidence,series_resolved,series_ambiguous | best_score=0.4787 upside_total=-1.0 e_sift=-1 sift_inliers=36 tilt_signed=-6.41 paper_score=0.337 paper_delta=-0.003 aspect_rel=1.033
+   20260522_210901.jpg |  2 믿음B | normal→normal | O | 0.671 | series | series_resolved | best_score=0.6714 upside_total=-0.766 e_sift=-1 sift_inliers=51 tilt_signed=-7.04 paper_score=0.341 paper_delta=0.002 aspect_rel=1.344
+   20260522_210901.jpg |  3 THINK | normal→normal | O | 0.411 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4107 upside_total=-1.0 e_sift=-1 sift_inliers=32 tilt_signed=-5.35 paper_score=0.262 paper_delta=-0.001 aspect_rel=1.688
+   20260522_210901.jpg |  4 실크로드 | absent|normal|unknown→unknown | O | 0.3 | redetected | present_unmatched | best_score=0.0627 paper_score=0.222
+   20260522_210901.jpg |  5 귀머거리 | normal→normal | O | 0.77 | appearance | - | best_score=0.7699 upside_total=-0.856 e_sift=-1 sift_inliers=115 tilt_signed=-4.16 paper_score=0.153 paper_delta=0.011 aspect_rel=1.046
+   20260522_210901.jpg |  6 외교관 | normal→normal | O | 0.79 | appearance | - | best_score=0.7896 upside_total=-0.877 e_sift=-1 sift_inliers=153 tilt_signed=-4.28 paper_score=0.268 paper_delta=0.012 aspect_rel=1.06
+   20260522_210901.jpg |  7 토토 | normal→normal | O | 0.743 | appearance | - | best_score=0.7428 upside_total=-0.853 e_sift=-1 sift_inliers=94 tilt_signed=-3.78 paper_score=0.207 paper_delta=-0.015 aspect_rel=1.011
+   20260522_210901.jpg |  8 밤하늘 | normal|tilted→normal | O | 0.565 | appearance | - | best_score=0.5647 upside_total=-0.798 e_sift=-1 sift_inliers=53 tilt_signed=-3.78 paper_score=0.169 paper_delta=0.039 aspect_rel=1.405
+   20260522_210901.jpg |  9 북극 | tilted→tilted | O | 0.504 | appearance | - | best_score=0.5732 upside_total=-0.771 e_sift=-1 sift_inliers=68 tilt_signed=8.11 paper_score=0.14 paper_delta=-0.006 aspect_rel=1.407
+   20260522_210901.jpg | 10 색과빛 | normal|tilted→normal | O | 0.6 | appearance | leaning_with_neighbor | best_score=0.6672 upside_total=-0.653 e_sift=-1 sift_inliers=41 tilt_signed=8.1 paper_score=0.232 paper_delta=0.003 aspect_rel=1.071
+   20260522_210901.jpg | 11 뉴문 | normal|tilted→normal | O | 0.743 | appearance | - | best_score=0.7429 upside_total=-0.9 e_sift=-1 sift_inliers=42 tilt_signed=6.85 paper_score=0.0 paper_delta=0.0 aspect_rel=0.84
+   20260522_210901.jpg | 12 비교정치 | normal|tilted→normal | O | 0.79 | appearance | - | best_score=0.79 upside_total=-0.902 e_sift=-1 sift_inliers=52 tilt_signed=5.47 paper_score=0.212 paper_delta=0.009 aspect_rel=1.023
+   20260522_210901.jpg | 13 친구들 | normal|tilted→normal | O | 0.642 | appearance | - | best_score=0.6416 upside_total=-0.824 e_sift=-1 sift_inliers=173 tilt_signed=4.92 paper_score=0.195 paper_delta=-0.02 aspect_rel=1.237
+   20260522_210901.jpg | 14 그건사랑 | normal|tilted→normal | O | 0.492 | appearance | orientation_by_sift_only,low_confidence | best_score=0.4921 upside_total=-1.0 e_sift=-1 sift_inliers=43 tilt_signed=3.89 paper_score=0.316 paper_delta=-0.003 aspect_rel=1.403
+   20260522_210901.jpg | 15 독수리 | normal|tilted→normal | O | 0.545 | appearance | - | best_score=0.5445 upside_total=-0.821 e_sift=-1 sift_inliers=53 tilt_signed=3.28 paper_score=0.233 paper_delta=-0.011 aspect_rel=1.151
+   20260522_210901.jpg | 16 시골의사 | normal→normal | O | 0.625 | appearance | - | best_score=0.6248 upside_total=-0.838 e_sift=-1 sift_inliers=44 tilt_signed=2.8 paper_score=0.0 paper_delta=0.0 aspect_rel=1.277
+   20260522_210901.jpg | 17 나는나를 | normal→normal | O | 0.759 | appearance | - | best_score=0.7594 upside_total=-0.899 e_sift=-1 sift_inliers=226 tilt_signed=0.84 paper_score=0.0 paper_delta=0.0 aspect_rel=0.909
+   20260522_210901.jpg | 18 공자 | normal→normal | O | 0.652 | appearance | - | best_score=0.6515 upside_total=-0.848 e_sift=-1 sift_inliers=110 tilt_signed=0.87 paper_score=0.313 paper_delta=-0.005 aspect_rel=1.008
+   20260522_210901.jpg | 19 바보빅터 | normal→normal | O | 0.601 | appearance | - | best_score=0.601 upside_total=-0.784 e_sift=-1 sift_inliers=139 tilt_signed=1.19 paper_score=0.269 paper_delta=-0.004 aspect_rel=0.934
+   20260522_210901.jpg | 20 STRUCT | normal→normal | O | 0.72 | appearance | - | best_score=0.7198 upside_total=-0.814 e_sift=-1 sift_inliers=197 tilt_signed=1.74 paper_score=0.127 paper_delta=0.002 aspect_rel=1.034
+   20260522_210901.jpg | 21 주체이론 | normal→normal | O | 0.759 | appearance | - | best_score=0.759 upside_total=-0.795 e_sift=-1 sift_inliers=49 tilt_signed=0.82 paper_score=0.225 paper_delta=-0.032 aspect_rel=0.889
+   20260522_210901.jpg | 22 나무 | normal|unknown→normal | O | 0.629 | appearance | - | best_score=0.6288 upside_total=-0.822 e_sift=-1 sift_inliers=113 tilt_signed=-1.01 paper_score=0.274 paper_delta=0.01 aspect_rel=0.884
+   20260522_210901.jpg | 23 소나기 | normal→normal | O | 0.784 | appearance | - | best_score=0.784 upside_total=-0.86 e_sift=-1 sift_inliers=146 tilt_signed=-0.8 paper_score=0.0 paper_delta=0.0 aspect_rel=1.018
+   20260522_210901.jpg | 24 게임 | normal→normal | O | 0.857 | appearance | - | best_score=0.857 upside_total=-0.879 e_sift=-1 sift_inliers=155 tilt_signed=0.0 paper_score=0.0 paper_delta=0.0 aspect_rel=0.91
+   20260522_210901.jpg | 25 변증법 | normal→normal | O | 0.634 | appearance | - | best_score=0.6343 upside_total=-0.814 e_sift=-1 sift_inliers=177 tilt_signed=-0.24 paper_score=0.0 paper_delta=0.0 aspect_rel=0.871
+   20260522_210901.jpg | 26 글읽기 | normal→normal | O | 0.603 | appearance | - | best_score=0.6026 upside_total=-0.837 e_sift=-1 sift_inliers=31 tilt_signed=0.18 paper_score=0.0 paper_delta=0.0 aspect_rel=1.242
+   20260522_210901.jpg | 27 바보처럼 | normal→normal | O | 0.456 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.4558 upside_total=-1.0 e_sift=-1 sift_inliers=69 tilt_signed=0.11 paper_score=0.269 paper_delta=-0.008 aspect_rel=0.703
+   20260522_210901.jpg | 28 덕혜옹주 | normal→normal | O | 0.788 | appearance | - | best_score=0.7884 upside_total=-0.897 e_sift=-1 sift_inliers=80 tilt_signed=-0.73 paper_score=0.205 paper_delta=0.004 aspect_rel=1.087
+   20260522_210901.jpg | 29 신약성경 | normal→normal | O | 0.781 | appearance | - | best_score=0.781 upside_total=-0.824 e_sift=-1 sift_inliers=23 tilt_signed=-0.23 paper_score=0.0 paper_delta=0.0 aspect_rel=1.149
+   20260522_210901.jpg | 30 Che | normal|tilted→normal | O | 0.669 | appearance | - | best_score=0.6692 upside_total=-0.728 e_sift=-1 sift_inliers=80 tilt_signed=-0.5 paper_score=0.0 paper_delta=0.0 aspect_rel=1.1
+   20260522_210909.jpg |  0 멈추면 | normal|tilted→normal | O | 0.6 | appearance | leaning_with_neighbor | best_score=0.5611 upside_total=-0.835 e_sift=-1 sift_inliers=64 tilt_signed=8.02 paper_score=0.308 paper_delta=0.027 aspect_rel=1.045
+   20260522_210909.jpg |  1 믿음A | normal|tilted→normal | O | 0.651 | series | series_resolved | best_score=0.6506 upside_total=-0.769 e_sift=-1 sift_inliers=42 tilt_signed=7.84 paper_score=0.333 paper_delta=-0.007 aspect_rel=1.114
+   20260522_210909.jpg |  2 믿음B | normal|tilted→normal | O | 0.582 | series | series_resolved | best_score=0.5816 upside_total=-0.779 e_sift=-1 sift_inliers=40 tilt_signed=7.96 paper_score=0.334 paper_delta=-0.005 aspect_rel=1.159
+   20260522_210909.jpg |  3 THINK | normal|tilted→normal | O | 0.676 | appearance | - | best_score=0.6757 upside_total=-0.876 e_sift=-1 sift_inliers=57 tilt_signed=7.07 paper_score=0.24 paper_delta=-0.024 aspect_rel=1.377
+   20260522_210909.jpg |  4 실크로드 | normal|tilted→normal | O | 0.557 | appearance | - | best_score=0.557 upside_total=-0.721 e_sift=-1 sift_inliers=67 tilt_signed=7.66 paper_score=0.246 paper_delta=0.006 aspect_rel=0.952
+   20260522_210909.jpg |  5 귀머거리 | normal|tilted→normal | O | 0.674 | appearance | - | best_score=0.6739 upside_total=-0.877 e_sift=-1 sift_inliers=129 tilt_signed=7.63 paper_score=0.0 paper_delta=-0.143 aspect_rel=1.022
+   20260522_210909.jpg |  6 외교관 | normal|tilted→normal | O | 0.627 | appearance | - | best_score=0.6269 upside_total=-0.89 e_sift=-1 sift_inliers=222 tilt_signed=6.56 paper_score=0.278 paper_delta=0.022 aspect_rel=0.957
+   20260522_210909.jpg |  7 토토 | normal|tilted→normal | O | 0.288 | sift | orientation_by_sift_only,low_confidence,matched_by_sift | best_score=0.2877 upside_total=-1.0 e_sift=-1 sift_inliers=44 tilt_signed=6.84 paper_score=0.187 paper_delta=-0.034 aspect_rel=0.902
+   20260522_210909.jpg |  8 밤하늘 | normal|tilted→normal | O | 0.508 | appearance | - | best_score=0.5076 upside_total=-0.882 e_sift=-1 sift_inliers=63 tilt_signed=7.92 paper_score=0.125 paper_delta=-0.005 aspect_rel=1.2
+   20260522_210909.jpg |  9 북극 | normal|tilted→normal | O | 0.705 | appearance | - | best_score=0.705 upside_total=-0.795 e_sift=-1 sift_inliers=98 tilt_signed=7.48 paper_score=0.15 paper_delta=0.004 aspect_rel=1.095
+   20260522_210909.jpg | 10 색과빛 | normal|tilted→normal | O | 0.647 | appearance | - | best_score=0.6466 upside_total=-0.664 e_sift=-1 sift_inliers=42 tilt_signed=7.47 paper_score=0.225 paper_delta=-0.005 aspect_rel=1.034
+   20260522_210909.jpg | 11 뉴문 | normal|tilted→normal | O | 0.759 | appearance | - | best_score=0.7588 upside_total=-0.892 e_sift=-1 sift_inliers=54 tilt_signed=6.54 paper_score=0.0 paper_delta=0.0 aspect_rel=0.857
+   20260522_210909.jpg | 12 비교정치 | normal|tilted→normal | O | 0.783 | appearance | - | best_score=0.7834 upside_total=-0.885 e_sift=-1 sift_inliers=54 tilt_signed=6.04 paper_score=0.217 paper_delta=0.014 aspect_rel=0.928
+   20260522_210909.jpg | 13 친구들 | normal|tilted→normal | O | 0.71 | appearance | - | best_score=0.7105 upside_total=-0.855 e_sift=-1 sift_inliers=261 tilt_signed=6.54 paper_score=0.223 paper_delta=0.008 aspect_rel=0.995
+   20260522_210909.jpg | 14 그건사랑 | normal|tilted→normal | O | 0.518 | appearance | - | best_score=0.5178 upside_total=-0.786 e_sift=-1 sift_inliers=86 tilt_signed=6.75 paper_score=0.324 paper_delta=0.005 aspect_rel=1.166
+   20260522_210909.jpg | 15 독수리 | normal|tilted→normal | O | 0.522 | appearance | - | best_score=0.5221 upside_total=-0.835 e_sift=-1 sift_inliers=79 tilt_signed=6.49 paper_score=0.234 paper_delta=-0.009 aspect_rel=0.907
+   20260522_210909.jpg | 16 시골의사 | normal|tilted→normal | O | 0.664 | appearance | - | best_score=0.6641 upside_total=-0.871 e_sift=-1 sift_inliers=96 tilt_signed=6.44 paper_score=0.0 paper_delta=0.0 aspect_rel=1.114
+   20260522_210909.jpg | 17 나는나를 | normal|tilted→normal | O | 0.771 | appearance | - | best_score=0.7712 upside_total=-0.908 e_sift=-1 sift_inliers=289 tilt_signed=6.39 paper_score=0.0 paper_delta=0.0 aspect_rel=0.933
+   20260522_210909.jpg | 18 공자 | normal|tilted→normal | O | 0.625 | appearance | - | best_score=0.6247 upside_total=-0.781 e_sift=-1 sift_inliers=108 tilt_signed=6.71 paper_score=0.314 paper_delta=-0.003 aspect_rel=0.943
+   20260522_210909.jpg | 19 바보빅터 | normal|tilted→normal | O | 0.569 | appearance | - | best_score=0.5694 upside_total=-0.755 e_sift=-1 sift_inliers=124 tilt_signed=7.21 paper_score=0.273 paper_delta=-0.001 aspect_rel=0.974
+   20260522_210909.jpg | 20 STRUCT | normal|tilted→normal | O | 0.727 | appearance | - | best_score=0.7267 upside_total=-0.82 e_sift=-1 sift_inliers=232 tilt_signed=6.05 paper_score=0.123 paper_delta=-0.002 aspect_rel=0.926
+   20260522_210909.jpg | 21 주체이론 | normal|tilted→normal | O | 0.782 | appearance | - | best_score=0.7825 upside_total=-0.807 e_sift=-1 sift_inliers=52 tilt_signed=7.95 paper_score=0.226 paper_delta=-0.031 aspect_rel=0.864
+   20260522_210909.jpg | 22 나무 | normal|tilted→normal | O | 0.717 | appearance | - | best_score=0.7171 upside_total=-0.879 e_sift=-1 sift_inliers=105 tilt_signed=6.86 paper_score=0.263 paper_delta=-0.001 aspect_rel=1.059
+   20260522_210909.jpg | 23 소나기 | normal|tilted→normal | O | 0.623 | appearance | - | best_score=0.6233 upside_total=-0.833 e_sift=-1 sift_inliers=131 tilt_signed=7.57 paper_score=0.0 paper_delta=0.0 aspect_rel=0.995
+   20260522_210909.jpg | 24 게임 | normal|tilted→normal | O | 0.6 | appearance | leaning_with_neighbor | best_score=0.7916 upside_total=-0.872 e_sift=-1 sift_inliers=154 tilt_signed=8.05 paper_score=0.0 paper_delta=0.0 aspect_rel=0.941
+   20260522_210909.jpg | 25 변증법 | normal|tilted→normal | O | 0.504 | appearance | - | best_score=0.5036 upside_total=-0.679 e_sift=-1 sift_inliers=64 tilt_signed=7.87 paper_score=0.0 paper_delta=0.0 aspect_rel=0.833
+   20260522_210909.jpg | 26 글읽기 | normal|tilted→tilted | O | 0.512 | appearance | - | best_score=0.5899 upside_total=-0.815 e_sift=-1 sift_inliers=18 tilt_signed=8.37 paper_score=0.0 paper_delta=0.0 aspect_rel=1.239
+   20260522_210909.jpg | 27 바보처럼 | normal|tilted→normal | O | 0.6 | appearance | leaning_with_neighbor | best_score=0.6309 upside_total=-0.809 e_sift=-1 sift_inliers=128 tilt_signed=8.27 paper_score=0.272 paper_delta=-0.004 aspect_rel=0.791
+   20260522_210909.jpg | 28 덕혜옹주 | normal|tilted→normal | O | 0.752 | appearance | - | best_score=0.7522 upside_total=-0.863 e_sift=-1 sift_inliers=63 tilt_signed=7.6 paper_score=0.201 paper_delta=-0.0 aspect_rel=1.141
+   20260522_210909.jpg | 29 신약성경 | normal→tilted | X | 0.634 | appearance | - | best_score=0.7373 upside_total=-0.817 e_sift=-1 sift_inliers=30 tilt_signed=-12.03 paper_score=0.0 paper_delta=0.0 aspect_rel=1.075
+   20260522_210909.jpg | 30 Che | normal→tilted | X | 0.64 | appearance | - | best_score=0.6649 upside_total=-0.685 e_sift=-1 sift_inliers=98 tilt_signed=-12.21 paper_score=0.0 paper_delta=0.0 aspect_rel=1.225
