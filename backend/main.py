@@ -1256,9 +1256,24 @@ def serve_login(ctx: Optional[AuthContext] = Depends(optional_auth)):
 @app.get("/")
 @app.get("/dashboard")
 def serve_dashboard(ctx: Optional[AuthContext] = Depends(optional_auth)):
+    """첫 화면: 정리가 필요한 층 목록 · 도서관 지도 · 층별 상태"""
     if not ctx:
         return RedirectResponse("/login")
-    return serve_page("dashboard.html")
+    return serve_page("home.html")
+
+@app.get("/level")
+def serve_level(ctx: Optional[AuthContext] = Depends(optional_auth)):
+    """층 화면: 한 층의 순찰 사진과 할 일 (?shelf_id=)"""
+    if not ctx:
+        return RedirectResponse("/login")
+    return serve_page("level.html")
+
+@app.get("/classic")
+def serve_classic_dashboard(ctx: Optional[AuthContext] = Depends(optional_auth)):
+    """기존 대시보드 (한 화면에 모든 기능). 관리 기능(기준 사진 · 구조 편집 · 계정 · 지도 · 배가 위치)은 아직 여기에만 있음"""
+    if not ctx:
+        return RedirectResponse("/login")
+    return serve_page("dashboard_classic.html")
 
 @app.get("/report")
 def serve_report(ctx: Optional[AuthContext] = Depends(optional_auth)):

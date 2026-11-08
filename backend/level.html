@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>층 화면 · 서고 모니터링</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/assets/common.js?v=20261108b"></script>
+    <script src="/assets/app.js?v=20261108b"></script>
+</head>
+<!-- 층 화면: "가서 뭘 해야 하나" — 한 층의 최근 순찰 사진과 할 일(알림). ?shelf_id=층 (선택: &session_id=지난 순찰) -->
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-24 lg:pb-0">
+    <div id="top-bar"></div>
+
+    <main class="max-w-6xl mx-auto px-4 md:px-8 py-5 md:py-6">
+        <a href="/" class="inline-flex items-center gap-1.5 text-sm text-indigo-600 font-semibold mb-3"><i class="fa-solid fa-arrow-left"></i> 오늘의 서가</a>
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+            <div class="min-w-0">
+                <h1 id="title" class="text-2xl md:text-3xl font-bold text-slate-900">불러오는 중...</h1>
+                <div id="subtitle" class="text-sm text-slate-500 mt-1"></div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="where-btn" onclick="showWhere()" class="hidden text-sm font-semibold px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+                    <i class="fa-solid fa-map-location-dot"></i> 위치 보기</button>
+                <span id="nav-pos" class="hidden lg:inline text-sm text-slate-500"></span>
+                <a id="next-top" class="hidden lg:flex text-sm font-semibold px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white items-center gap-1.5"></a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6">
+            <section class="lg:col-span-7">
+                <div class="bg-white rounded-2xl border border-slate-200 p-3 md:p-4 lg:sticky lg:top-20">
+                    <div class="flex items-center justify-between gap-2 mb-3">
+                        <div class="flex bg-slate-100 rounded-lg p-0.5 text-sm font-semibold">
+                            <button id="tab-latest" onclick="showPhoto('latest')" class="px-3 py-1 rounded-md">최근 순찰</button>
+                            <button id="tab-normal" onclick="showPhoto('normal')" class="px-3 py-1 rounded-md">정상일 때 사진</button>
+                        </div>
+                        <span id="photo-caption" class="text-xs text-slate-400 truncate"></span>
+                    </div>
+                    <img id="photo" alt="" class="hidden w-full rounded-xl cursor-zoom-in bg-slate-100">
+                    <div id="photo-empty" class="hidden rounded-xl bg-slate-50 border border-slate-200 h-64 flex items-center justify-center text-sm text-slate-400 text-center px-6"></div>
+                </div>
+            </section>
+
+            <section class="lg:col-span-5 flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-bold text-lg">할 일 <span id="todo-count" class="text-slate-400 font-normal"></span></h2>
+                    <span class="text-xs text-slate-400">다른 서가 책부터 보여 줘요</span>
+                </div>
+                <div id="tasks" class="flex flex-col gap-3"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- 휴대폰: 아래에 고정한 다음 층 버튼 -->
+    <div id="next-bottom-bar" class="hidden lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 p-3 z-20">
+        <a id="next-bottom" class="w-full py-3 rounded-xl bg-slate-900 text-white font-semibold flex items-center justify-center gap-1.5"></a>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(location.search);
+        const SHELF_ID = params.get("shelf_id");
+        const SESSION_ID = params.get("session_id");   // 지난 순찰을 볼 때만
+        let ME = null;
+        let levels = [];
+        let level = null;
+        let session = null;
+        let photoMode = "latest";
+
+        function updateHeader() {
+            if (!level) return;
+            const t = levelTitle(level);
+            document.getElementById("title").textContent = `${t.zone} ${t.main}`;
+            document.title = `${t.zone} ${t.main} · 서고 모니터링`;
+            const parts = [level.zone.zone_name, `도서 ${level.book_count}권`];
+            if (session) parts.push(`${formatTime(session.scan_time)} 순찰${SESSION_ID && level.latest_session?.session_id !== SESSION_ID ? " (지난 순찰)" : ""}`);
+            document.getElementById("subtitle").textContent = parts.filter(Boolean).join(" · ");
+
+            // 다음 층: 첫 화면 목록 순서(정리 필요 → 재촬영 → 확인) 중 이 층 다음
+            const todo = attentionLevels(levels);
+            const idx = todo.findIndex(l => l.shelf_id === SHELF_ID);
+            const next = todo.filter(l => l.shelf_id !== SHELF_ID)[idx >= 0 ? idx : 0];
+            document.getElementById("nav-pos").textContent = idx >= 0 ? `${idx + 1} / ${todo.length}` : "";
+            ["next-top", "next-bottom"].forEach(id => {
+                const a = document.getElementById(id);
+                if (next) {
+                    const nt = levelTitle(next);
+                    a.href = levelUrl(next);
+                    a.innerHTML = `다음 층: ${nt.zone} ${nt.main} <i class="fa-solid fa-arrow-right"></i>`;
+                } else {
+                    a.href = "/";
+                    a.innerHTML = `<i class="fa-solid fa-house"></i> 오늘의 서가로`;
+                }
+            });
+            document.getElementById("next-bottom-bar").classList.remove("hidden");
+        }
+
+        // ===================== 사진 =====================
+        function showPhoto(mode) {
+            photoMode = mode;
+            ["latest", "normal"].forEach(m => {
+                document.getElementById(`tab-${m}`).className = "px-3 py-1 rounded-md " + (m === mode ? "bg-white shadow-sm text-slate-800" : "text-slate-500");
+            });
+            const img = document.getElementById("photo");
+            const empty = document.getElementById("photo-empty");
+            const caption = document.getElementById("photo-caption");
+            const label = level ? level.location_label : "";
+            let url = "", text = "";
+            if (mode === "latest") {
+                if (session && session.image_path) { url = spineUrl(session.image_path); text = `${formatTime(session.scan_time)} 촬영`; }
+                else empty.innerHTML = session ? "이 순찰에는 원본 사진이 저장되어 있지 않습니다." : `<div><i class="fa-solid fa-route text-3xl block mb-2"></i>아직 순찰 기록이 없습니다.</div>`;
+            } else if (level && level.has_normal_image) {
+                url = `${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image?v=${Date.now()}`;
+                text = "정상 상태 기준 사진";
+            } else {
+                empty.innerHTML = `<div><i class="fa-solid fa-circle-check text-3xl block mb-2"></i>정상 상태 기준 사진이 없습니다.</div>`;
+            }
+            img.classList.toggle("hidden", !url);
+            empty.classList.toggle("hidden", !!url);
+            if (url) {
+                img.src = url;
+                img.alt = `${label} ${text}`;
+                img.onclick = () => openLightbox(url, label, text);
+            }
+            caption.textContent = text;
+        }
+
+        function showWhere() {
+            openLightbox(libraryMapUrl(), "도서관 지도", level ? `${level.location_label} · ${level.zone.zone_name || ""}` : "");
+        }
+
+        // ===================== 할 일 =====================
+        async function updateAction(row, status) {
+            try {
+                const updated = await fetchJson(`${API_BASE}/results/${row.result_id}/action`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status }),
+                });
+                Object.assign(row, { action_status: updated.action_status, action_time: updated.action_time, action_by_name: updated.action_by_name });
+                renderTasks();
+                refreshLevels();
+            } catch (e) {
+                alert(`조치 상태 저장 실패: ${e.message}`);
+            }
+        }
+
+        function renderTasks() {
+            const box = document.getElementById("tasks");
+            box.innerHTML = "";
+            const count = document.getElementById("todo-count");
+            if (!session) {
+                count.textContent = "";
+                box.appendChild(noticeBox("bg-slate-50 border-slate-300 text-slate-600", "fa-route",
+                    level && level.status === "no_reference"
+                        ? `정상 상태 기준 사진이 없어 이 층은 분석할 수 없습니다. ${ME.is_admin ? `<a href="/classic" class="font-semibold text-indigo-600">관리 화면</a>에서 등록해 주세요.` : "관리자에게 알려 주세요."}`
+                        : "아직 이 층의 순찰 기록이 없습니다. 순찰 사진이 들어오면 첫 화면에서 분석해 주세요."));
+                return;
+            }
+            const results = session.results || [];
+            const quality = session.quality;
+            const reliable = !quality || quality.is_reliable;
+            const withIssues = results.filter(r => r.issues.length > 0);
+            const pending = sortByPriority(withIssues.filter(isPending));
+            const handled = sortByPriority(withIssues.filter(r => !isPending(r)));
+            count.textContent = pending.length ? String(pending.length) : "";
+
+            if (level?.reference_mismatch) {
+                const m = level.reference_mismatch;
+                box.appendChild(noticeBox("bg-amber-50 border-amber-500 text-amber-800", "fa-triangle-exclamation",
+                    `기준 사진의 책(${m.detected}권)과 이 층에 연결된 책(${m.expected}권)의 수가 달라, 책이 다른 도서로 판정될 수 있습니다. `
+                    + (ME.is_admin ? "관리 화면에서 기준 사진과 배가 위치를 확인해 주세요." : "관리자에게 알려 주세요.")));
+            }
+
+            let list = box;
+            if (!reliable) {
+                box.appendChild(noticeBox("bg-rose-50 border-rose-500 text-rose-800", "fa-camera-rotate",
+                    `<b>사진을 다시 찍어야 해요.</b> 인식 신뢰도가 낮아 아래 판정은 틀릴 수 있습니다.
+                     <ul class="list-disc ml-5 mt-1 text-xs">${quality.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>`));
+                if (pending.length) {
+                    const d = document.createElement("details");
+                    d.innerHTML = `<summary class="cursor-pointer text-xs font-bold text-slate-500 py-1">참고용 판정 ${pending.length}건 보기</summary><div class="flex flex-col gap-3 mt-2"></div>`;
+                    box.appendChild(d);
+                    list = d.querySelector("div");
+                }
+            }
+
+            const unknown = session.unknown_books;
+            const hintGroup = unknown ? pending.find(r => r.reg_no === "UNKNOWN")?.issues[0].group : null;
+            let othersLabel = false;
+            DASHBOARD_GROUP_ORDER.forEach(group => {
+                const rows = pending.filter(r => r.issues[0].group === group.key);
+                if (!rows.length) return;
+                const open = OPEN_GROUPS.has(group.key);
+                if (!open && !othersLabel) {
+                    const label = document.createElement("div");
+                    label.className = "text-xs font-semibold text-slate-400 mt-1";
+                    label.textContent = pending.some(r => OPEN_GROUPS.has(r.issues[0].group)) ? "그 밖의 알림" : "알림 (눌러서 펼치기)";
+                    list.appendChild(label);
+                    othersLabel = true;
+                }
+                const section = buildSection(group, rows, open, updateAction);
+                if (group.key === hintGroup) section.querySelector("div").prepend(noticeBox("bg-sky-50 border-sky-400 text-sky-800", "fa-tower-broadcast", unknownBooksMessage(unknown)));
+                list.appendChild(section);
+            });
+            if (unknown && !unknown.matched && !hintGroup) {
+                list.appendChild(noticeBox("bg-sky-50 border-sky-400 text-sky-800", "fa-tower-broadcast", unknownBooksMessage(unknown)));
+            }
+
+            if (pending.length === 0 && reliable) {
+                box.prepend(noticeBox("bg-emerald-50 border-emerald-500 text-emerald-800", "fa-circle-check",
+                    withIssues.length ? `<b>모두 처리했어요.</b> 이 순찰에서 발견된 ${withIssues.length}건을 모두 처리했습니다.`
+                                      : `<b>정돈되어 있어요.</b> 이 순찰에서 정리할 책이 발견되지 않았습니다.`));
+            }
+            if (handled.length) {
+                box.appendChild(buildSection(HANDLED_GROUP, handled, false, updateAction));
+            }
+        }
+
+        // ===================== 데이터 =====================
+        async function refreshLevels() {
+            levels = flattenLevels(await fetchJson(`${API_BASE}/locations`));
+            level = levels.find(l => l.shelf_id === SHELF_ID) || null;
+            updateHeader();
+        }
+
+        async function loadSession() {
+            const sid = SESSION_ID || level?.latest_session?.session_id;
+            session = sid ? await fetchJson(`${API_BASE}/dashboard/results?session_id=${encodeURIComponent(sid)}`) : null;
+            if (session && !session.session_id) session = null;
+        }
+
+        (async () => {
+            ME = await loadMe();
+            renderTopBar(ME, "home");
+            if (!SHELF_ID) { location.href = "/"; return; }
+            try {
+                await refreshLevels();
+                if (!level) {
+                    document.getElementById("title").textContent = "층을 찾을 수 없습니다";
+                    document.getElementById("tasks").appendChild(noticeBox("bg-slate-50 border-slate-300 text-slate-600", "fa-circle-question",
+                        `이 도서관에 없는 층입니다. <a href="/" class="font-semibold text-indigo-600">오늘의 서가</a>로 돌아가 주세요.`));
+                    return;
+                }
+                await loadSession();
+            } catch (e) {
+                document.getElementById("tasks").appendChild(noticeBox("bg-rose-50 border-rose-500 text-rose-800", "fa-circle-exclamation", `불러오지 못했습니다: ${escapeHtml(e.message)}`));
+                return;
+            }
+            updateHeader();
+            showPhoto("latest");
+            renderTasks();
+            const probe = new Image();   // 지도가 있을 때만 '위치 보기' 버튼 표시
+            probe.onload = () => document.getElementById("where-btn").classList.remove("hidden");
+            probe.src = libraryMapUrl();
+        })();
+    </script>
+</body>
+</html>

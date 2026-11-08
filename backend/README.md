@@ -365,8 +365,11 @@ AI가 판별한 `visual_status`(뒤집힘 / 기울어짐 / 가로로 누움 / �
 | `analyzer.py` | 서가 정보 조회, 가상 RFID 생성, AI 책 ID(`B00n`) → 등록번호 변환, 상태 판정, 알림 분류, 인식 품질 평가 |
 | `locations.py` | 구역 / 책꽂이 / 층 위치 조회, 위치 표시 문구, 트리 구성 |
 | `login.html` | 로그인 화면 (도서관 ID는 브라우저에 기억) |
-| `dashboard.html` | 사서 대시보드 (순찰 사진 일괄 분석 바, 도서관 지도 / 서가 사진, 서가 선택 미니맵, 확인 필요 목록 · 알림판, 조치 기록, 순찰 이력) |
+| `home.html` | 첫 화면 `/` (정리가 필요한 층 목록, 도서관 지도, 층별 상태 미니맵, 일괄 분석) |
+| `level.html` | 층 화면 `/level?shelf_id=` (순찰 사진 · 정상 상태 사진, 할 일 카드, 다음 층) |
+| `dashboard_classic.html` | 기존 대시보드 `/classic` (순찰 사진 일괄 분석 바, 도서관 지도 / 서가 사진, 서가 선택 미니맵, 확인 필요 목록 · 알림판, 조치 기록, 순찰 이력, 관리 기능) |
 | `report.html` | 일일 순찰 리포트 |
+| `static/app.js` | 새 화면(첫 화면 · 층 화면) 공용: 상단 바, 사진 확대, 알림 카드 · 그룹 |
 | `static/common.js` | 화면들이 공유하는 알림 그룹 표시 설정, API 호출(`fetchJson`, 401이면 로그인 화면으로), 로그인 사용자 표시 · 로그아웃 |
 | `config.py` | DB 접속 정보, 기본 층 ID(`LIB001-A-01-5`), 테스트 스크립트용 시연 계정(`DEMO_LOGIN`, 환경변수 `DEMO_LIBRARY_ID` · `DEMO_USERNAME` · `DEMO_PASSWORD`), 세션 보관소 · 시드 이미지 경로 |
 | `db.py` | DB 연결 |

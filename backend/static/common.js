@@ -1,4 +1,4 @@
-// 대시보드(dashboard.html)와 일일 리포트(report.html)가 함께 쓰는 설정과 유틸리티
+// 화면들(home · level · dashboard_classic · report)이 함께 쓰는 설정과 유틸리티
 const API_BASE = "/api";
 const SPINE_BASE = "/api/files/spine";   // 세션 원본 사진 · 책등 크롭 (로그인한 도서관 것만 내려줌)
 
