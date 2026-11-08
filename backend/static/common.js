@@ -62,12 +62,12 @@ function renderUserBox(me) {
 
 // 알림 그룹 표시 설정. 순서 = 심각도 순서이며, 그룹 분류 자체는 서버(analyzer.classify_issues)가 결정합니다.
 const ISSUE_GROUPS = [
-    { key: "lost",     title: "분실 위험", icon: "fa-eye-slash",            color: "border-red-500 bg-red-50 text-red-700",          badge: "bg-red-100 text-red-700" },
-    { key: "foreign",  title: "오배가",    icon: "fa-right-left",           color: "border-orange-500 bg-orange-50 text-orange-700", badge: "bg-orange-100 text-orange-700" },
-    { key: "status",   title: "상태이상",  icon: "fa-rotate-left",          color: "border-pink-500 bg-pink-50 text-pink-700",       badge: "bg-pink-100 text-pink-700" },
-    { key: "misorder", title: "오배열",    icon: "fa-shuffle",              color: "border-violet-500 bg-violet-50 text-violet-700", badge: "bg-violet-100 text-violet-700" },
-    { key: "physical", title: "외형 이상", icon: "fa-triangle-exclamation", color: "border-amber-500 bg-amber-50 text-amber-700",    badge: "bg-amber-100 text-amber-700" },
-    { key: "check",    title: "확인 필요", icon: "fa-magnifying-glass",     color: "border-slate-400 bg-slate-50 text-slate-700",    badge: "bg-slate-200 text-slate-700" },
+    { key: "lost",     title: "분실 위험", icon: "fa-eye-slash",            color: "border-red-500 bg-red-50 text-red-700",          badge: "bg-red-100 text-red-700",       stripe: "border-l-red-500",    text: "text-red-700",    hint: "다른 책꽂이에 꽂혀 있을 가능성이 높음" },
+    { key: "foreign",  title: "오배가",    icon: "fa-right-left",           color: "border-orange-500 bg-orange-50 text-orange-700", badge: "bg-orange-100 text-orange-700", stripe: "border-l-orange-500", text: "text-orange-700", hint: "다른 서가의 책이 섞여 있음" },
+    { key: "status",   title: "상태이상",  icon: "fa-rotate-left",          color: "border-pink-500 bg-pink-50 text-pink-700",       badge: "bg-pink-100 text-pink-700",     stripe: "border-l-pink-500",   text: "text-pink-700",   hint: "대출 중으로 되어 있는데 서가에 있음" },
+    { key: "misorder", title: "오배열",    icon: "fa-shuffle",              color: "border-violet-500 bg-violet-50 text-violet-700", badge: "bg-violet-100 text-violet-700", stripe: "border-l-violet-500", text: "text-violet-700", hint: "같은 층 안에서 순서만 바뀐 책" },
+    { key: "physical", title: "외형 이상", icon: "fa-triangle-exclamation", color: "border-amber-500 bg-amber-50 text-amber-700",    badge: "bg-amber-100 text-amber-700",   stripe: "border-l-amber-500",  text: "text-amber-700",  hint: "책은 제자리에 있음 · 정돈만 필요" },
+    { key: "check",    title: "확인 필요", icon: "fa-magnifying-glass",     color: "border-slate-400 bg-slate-50 text-slate-700",    badge: "bg-slate-200 text-slate-700",   stripe: "border-l-slate-400",  text: "text-slate-600",  hint: "AI가 어떤 책인지 확인하지 못함" },
 ];
 const GROUP_INFO = Object.fromEntries(ISSUE_GROUPS.map(g => [g.key, g]));
 const GROUP_RANK = Object.fromEntries(ISSUE_GROUPS.map((g, i) => [g.key, i]));
@@ -118,6 +118,19 @@ function bookLabel(row) {
 // 서명만 표시 (서명이 없는 도서는 등록번호)
 function bookTitle(row) {
     return row.title ? `「${escapeHtml(row.title)}」` : bookLabel(row);
+}
+
+// 알림에서 책을 부르는 이름: 제목 → (제목 없으면) 등록번호 → (어떤 책인지 모르면) 왼쪽에서 몇 번째. 뒤에 "책이"를 붙여 씀
+function bookName(row) {
+    if (row.title) return `「${escapeHtml(row.title)}」`;
+    if (row.reg_no && row.reg_no !== "UNKNOWN") return `등록번호 ${escapeHtml(row.reg_no)}`;
+    return row.sequence_order > 0 ? `왼쪽에서 ${row.sequence_order}번째` : "위치 불명";
+}
+
+// 제목 옆에 작게 붙이는 서가 위치 (사진에서 찾은 책만)
+function seqHint(row) {
+    return (row.title || (row.reg_no && row.reg_no !== "UNKNOWN")) && row.sequence_order > 0
+        ? ` <span class="text-slate-400 text-xs font-normal">(왼쪽에서 ${row.sequence_order}번째)</span>` : "";
 }
 
 // 어떤 책인지 알 수 없는 책과 대조한 RFID 후보 안내 문구 (서버 analyzer.find_unknown_book_candidates). 어떤 책인지 확정하지는 않음
