@@ -229,15 +229,15 @@ class QualityTest(unittest.TestCase):
 
 class MisorderTargetTest(unittest.TestCase):
     def test_between_neighbors(self):
-        self.assertEqual(misorder_target("R3", master()), "「도서2」과(와) 「도서4」 사이 (3번째 자리)")
+        self.assertEqual(misorder_target("R3", master()), "3번째 자리 (「도서2」과(와) 「도서4」 사이)")
 
     def test_ends_of_shelf(self):
-        self.assertEqual(misorder_target("R1", master()), "맨 왼쪽, 「도서2」 앞 (1번째 자리)")
-        self.assertEqual(misorder_target("R5", master()), "맨 오른쪽, 「도서4」 뒤 (5번째 자리)")
+        self.assertEqual(misorder_target("R1", master()), "1번째 자리 (맨 왼쪽, 「도서2」 앞)")
+        self.assertEqual(misorder_target("R5", master()), "5번째 자리 (맨 오른쪽, 「도서4」 뒤)")
 
     def test_loaned_book_is_not_counted(self):
         books = master(R2={"on_shelf": False})
-        self.assertEqual(misorder_target("R3", books), "「도서1」과(와) 「도서4」 사이 (2번째 자리)")
+        self.assertEqual(misorder_target("R3", books), "2번째 자리 (「도서1」과(와) 「도서4」 사이)")
 
     def test_only_book(self):
         self.assertEqual(misorder_target("R1", master(1)), "1번째 자리")
