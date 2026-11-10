@@ -17,7 +17,7 @@ from auth import (SESSION_COOKIE, SESSION_HOURS, AuthContext, authenticate, clea
                   context_from_session_token, create_session, delete_session, login_retry_seconds, optional_auth,
                   record_login_failure, require_admin, require_user)
 from book_placement import PlacementNotReady, apply_placement, build_placement, undo_placement
-from config import COOKIE_SECURE, SPINE_STORE_DIR
+from config import COOKIE_SECURE, DASHBOARD_UI, SPINE_STORE_DIR
 from db import get_db_connection
 from image_check import detect_image_ext
 from locations import (build_location_tree, fetch_shelf_location, fetch_shelf_locations, fetch_space_skeleton,
@@ -1256,7 +1256,14 @@ def serve_login(ctx: Optional[AuthContext] = Depends(optional_auth)):
 @app.get("/")
 @app.get("/dashboard")
 def serve_dashboard(ctx: Optional[AuthContext] = Depends(optional_auth)):
-    """첫 화면: 정리가 필요한 층 목록 · 도서관 지도 · 층별 상태"""
+    """첫 화면: config.DASHBOARD_UI가 new면 새 첫 화면, classic(기본)이면 기존 대시보드"""
+    if not ctx:
+        return RedirectResponse("/login")
+    return serve_page("home.html" if DASHBOARD_UI == "new" else "dashboard_classic.html")
+
+@app.get("/home")
+def serve_home(ctx: Optional[AuthContext] = Depends(optional_auth)):
+    """새 첫 화면: 정리가 필요한 층 목록 · 도서관 지도 · 층별 상태"""
     if not ctx:
         return RedirectResponse("/login")
     return serve_page("home.html")

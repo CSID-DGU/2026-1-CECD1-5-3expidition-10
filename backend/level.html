@@ -14,7 +14,7 @@
     <div id="top-bar"></div>
 
     <main class="max-w-6xl mx-auto px-4 md:px-8 py-5 md:py-6">
-        <a href="/" class="inline-flex items-center gap-1.5 text-sm text-indigo-600 font-semibold mb-3"><i class="fa-solid fa-arrow-left"></i> 오늘의 서가</a>
+        <a href="/home" class="inline-flex items-center gap-1.5 text-sm text-indigo-600 font-semibold mb-3"><i class="fa-solid fa-arrow-left"></i> 오늘의 서가</a>
         <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
             <div class="min-w-0">
                 <h1 id="title" class="text-2xl md:text-3xl font-bold text-slate-900">불러오는 중...</h1>
@@ -89,7 +89,7 @@
                     a.href = levelUrl(next);
                     a.innerHTML = `다음 층: ${nt.zone} ${nt.main} <i class="fa-solid fa-arrow-right"></i>`;
                 } else {
-                    a.href = "/";
+                    a.href = "/home";
                     a.innerHTML = `<i class="fa-solid fa-house"></i> 오늘의 서가로`;
                 }
             });
@@ -234,13 +234,13 @@
         (async () => {
             ME = await loadMe();
             renderTopBar(ME, "home");
-            if (!SHELF_ID) { location.href = "/"; return; }
+            if (!SHELF_ID) { location.href = "/home"; return; }
             try {
                 await refreshLevels();
                 if (!level) {
                     document.getElementById("title").textContent = "층을 찾을 수 없습니다";
                     document.getElementById("tasks").appendChild(noticeBox("bg-slate-50 border-slate-300 text-slate-600", "fa-circle-question",
-                        `이 도서관에 없는 층입니다. <a href="/" class="font-semibold text-indigo-600">오늘의 서가</a>로 돌아가 주세요.`));
+                        `이 도서관에 없는 층입니다. <a href="/home" class="font-semibold text-indigo-600">오늘의 서가</a>로 돌아가 주세요.`));
                     return;
                 }
                 await loadSession();

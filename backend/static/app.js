@@ -12,13 +12,13 @@ function renderTopBar(me, active) {
     bar.className = "bg-white border-b border-slate-200 sticky top-0 z-30";
     bar.innerHTML = `
         <div class="max-w-6xl mx-auto px-4 md:px-8 h-16 flex items-center gap-3 md:gap-8">
-            <a href="/" class="flex items-center gap-2.5 shrink-0">
+            <a href="/home" class="flex items-center gap-2.5 shrink-0">
                 <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center"><i class="fa-solid fa-book-open"></i></div>
                 <div class="hidden sm:block"><div class="font-bold text-slate-900 leading-tight">서고 모니터링</div>
                     <div class="text-[11px] text-slate-400 leading-tight">${escapeHtml(me.library_name)}</div></div>
             </a>
             <nav class="flex gap-1 text-sm font-medium">
-                ${link("home", "/", "오늘의 서가", "fa-house")}
+                ${link("home", "/home", "오늘의 서가", "fa-house")}
                 ${link("report", "/report", "일일 리포트", "fa-file-lines")}
                 ${link("classic", "/classic", me.is_admin ? "관리" : "전체 보기", "fa-gear")}
             </nav>
