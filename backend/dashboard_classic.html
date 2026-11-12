@@ -6,7 +6,7 @@
     <title>VLM 지능형 서고 관리 플랫폼</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="/assets/common.js?v=20261101b"></script>
+    <script src="/assets/common.js?v=20261108a"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
@@ -20,6 +20,9 @@
             <button id="new-result" onclick="openNewResult()" class="hidden text-sm bg-blue-600 hover:bg-blue-700 text-white font-semibold px-3 py-1.5 rounded-lg items-center gap-1.5">
                 <i class="fa-solid fa-arrows-rotate"></i> 이 층의 새 순찰 결과 보기
             </button>
+            <a href="/home" class="whitespace-nowrap text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
+                <i class="fa-solid fa-house"></i> 새 화면으로
+            </a>
             <a href="/report" target="_blank" class="whitespace-nowrap text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors">
                 <i class="fa-solid fa-file-lines"></i> 일일 리포트
             </a>
@@ -296,23 +299,29 @@
         let ME = { is_admin: false };  // 로그인한 사서 (/api/auth/me) — 관리자만 지도 · 기준 사진 · 구조 설정 가능
         let editMode = false;         // 관리자의 구조 편집 모드 (서가 선택 카드에서 구역 · 책꽂이 · 층 추가 · 수정 · 삭제)
 
+        // 알림판 그룹 순서와 기본 펼침: 오배가(다른 서가 책)만 펼쳐서 맨 위에, 나머지는 심각도 순으로 접어 둠
+        const OPEN_GROUPS = new Set(["foreign"]);
+        const DASHBOARD_GROUP_ORDER = [...ISSUE_GROUPS.filter(g => OPEN_GROUPS.has(g.key)), ...ISSUE_GROUPS.filter(g => !OPEN_GROUPS.has(g.key))];
+        const HANDLED_GROUP = { key: "handled", title: "처리된 알림", icon: "fa-circle-check", badge: "bg-emerald-100 text-emerald-700",
+                                text: "text-emerald-700", hint: "처리 완료 · 오탐으로 표시한 알림" };
+
         // 알림 라벨별 사서 안내 문구 (라벨/그룹 분류는 서버가 결정)
         const MESSAGE_BY_LABEL = {
-            "누락/분실":     r => `청구기호 명부에는 있으나, <b>${bookLabel(r)}</b> 도서가 영상과 RFID 모두에서 확인되지 않았습니다.`,
-            "오배가":        r => `<b>${bookTitle(r)}</b> 도서가 이 서가에 속하지 않습니다. ${r.home_location
+            "누락/분실":     r => `<b>${bookName(r)}</b> 책이 사진과 RFID 모두에서 확인되지 않았습니다. 다른 책꽂이에 꽂혀 있는지 확인해 주세요.`,
+            "오배가":        r => `<b>${bookName(r)}</b> 책이 이 서가에 속하지 않습니다. ${r.home_location
                 ? `원래 위치 <b>${escapeHtml(r.home_location)}</b>로 옮겨 주세요.` : "배가 위치가 지정되지 않은 도서입니다. 도서 정보를 확인해 주세요."}`,
-            "상태이상":      r => `<b>${bookLabel(r)}</b> 도서는 대출 중(미비치)으로 되어 있는데 서가에서 발견되었습니다. 반납 처리를 확인해 주세요.`,
+            "상태이상":      r => `<b>${bookName(r)}</b>${seqHint(r)} 책은 대출 중(미비치)으로 되어 있는데 서가에서 발견되었습니다. 반납 처리를 확인해 주세요.`,
             "미분석":        r => `RFID로 읽은 등록번호 <b>${escapeHtml(r.reg_no)}</b>의 도서 정보가 없습니다. 등록 여부를 확인해 주세요.`,
-            "오배열":        r => `<b>${seqLabel(r)}</b> 책(${bookTitle(r)})의 자리가 잘못되었습니다. ${r.move_to
+            "오배열":        r => `<b>${bookName(r)}</b>${seqHint(r)} 책의 순서가 잘못되었습니다. ${r.move_to
                 ? `<b>${escapeHtml(r.move_to)}</b>로 옮겨 주세요.` : "제자리로 옮겨 주세요."}`,
-            "인식 실패":     r => `<b>${bookLabel(r)}</b> 도서의 RFID는 감지되었으나 영상에서 찾지 못했습니다. 서가에서 직접 확인해 주세요.`,
-            "미확인 도서":   r => `<b>${seqLabel(r)}</b> 책을 어떤 도서인지 식별하지 못했습니다. 직접 확인해 주세요.`,
-            "중복 인식":     r => `<b>${seqLabel(r)}</b> 책이 다른 위치의 책과 같은 도서(${bookLabel(r)})로 인식되었습니다. 직접 확인해 주세요.`,
-            "RFID 미인식":   r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})은 영상에서 확인되었으나 RFID 태그가 감지되지 않았습니다. 태그를 점검해 주세요.`,
-            "뒤집힘":        r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 거꾸로 회전되어 있습니다. 똑바로 세워주세요.`,
-            "기울어짐":      r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 기울어져 있습니다. 정돈해 주세요.`,
-            "가로로 누움":   r => `<b>${seqLabel(r)}</b> 책(${bookLabel(r)})이 가로로 눕혀져 있거나 다른 책 위에 쌓여 있습니다. 세워서 꽂아주세요.`,
-            "책등 안 보임": r => `<b>${seqLabel(r)}</b> 책의 책등이 보이지 않아 어떤 책인지 알 수 없습니다. 거꾸로 꽂혔거나 종이가 끼어 있을 수 있으니 확인해 주세요.`,
+            "인식 실패":     r => `<b>${bookName(r)}</b> 책의 RFID는 감지되었으나 사진에서 찾지 못했습니다. 서가에서 직접 확인해 주세요.`,
+            "미확인 도서":   r => `<b>${bookName(r)}</b>${seqHint(r)} 책이 어떤 도서인지 식별하지 못했습니다. 직접 확인해 주세요.`,
+            "중복 인식":     r => `<b>${bookName(r)}</b>${seqHint(r)} 책이 다른 위치의 책과 같은 도서로 인식되었습니다. 직접 확인해 주세요.`,
+            "RFID 미인식":   r => `<b>${bookName(r)}</b>${seqHint(r)} 책은 사진에서 확인되었으나 RFID 태그가 감지되지 않았습니다. 태그를 점검해 주세요.`,
+            "뒤집힘":        r => `<b>${bookName(r)}</b>${seqHint(r)} 책이 거꾸로 꽂혀 있습니다. 똑바로 세워 주세요.`,
+            "기울어짐":      r => `<b>${bookName(r)}</b>${seqHint(r)} 책이 기울어져 있습니다. 정돈해 주세요.`,
+            "가로로 누움":   r => `<b>${bookName(r)}</b>${seqHint(r)} 책이 가로로 눕혀져 있거나 다른 책 위에 쌓여 있습니다. 세워서 꽂아 주세요.`,
+            "책등 안 보임": r => `<b>${bookName(r)}</b>${seqHint(r)} 책의 책등이 보이지 않아 어떤 책인지 알 수 없습니다. 거꾸로 꽂혔거나 종이가 끼어 있을 수 있으니 확인해 주세요.`,
         };
 
         // ===================== 공통 UI =====================
@@ -1527,10 +1536,12 @@
             }
         }
 
-        function actionButton(label, icon, classes, onClick) {
+        function iconButton(title, icon, classes, onClick) {
             const btn = document.createElement("button");
-            btn.className = `text-[11px] font-semibold px-2 py-1 rounded-md flex items-center gap-1 whitespace-nowrap ${classes}`;
-            btn.innerHTML = `<i class="fa-solid ${icon}"></i> ${label}`;
+            btn.className = `w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${classes}`;
+            btn.title = title;
+            btn.setAttribute("aria-label", title);
+            btn.innerHTML = `<i class="fa-solid ${icon}"></i>`;
             btn.addEventListener("click", onClick);
             return btn;
         }
@@ -1539,51 +1550,86 @@
             const [primary, ...others] = row.issues;
             const group = GROUP_INFO[primary.group];
             const handled = row.action_status !== "PENDING";
-            const message = (MESSAGE_BY_LABEL[primary.label] || (r => bookLabel(r)))(row);
+            const message = (MESSAGE_BY_LABEL[primary.label] || (r => bookName(r)))(row);
             const extraBadges = others.map(o =>
                 `<span class="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded ${GROUP_INFO[o.group].badge}">+ ${escapeHtml(o.label)}</span>`
             ).join("");
             const handledBadge = handled
-                ? `<span class="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">${ACTION_LABELS[row.action_status]}${row.action_by_name ? " · " + escapeHtml(row.action_by_name) : ""} · ${formatTime(row.action_time)}</span>`
+                ? `<span class="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 whitespace-nowrap">${ACTION_LABELS[row.action_status]}${row.action_by_name ? " · " + escapeHtml(row.action_by_name) : ""} · ${formatTime(row.action_time)}</span>`
                 : "";
 
             const card = document.createElement("div");
-            card.className = `p-3 rounded-xl border-l-4 flex items-center gap-3 shadow-sm text-sm `
-                + (handled ? "border-slate-300 bg-slate-50 text-slate-400" : group.color);
+            card.className = "px-3 py-2.5 rounded-lg border border-slate-200 border-l-4 flex items-center gap-3 text-sm "
+                + (handled ? "border-l-slate-300 bg-slate-50 text-slate-400" : `${group.stripe} bg-white text-slate-700`);
             card.innerHTML = `
-                <i class="fa-solid ${group.icon} text-base opacity-90"></i>
-                <div class="flex-1 ${handled ? "line-through decoration-slate-300" : ""}"><b>[${escapeHtml(primary.label)}]</b> ${message}${extraBadges}</div>
+                <div class="flex-1 min-w-0 break-words ${handled ? "line-through decoration-slate-300" : ""}"><span class="text-[11px] font-bold px-1.5 py-0.5 rounded mr-1 ${handled ? "bg-slate-200 text-slate-500" : group.badge}">${escapeHtml(primary.label)}</span> ${message}${extraBadges}</div>
                 ${handledBadge}
-                <div class="flex flex-col gap-1 shrink-0" data-actions></div>
+                <div class="flex gap-1 shrink-0" data-actions></div>
             `;
             const actions = card.querySelector("[data-actions]");
             if (handled) {
-                actions.appendChild(actionButton("되돌리기", "fa-rotate-left", "bg-white border border-slate-200 text-slate-500 hover:bg-slate-100",
+                actions.appendChild(iconButton("되돌리기", "fa-rotate-left", "bg-white border border-slate-200 text-slate-500 hover:bg-slate-100",
                     () => updateAction(row, "PENDING")));
             } else {
-                actions.appendChild(actionButton("처리 완료", "fa-check", "bg-emerald-600 text-white hover:bg-emerald-700",
+                actions.appendChild(iconButton("처리 완료", "fa-check", "bg-emerald-600 text-white hover:bg-emerald-700",
                     () => updateAction(row, "RESOLVED")));
-                actions.appendChild(actionButton("오탐", "fa-ban", "bg-white border border-slate-300 text-slate-600 hover:bg-slate-100",
+                actions.appendChild(iconButton("오탐", "fa-ban", "bg-white border border-slate-200 text-slate-500 hover:bg-slate-100",
                     () => updateAction(row, "FALSE_POSITIVE")));
             }
             return card;
         }
 
-        function buildSection(title, badgeClass, rows, open) {
+        // 접힌 그룹에 보여 줄 미리보기: 앞의 두 권 이름 + 나머지 권수
+        function sectionPreview(rows) {
+            const names = rows.slice(0, 2).map(r => bookName(r));
+            return names.join(", ") + (rows.length > 2 ? ` 외 ${rows.length - 2}권` : "");
+        }
+
+        // 알림 그룹: 접혀 있으면 회색 한 줄(설명 · 미리보기), 펼치면 색 제목 아래 카드 목록
+        function buildSection(group, rows, open) {
             const section = document.createElement("details");
-            section.className = "group/sec";
+            section.className = "group/sec mb-2";
+            section.dataset.group = group.key;
             section.open = open;
             section.innerHTML = `
-                <summary class="cursor-pointer select-none flex items-center gap-2 text-xs font-bold text-slate-500 py-1.5">
-                    <i class="fa-solid fa-chevron-right text-[10px] transition-transform group-open/sec:rotate-90"></i>
-                    ${title}
-                    <span class="px-1.5 py-0.5 rounded-full ${badgeClass}">${rows.length}</span>
+                <summary class="list-none [&::-webkit-details-marker]:hidden cursor-pointer select-none flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm
+                                bg-slate-50 border border-slate-200 hover:bg-slate-100
+                                group-open/sec:bg-transparent group-open/sec:border-transparent group-open/sec:border-b-slate-100 group-open/sec:rounded-none group-open/sec:px-0 group-open/sec:hover:bg-transparent">
+                    <span class="w-7 h-7 shrink-0 rounded-lg flex items-center justify-center ${group.badge}"><i class="fa-solid ${group.icon} text-xs"></i></span>
+                    <span class="font-bold whitespace-nowrap ${group.text}">${group.title}</span>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${group.badge}">${rows.length}권</span>
+                    <span class="flex-1 min-w-0 text-xs text-slate-500 truncate">${group.hint || ""}<span class="group-open/sec:hidden"> · ${sectionPreview(rows)}</span></span>
+                    <span class="text-xs font-semibold text-slate-500 whitespace-nowrap group-open/sec:hidden">펼쳐 보기 <i class="fa-solid fa-chevron-down"></i></span>
+                    <span class="hidden group-open/sec:inline text-xs text-slate-400"><i class="fa-solid fa-chevron-up"></i></span>
                 </summary>
-                <div class="flex flex-col gap-2 mt-1 mb-2"></div>
+                <div class="flex flex-col gap-1.5 mt-2 mb-2"></div>
             `;
             const list = section.querySelector("div");
             rows.forEach(row => list.appendChild(buildTaskCard(row)));
             return section;
+        }
+
+        // 알림판 맨 위 그룹별 개수 칩: 누르면 그 그룹을 펼치고 그 자리로 이동
+        function buildGroupChips(pending, container) {
+            const box = document.createElement("div");
+            box.className = "flex flex-wrap gap-1.5 mb-3";
+            DASHBOARD_GROUP_ORDER.forEach(group => {
+                const count = pending.filter(r => r.issues[0].group === group.key).length;
+                if (count === 0) return;
+                const chip = document.createElement("button");
+                chip.type = "button";
+                chip.className = `text-xs font-semibold px-2.5 py-1 rounded-full ${group.badge} hover:brightness-95`;
+                chip.innerHTML = `<i class="fa-solid ${group.icon} mr-1"></i>${group.title} ${count}`;
+                chip.addEventListener("click", () => {
+                    const section = container.querySelector(`details[data-group="${group.key}"]`);
+                    if (!section) return;
+                    section.open = true;
+                    section.parentElement.closest("details")?.setAttribute("open", "");
+                    section.scrollIntoView({ behavior: "smooth", block: "start" });
+                });
+                box.appendChild(chip);
+            });
+            return box;
         }
 
         function buildQualityWarning(quality) {
@@ -1611,7 +1657,7 @@
             const group = GROUP_INFO[row.issues[0].group];
             const url = spineUrl(row.spine_img_path);
             const name = row.reg_no === "UNKNOWN" ? "알 수 없는 책" : row.reg_no || "Unknown";
-            const title = `${seqLabel(row)} [${name}${row.title ? " " + row.title : ""}]`;
+            const title = row.title ? `「${row.title}」${row.sequence_order > 0 ? ` (왼쪽에서 ${row.sequence_order}번째)` : ""}` : `${seqLabel(row)} [${name}]`;
             const imgBox = document.createElement("div");
             imgBox.className = "relative bg-slate-100 rounded-lg overflow-hidden border border-slate-200 shadow-sm flex flex-col items-center p-1 group";
             imgBox.innerHTML = `
@@ -1674,12 +1720,21 @@
 
             const unknownBooks = payload.unknown_books;
             const hintGroup = unknownBooks ? pending.find(r => r.reg_no === "UNKNOWN")?.issues[0].group : null;
-            ISSUE_GROUPS.forEach(group => {
+            if (pending.length > 0) taskContainer.insertBefore(buildGroupChips(pending, taskContainer), taskContainer.firstChild);
+            // 오배가만 펼쳐 두고 나머지는 접어 둠: 누락은 다른 책꽂이에 있을 가능성이 높고, 외형 이상은 책이 제자리에 있으므로 덜 급함
+            let shownOthersLabel = false;
+            DASHBOARD_GROUP_ORDER.forEach(group => {
                 const rows = pending.filter(r => r.issues[0].group === group.key);
                 if (rows.length === 0) return;
-                // '확인 필요'는 조치가 필요한 알림이 있을 때 기본으로 접어 둠
-                const section = buildSection(group.title, group.badge, rows,
-                    group.key !== "check" || actionCount === 0 || group.key === hintGroup);
+                const open = OPEN_GROUPS.has(group.key);
+                if (!open && !shownOthersLabel) {
+                    const label = document.createElement("div");
+                    label.className = "text-[11px] font-semibold text-slate-400 mt-1 mb-1.5";
+                    label.textContent = pending.some(r => OPEN_GROUPS.has(r.issues[0].group)) ? "그 밖의 알림 (눌러서 펼치기)" : "알림 (눌러서 펼치기)";
+                    listContainer.appendChild(label);
+                    shownOthersLabel = true;
+                }
+                const section = buildSection(group, rows, open);
                 if (group.key === hintGroup) section.querySelector("div").prepend(buildUnknownBooksHint(unknownBooks));
                 listContainer.appendChild(section);
             });
@@ -1690,7 +1745,7 @@
             }
 
             if (handled.length > 0) {
-                taskContainer.appendChild(buildSection("처리된 알림", "bg-emerald-100 text-emerald-700", handled, false));
+                taskContainer.appendChild(buildSection(HANDLED_GROUP, handled, false));
             }
 
             // 정상 상태 / 전부 처리된 상태 안내

@@ -1256,7 +1256,7 @@ def serve_login(ctx: Optional[AuthContext] = Depends(optional_auth)):
 @app.get("/")
 @app.get("/dashboard")
 def serve_dashboard(ctx: Optional[AuthContext] = Depends(optional_auth)):
-    """첫 화면: config.DASHBOARD_UI가 new면 새 첫 화면, classic(기본)이면 기존 대시보드"""
+    """첫 화면: config.DASHBOARD_UI가 new(기본)면 새 첫 화면, classic이면 기존 대시보드"""
     if not ctx:
         return RedirectResponse("/login")
     return serve_page("home.html" if DASHBOARD_UI == "new" else "dashboard_classic.html")
