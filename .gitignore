@@ -24,3 +24,7 @@ venv/
 
 # AI 파트 로컬 메모
 howtotest.txt
+/pipeline_outputs/
+
+# 결과 화면 캡처 (대화 공유용)
+docs/test_captures_20261031/

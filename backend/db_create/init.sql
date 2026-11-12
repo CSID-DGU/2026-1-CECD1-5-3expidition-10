@@ -18,6 +18,7 @@ CREATE TABLE SHELF_SESSION (
     scan_time DATETIME NOT NULL COMMENT '스캔 완료 시간',
     sync_status VARCHAR(20) DEFAULT 'WAITING' COMMENT '메인 DB 동기화 상태 (WAITING/SUCCESS/FAIL)',
     image_path VARCHAR(255) NULL COMMENT '원본 서가 사진 경로 (spine_store 기준 <session_id>/original.*)',
+    rfid_source VARCHAR(10) NULL COMMENT 'RFID 출처 (READER 리더 / VIRTUAL 가상 / NONE 미수신, NULL은 직접 적재 · 예전 세션)',
     INDEX idx_session_library (library_id, scan_time)
 );
 
@@ -25,7 +26,7 @@ CREATE TABLE SHELF_SESSION (
 CREATE TABLE VISION_DATA (
     vision_id VARCHAR(50) PRIMARY KEY COMMENT '비전 식별 고유 ID',
     session_id VARCHAR(50) NOT NULL COMMENT '참조 세션 ID',
-    book_id VARCHAR(50) COMMENT 'AI가 식별한 도서 ID (null 가능)',
+    reg_no VARCHAR(50) COMMENT 'AI가 식별한 도서의 등록번호 (BO_BOOK_TBL.REG_NO, 확정 못 하면 UNKNOWN)',
     sequence_order INT NOT NULL COMMENT '서가 내 상대적 순서 (왼쪽부터 1번)',
     confidence_score FLOAT NOT NULL COMMENT 'AI 인식 신뢰도',
     spine_img_path VARCHAR(255) NOT NULL COMMENT '책등 이미지 경로',
@@ -34,13 +35,12 @@ CREATE TABLE VISION_DATA (
 );
 
 -- 5. 자식 테이블 2: RFID 스캔 데이터 (RFID_DATA)
+--    태그에 기록된 등록번호를 그대로 저장합니다. 도서 정보는 BO_BOOK_TBL.REG_NO로 찾습니다. (없으면 '미분석')
 CREATE TABLE RFID_DATA (
-    rfid_uid VARCHAR(50),
+    reg_no VARCHAR(20) NOT NULL COMMENT '태그에서 읽은 등록번호',
     session_id VARCHAR(50) NOT NULL COMMENT '참조 세션 ID',
-    book_id VARCHAR(50) COMMENT '메인 DB에서 조회된 도서 ID',
-    title VARCHAR(255) COMMENT '조회된 도서명',
     rssi FLOAT COMMENT '수신 신호 강도',
-    PRIMARY KEY (rfid_uid, session_id) COMMENT 'RFID 태그 고유 식별자',
+    PRIMARY KEY (reg_no, session_id),
     FOREIGN KEY (session_id) REFERENCES SHELF_SESSION(session_id) ON DELETE CASCADE
 );
 
@@ -48,9 +48,9 @@ CREATE TABLE RFID_DATA (
 CREATE TABLE ANALYSIS_RESULT (
     result_id INT AUTO_INCREMENT PRIMARY KEY COMMENT '결과 고유 ID (자동 증가)',
     session_id VARCHAR(50) NOT NULL COMMENT '참조 세션 ID',
-    book_id VARCHAR(50) NOT NULL COMMENT '최종 확정된 도서 ID',
+    reg_no VARCHAR(50) NOT NULL COMMENT '도서 등록번호 (BO_BOOK_TBL.REG_NO, 어떤 책인지 확정 못 하면 UNKNOWN)',
     current_order INT NOT NULL COMMENT '최종 판별된 서가 내 순서',
-    final_status VARCHAR(100) NOT NULL COMMENT '최종 상태 (정상/오배열/오배가/누락)',
+    final_status VARCHAR(100) NOT NULL COMMENT '최종 상태 (정상/오배열/오배가/상태이상/미분석/누락 등)',
     action_status VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '사서 조치 상태 (PENDING/RESOLVED/FALSE_POSITIVE)',
     action_time DATETIME NULL COMMENT '조치 기록 시각',
     action_by INT NULL COMMENT '조치를 기록한 사서 (APP_USER.user_id)',

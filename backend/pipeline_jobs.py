@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 import queue
@@ -7,18 +8,37 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Optional
 
-from analyzer import analyze_shelf_session, get_virtual_rfid_items
-from config import SPINE_STORE_DIR
+from analyzer import (analyze_shelf_session, get_virtual_rfid_items, get_vision_id_map, vision_book_id_to_reg_no,
+                      RFID_INSERT_SQL)
+from config import RFID_MODE, SPINE_STORE_DIR
 from db import get_db_connection
 from locations import fetch_shelf_location
-from normal_images import prepare_normal_work_dir
+from normal_images import get_normal_image_info
 from spine_archive import archive_spine_image
 from vision_ai import run_vision_ai   # AI 분석 호출 (작업 프로세스를 띄워 두고 재사용, vision_ai.py)
 
-# JsonTesting.py는 *.jpg / *.png 만 읽으므로 그 외 확장자는 맞춰서 저장합니다.
+# AI는 *.jpg / *.png 만 읽으므로 그 외 확장자는 맞춰서 저장합니다.
 ALLOWED_IMAGE_EXTS = {".jpg": ".jpg", ".jpeg": ".jpg", ".png": ".png"}
 
 MAX_KEPT_JOBS = 100   # 메모리에 보관할 최근 작업 수
+
+
+def choose_rfid_tags(session_id: str, shelf_id: str, conn) -> tuple:
+    """
+    이 세션에 쓸 RFID 값과 출처를 고릅니다. 반환: (태그 목록, READER / VIRTUAL / NONE)
+    순찰 사진에 리더값이 있으면 그 값(빈 목록이어도 실제 결과), 없으면 RFID_MODE에 따라 가상 RFID 또는 미수신
+    """
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT rfid_tags FROM PATROL_PHOTO WHERE session_id = %s", (session_id,))
+        row = cursor.fetchone()
+    finally:
+        cursor.close()
+    if row and row[0] is not None:
+        return json.loads(row[0]), "READER"
+    if RFID_MODE == "real":
+        return [], "NONE"
+    return get_virtual_rfid_items(shelf_id, conn), "VIRTUAL"
 
 
 def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: str, scan_time: Optional[datetime] = None):
@@ -36,13 +56,16 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
         loc = fetch_shelf_location(conn, shelf_id)
         if loc is None:
             raise RuntimeError(f"등록되지 않은 층입니다: {shelf_id}")
-        normal_dir = prepare_normal_work_dir(conn, loc)
+        normal_image = get_normal_image_info(conn, shelf_id)
+        if normal_image is None:
+            raise RuntimeError(f"{loc['location_label']}의 정상 상태 기준 이미지가 없습니다. "
+                               f"대시보드에서 층을 선택하고 '정상 상태' 탭에서 기준 사진을 등록해 주세요. (관리자)")
     finally:
         conn.close()
 
     # ① AI 분석 (세션 보관소의 원본 사진을 그대로 분석)
     print(f"\n▶️ [엔진 가동] 세션 {session_id} ({loc['location_label']}): Edge AI 분석 시작 (YOLO & ResNet)...")
-    ai_vision_items = run_vision_ai(os.path.join(SPINE_STORE_DIR, image_rel_path), normal_dir)
+    ai_vision_items = run_vision_ai(os.path.join(SPINE_STORE_DIR, image_rel_path), normal_image["image_id"])
 
     # ② DB 적재 + 판정
     conn = get_db_connection()
@@ -50,28 +73,31 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
         raise RuntimeError("DB 연결 실패")
     cursor = conn.cursor()
     try:
+        rfid_tags, rfid_source = choose_rfid_tags(session_id, shelf_id, conn)
         cursor.execute(
-            "INSERT INTO SHELF_SESSION (session_id, library_id, shelf_id, scan_time, image_path) VALUES (%s, %s, %s, %s, %s)",
-            (session_id, loc["library_id"], shelf_id, (scan_time or datetime.now()).strftime('%Y-%m-%d %H:%M:%S'), image_rel_path)
+            """INSERT INTO SHELF_SESSION (session_id, library_id, shelf_id, scan_time, image_path, rfid_source)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (session_id, loc["library_id"], shelf_id, (scan_time or datetime.now()).strftime('%Y-%m-%d %H:%M:%S'),
+             image_rel_path, rfid_source)
         )
 
-        # 가상 RFID 스캔 결과 (가상 도서 정보 BOOK_MASTER 기준)
-        for tag in get_virtual_rfid_items(shelf_id, conn):
-            cursor.execute(
-                "INSERT INTO RFID_DATA (session_id, rfid_uid, book_id, title, rssi) VALUES (%s, %s, %s, %s, %s)",
-                (session_id, tag['rfid_uid'], tag['book_id'], tag['title'], tag['rssi'])
-            )
+        # RFID 스캔 결과 (태그 값 = 등록번호)
+        for tag in rfid_tags:
+            cursor.execute(RFID_INSERT_SQL, (session_id, tag['reg_no'], tag['rssi']))
 
+        # AI의 도서 ID(기준 사진의 n번째 책 = B00n) → 등록번호
+        order_map = get_vision_id_map(shelf_id, conn)
         for item in ai_vision_items:
             seq_idx = item.get("sequence_order")
             # pipeline.py는 탐지 순서로 크롭을 저장하고 sequence_order는 좌→우 정렬 후 순서라 서로 다르므로,
-            # JsonTesting이 넘겨준 실제 파일명을 세션 보관소로 복사해 사용합니다.
+            # AI가 넘겨준 실제 파일명을 세션 보관소로 복사해 사용합니다.
             spine_img_path = archive_spine_image(session_id, item.get("spine_img_file", ""))
             cursor.execute(
                 """INSERT INTO VISION_DATA
-                   (vision_id, session_id, book_id, sequence_order, confidence_score, spine_img_path, visual_status)
+                   (vision_id, session_id, reg_no, sequence_order, confidence_score, spine_img_path, visual_status)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-                (f"V_{session_id}_{seq_idx}", session_id, item.get("book_id", "UNKNOWN"), seq_idx,
+                (f"V_{session_id}_{seq_idx}", session_id,
+                 vision_book_id_to_reg_no(item.get("book_id"), order_map, item.get("visual_status")), seq_idx,
                  item.get("confidence_score", 0.0), spine_img_path, item.get("visual_status", "normal"))
             )
         conn.commit()
