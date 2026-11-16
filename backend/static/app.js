@@ -20,7 +20,7 @@ function renderTopBar(me, active) {
             <nav class="flex gap-1 text-sm font-medium">
                 ${link("home", "/home", "오늘의 서가", "fa-house")}
                 ${link("report", "/report", "일일 리포트", "fa-file-lines")}
-                ${link("classic", "/classic", me.is_admin ? "관리" : "전체 보기", "fa-gear")}
+                ${link("classic", "/manage", "관리", "fa-gear")}
             </nav>
             <div class="ml-auto flex items-center gap-2 md:gap-3">
                 <div class="text-right hidden sm:block"><div class="text-sm font-semibold text-slate-700">${escapeHtml(me.display_name)}</div>

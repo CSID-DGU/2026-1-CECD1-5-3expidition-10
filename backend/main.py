@@ -1284,9 +1284,16 @@ def serve_level(ctx: Optional[AuthContext] = Depends(optional_auth)):
         return RedirectResponse("/login")
     return serve_page("level.html")
 
+@app.get("/manage")
+def serve_manage(ctx: Optional[AuthContext] = Depends(optional_auth)):
+    """관리 화면 (새 디자인): 층별 관리 칸 + 층별 기준 사진 · 순찰 이력, 구조 편집, 수신함 · 일괄 갱신 · 배가 위치 · 지도 · 계정"""
+    if not ctx:
+        return RedirectResponse("/login")
+    return serve_page("manage.html")
+
 @app.get("/classic")
 def serve_classic_dashboard(ctx: Optional[AuthContext] = Depends(optional_auth)):
-    """기존 대시보드 (한 화면에 모든 기능). 관리 기능(기준 사진 · 구조 편집 · 계정 · 지도 · 배가 위치)은 아직 여기에만 있음"""
+    """기존 대시보드 (한 화면에 모든 기능). DASHBOARD_UI=classic일 때의 첫 화면이기도 함"""
     if not ctx:
         return RedirectResponse("/login")
     return serve_page("dashboard_classic.html")

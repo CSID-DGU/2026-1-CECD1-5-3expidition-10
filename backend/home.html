@@ -6,8 +6,8 @@
     <title>오늘의 서가 · 서고 모니터링</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="/assets/common.js?v=20261116"></script>
-    <script src="/assets/app.js?v=20261116"></script>
+    <script src="/assets/common.js?v=20261116b"></script>
+    <script src="/assets/app.js?v=20261116b"></script>
 </head>
 <!-- 첫 화면: "어디가 이상한가" — 층별 관리(책꽂이 모양 그대로, 칸 안에 무슨 문제인지), 문제 있는 층 표, 도서관 지도.
      칸이나 표의 층을 누르면 층 화면(/level)으로 이동 -->
@@ -205,7 +205,7 @@
             const box = document.getElementById("work-list");
             if (levels.length === 0) {
                 box.innerHTML = `<div class="text-center text-sm text-slate-500 py-6">
-                    ${ME.is_admin ? `<a href="/classic" class="text-indigo-600 font-semibold">관리 화면</a>에서 구역 · 책꽂이 · 층을 먼저 만들어 주세요.` : "관리자가 도서관 구조를 등록하면 여기에 표시됩니다."}</div>`;
+                    ${ME.is_admin ? `<a href="/manage" class="text-indigo-600 font-semibold">관리 화면</a>에서 구역 · 책꽂이 · 층을 먼저 만들어 주세요.` : "관리자가 도서관 구조를 등록하면 여기에 표시됩니다."}</div>`;
                 return;
             }
             if (work.length === 0) {
@@ -243,7 +243,7 @@
             const empty = document.getElementById("map-empty");
             empty.classList.toggle("hidden", ok);
             if (!ok) empty.innerHTML = `<i class="fa-regular fa-map text-3xl block mb-2"></i>등록된 지도가 없습니다.`
-                + (ME?.is_admin ? `<br><a href="/classic" class="text-xs text-indigo-600 font-semibold">관리 화면에서 지도 올리기</a>` : "");
+                + (ME?.is_admin ? `<br><a href="/manage" class="text-xs text-indigo-600 font-semibold">관리 화면에서 지도 올리기</a>` : "");
             img.onclick = ok ? () => openLightbox(img.src, "도서관 전체 지도") : null;
         }
 

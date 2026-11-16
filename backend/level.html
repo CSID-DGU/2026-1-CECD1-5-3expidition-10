@@ -6,8 +6,8 @@
     <title>층 화면 · 서고 모니터링</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="/assets/common.js?v=20261116"></script>
-    <script src="/assets/app.js?v=20261116"></script>
+    <script src="/assets/common.js?v=20261116b"></script>
+    <script src="/assets/app.js?v=20261116b"></script>
 </head>
 <!-- 층 화면: "가서 뭘 해야 하나" — 한 층의 최근 순찰 사진과 할 일(알림). ?shelf_id=층 (선택: &session_id=지난 순찰) -->
 <body class="bg-slate-50 text-slate-800 min-h-screen pb-24 lg:pb-0">
@@ -372,7 +372,7 @@
                 count.textContent = "";
                 box.appendChild(noticeBox("bg-slate-50 border-slate-300 text-slate-600", "fa-route",
                     level && level.status === "no_reference"
-                        ? `정상 상태 기준 사진이 없어 이 층은 분석할 수 없습니다. ${ME.is_admin ? `<a href="/classic" class="font-semibold text-indigo-600">관리 화면</a>에서 등록해 주세요.` : "관리자에게 알려 주세요."}`
+                        ? `정상 상태 기준 사진이 없어 이 층은 분석할 수 없습니다. ${ME.is_admin ? `<a href="/manage" class="font-semibold text-indigo-600">관리 화면</a>에서 등록해 주세요.` : "관리자에게 알려 주세요."}`
                         : "아직 이 층의 순찰 기록이 없습니다. 순찰 사진이 들어오면 첫 화면에서 분석해 주세요."));
                 return;
             }
