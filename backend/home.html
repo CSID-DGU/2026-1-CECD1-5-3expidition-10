@@ -9,62 +9,57 @@
     <script src="/assets/common.js?v=20261116b"></script>
     <script src="/assets/app.js?v=20261116b"></script>
 </head>
-<!-- 첫 화면: "어디가 이상한가" — 층별 관리(책꽂이 모양 그대로, 칸 안에 무슨 문제인지), 문제 있는 층 표, 도서관 지도.
-     칸이나 표의 층을 누르면 층 화면(/level)으로 이동 -->
+<!-- 첫 화면: "어디가 이상한가" — 층별 관리(책꽂이 모양 그대로, 칸 안에 무슨 문제인지)와 오른쪽 위 도서관 지도.
+     칸의 층을 누르면 층 화면(/level)으로 이동 -->
 <body class="bg-slate-50 text-slate-800 min-h-screen">
     <div id="top-bar"></div>
 
     <main class="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
-        <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
-            <div>
+        <!-- 위쪽 줄: 제목 · 순찰 사진 분석 · 도서관 지도(오른쪽 위). 휴대폰 폭에서는 지도가 층별 관리 아래로 -->
+        <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto_17rem] gap-x-6 gap-y-5 mb-6 items-center">
+            <div class="lg:col-start-1 lg:row-start-1">
                 <div id="today" class="text-sm text-slate-500"></div>
                 <h1 id="headline" class="text-2xl md:text-3xl font-bold text-slate-900 mt-1">불러오는 중...</h1>
             </div>
             <!-- 순찰 사진 수신함 → 일괄 분석 -->
-            <div class="flex flex-col items-end gap-1.5">
+            <div class="lg:col-start-2 lg:row-start-1 flex flex-col items-start lg:items-end gap-1.5">
                 <div class="flex items-center gap-3 text-sm text-slate-500">
                     <span id="inbox-text"></span>
                     <button id="analyze-btn" onclick="startBatchAnalysis()" disabled
-                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2.5 rounded-xl flex items-center gap-1.5 disabled:bg-slate-300 disabled:cursor-not-allowed">
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2.5 rounded-xl flex items-center gap-1.5 whitespace-nowrap disabled:bg-slate-300 disabled:cursor-not-allowed">
                         <i id="analyze-icon" class="fa-solid fa-play"></i> <span id="analyze-text">지금 분석</span>
                     </button>
                 </div>
                 <div id="inbox-progress" class="text-xs text-slate-500 w-72 max-w-full"></div>
             </div>
-        </div>
 
-        <!-- 층별 관리: 화면에서 가장 크게. 책꽂이를 실제처럼 세워 놓고(맨 위가 가장 높은 층) 칸 안에 문제를 바로 적음 -->
-        <section class="bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
-            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 md:mb-5">
-                <h2 class="text-lg md:text-xl font-extrabold">층별 관리</h2>
-                <div id="zone-tabs" class="flex flex-wrap gap-1.5 text-sm font-bold"></div>
-                <span id="zone-name" class="text-sm text-slate-400"></span>
-                <div id="legend" class="lg:ml-auto flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-slate-500"></div>
-            </div>
-            <div id="board" class="overflow-x-auto pb-1"></div>
-            <div class="flex flex-wrap justify-between gap-2 mt-4 text-xs md:text-sm text-slate-500">
-                <span>칸을 누르면 그 층의 사진과 문제 책 위치로 이동해요 · <span id="board-axis-hint"></span></span>
-                <span id="board-summary"></span>
-            </div>
-        </section>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 mt-5 lg:mt-6">
-            <section class="lg:col-span-8 bg-white rounded-2xl border border-slate-200 p-4 md:p-5">
-                <h2 class="font-extrabold mb-1">문제 있는 층</h2>
-                <div id="work-list"></div>
-            </section>
-
-            <aside class="lg:col-span-4">
-                <div class="bg-white rounded-2xl border border-slate-200 p-4 md:p-5">
-                    <div class="flex items-center gap-2 mb-3">
-                        <h2 class="font-extrabold">도서관 지도</h2>
+            <!-- 도서관 지도 -->
+            <aside class="order-last lg:order-none lg:col-start-3 lg:row-start-1 self-stretch">
+                <div class="h-full bg-white rounded-2xl border border-slate-200 p-3 md:p-4">
+                    <div class="flex items-center gap-2 mb-2">
+                        <h2 class="font-extrabold text-sm md:text-base">도서관 지도</h2>
                         <span id="map-hint" class="text-xs text-slate-400 hidden"><i class="fa-solid fa-magnifying-glass-plus"></i> 눌러서 크게</span>
                     </div>
                     <img id="map-img" alt="도서관 전체 지도" class="hidden w-full rounded-lg border border-slate-100 cursor-zoom-in"
                          onload="onMapLoaded(true)" onerror="onMapLoaded(false)">
-                    <div id="map-empty" class="text-sm text-slate-400 text-center py-6"><i class="fa-regular fa-map text-3xl block mb-2"></i>등록된 지도가 없습니다.</div>
+                    <div id="map-empty" class="text-sm text-slate-400 text-center py-3"><i class="fa-regular fa-map text-2xl block mb-1"></i>등록된 지도가 없습니다.</div>
                 </div>
             </aside>
+
+            <!-- 층별 관리: 화면에서 가장 크게. 책꽂이를 실제처럼 세워 놓고(맨 위가 가장 높은 층) 칸 안에 문제를 바로 적음 -->
+            <section class="lg:col-span-3 lg:row-start-2 min-w-0 bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 md:mb-5">
+                    <h2 class="text-lg md:text-xl font-extrabold">층별 관리</h2>
+                    <div id="zone-tabs" class="flex flex-wrap gap-1.5 text-sm font-bold"></div>
+                    <span id="zone-name" class="text-sm text-slate-400"></span>
+                    <div id="legend" class="lg:ml-auto flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-slate-500"></div>
+                </div>
+                <div id="board" class="overflow-x-auto pb-1"></div>
+                <div class="flex flex-wrap justify-between gap-2 mt-4 text-xs md:text-sm text-slate-500">
+                    <span>칸을 누르면 그 층의 사진과 문제 책 위치로 이동해요 · <span id="board-axis-hint"></span></span>
+                    <span id="board-summary"></span>
+                </div>
+            </section>
         </div>
     </main>
 
@@ -152,6 +147,8 @@
             board.innerHTML = "";
             if (!zone) {
                 document.getElementById("board-summary").textContent = "";
+                board.innerHTML = `<div class="text-center text-sm text-slate-500 py-10">
+                    ${ME.is_admin ? `<a href="/manage" class="text-indigo-600 font-semibold">관리 화면</a>에서 구역 · 책꽂이 · 층을 먼저 만들어 주세요.` : "관리자가 도서관 구조를 등록하면 여기에 표시됩니다."}</div>`;
                 return;
             }
             const levels = flattenLevels([zone]);
@@ -193,43 +190,19 @@
                 `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm ${st.swatch}"></span>${st.legend || st.text}</span>`).join("");
         }
 
-        // 문제 있는 층 표: 정리 필요 · 재촬영 층을 구역 순서대로
-        function renderWorkList() {
+        // 제목 문구: 정리가 필요한 층 수 (어느 층인지는 층별 관리 칸에 바로 보임)
+        function renderHeadline() {
             const levels = flattenLevels(tree);
-            const work = attentionLevels(levels).filter(l => WORK_STATUSES.has(l.status));
-
+            const work = levels.filter(l => WORK_STATUSES.has(l.status));
             document.getElementById("headline").innerHTML = levels.length === 0
                 ? "등록된 서가가 없어요"
                 : work.length ? `정리가 필요한 곳 <span class="text-rose-600">${work.length}층</span>` : `오늘은 정리할 곳이 없어요 <span class="text-emerald-600">✓</span>`;
-
-            const box = document.getElementById("work-list");
-            if (levels.length === 0) {
-                box.innerHTML = `<div class="text-center text-sm text-slate-500 py-6">
-                    ${ME.is_admin ? `<a href="/manage" class="text-indigo-600 font-semibold">관리 화면</a>에서 구역 · 책꽂이 · 층을 먼저 만들어 주세요.` : "관리자가 도서관 구조를 등록하면 여기에 표시됩니다."}</div>`;
-                return;
-            }
-            if (work.length === 0) {
-                box.innerHTML = `<div class="flex items-center gap-3 text-emerald-800 py-4">
-                    <i class="fa-solid fa-circle-check text-2xl text-emerald-500"></i>
-                    <div><div class="font-bold">모든 층이 정돈되어 있어요</div><div class="text-sm">최근 순찰에서 정리할 책이 발견되지 않았습니다.</div></div></div>`;
-                return;
-            }
-            box.innerHTML = work.map(l => {
-                const t = levelTitle(l);
-                const chips = l.status === "retake"
-                    ? `<span class="text-xs md:text-[13px] font-bold px-2 py-0.5 rounded-md bg-orange-100 text-orange-700">사진을 다시 찍어야 함</span>`
-                    : issueChips(l, "text-xs md:text-[13px] px-2 py-0.5");
-                return `<a href="${levelUrl(l)}" class="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1.5 py-3 border-t border-slate-100 first:border-t-0 hover:bg-slate-50 -mx-2 px-2 rounded-lg">
-                    <b class="w-full sm:w-40 shrink-0 text-slate-800">${escapeHtml(l.zone.zone_code)}-${l.bookcase.bookcase_no} ${l.level}층</b>
-                    <span class="flex flex-wrap gap-1 flex-1">${chips}</span>
-                    <span class="text-sm font-bold text-indigo-600 whitespace-nowrap">보러 가기 <i class="fa-solid fa-arrow-right"></i></span></a>`;
-            }).join("");
         }
 
         async function refreshLocations() {
             try {
                 tree = await fetchJson(`${API_BASE}/locations`);
-                renderWorkList();
+                renderHeadline();
                 renderBoard();
             } catch (e) {
                 document.getElementById("headline").textContent = `서가 현황을 불러오지 못했습니다: ${e.message}`;
