@@ -6,6 +6,8 @@
 
 ## 🌟 주요 기능
 - **Vision AI 분석** (`MakeResult.py`, `app/`): YOLO 세그멘테이션으로 책등을 찾고, ResNet 특징으로 정상 서가 이미지의 책과 매칭합니다. 누움 · 기울어짐 · 뒤집힘 · 종이 끼임 같은 **외형 이상**을 판별합니다.
+  - 책등이 안 보이고 종이면만 보이게 꽂힌 책도 같은 모델로 함께 검출합니다(`book-paper`).
+  - 사진에 위 · 아래 층이 함께 찍혀도 **사진 가운데에 가장 가까운 층의 책만** 분석합니다.
 - **서가 상태 판정** (`backend/analyzer.py`): Vision 결과, 가상 RFID, 가상 서가 정보를 교차 검증해 **오배열 · 누락 · 오배가 · 인식 실패** 같은 **위치 이상**을 판정합니다.
   - 책 한 권을 놓쳐도 뒤의 책들이 줄줄이 오배열로 나오지 않도록 LIS(최장 증가 부분수열) 방식으로 판정합니다.
   - 인식이 크게 틀린 세션은 개별 알림 대신 **"재촬영 필요"** 로 안내합니다.
@@ -33,7 +35,7 @@
 ```
 CECD/
 ├── app/                      # Vision AI 파트: 탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
-├── model/                    #   YOLO 가중치 (현재 사용: yolo26l_1280_v3.pt, app/models.py 참고)
+├── model/                    #   YOLO 가중치 (현재 사용: yolo26l_1280_v9_last.pt, app/models.py 참고)
 ├── dataset/                  #   시나리오별 테스트 이미지 (normal/, abnormal_*/) — 서버는 DB에 저장된 층별 기준 이미지를 사용
 │   └── test/                 #   MakeResult.py를 직접 실행할 때의 입력 이미지 (git 제외, 서버는 건드리지 않음)
 ├── test/                     #   MakeResult.py 직접 실행용 테스트 사진 묶음 (dataset/의 사진과 동일)
@@ -75,7 +77,7 @@ pip install -r requirements.txt
 > ⚠️ **백엔드 서버와 AI 분석은 같은 Python 환경을 써야 합니다.** 서버는 자신을 실행한 Python으로 AI 작업 프로세스(`backend/ai_worker.py` → `MakeResult.py`)를 띄우기 때문에, AI 패키지(ultralytics, torch)가 없는 가상환경으로 서버를 띄우면 분석 단계에서 실패합니다.
 
 ### 2. AI 모델 파일
-`model/yolo26l_1280_v3.pt`가 있어야 합니다(`app/models.py`가 가리키는 파일). `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
+`model/yolo26l_1280_v9_last.pt`가 있어야 합니다(`app/models.py`가 가리키는 파일). 책등(`book-spine`)과 종이면(`book-paper`)을 함께 검출하는 2클래스 모델입니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 코드를 새로 받은 뒤에는 `git lfs pull`로 모델 파일을 받아 주세요. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
 
 ### 3. 데이터베이스 (MySQL 8.0, Docker)
 ```bash
@@ -161,9 +163,11 @@ cp -r LIB001 backend/patrol_inbox/            # Windows PowerShell: Copy-Item -R
 | 층 | 사진 | 도서 | 참고 |
 |---|---|---|---|
 | A구역 1번 책꽂이 3층 | `LIB001/A/A-01/A-01-3.jpg` | 13권 | |
-| A구역 2번 책꽂이 3층 | `LIB001/A/A-02/A-02-3.jpg` | 31권 | 현재 모델(`yolo26l_1280_v1`)은 30번 「신약성경」을 놓쳐, 마지막 「Che Guevara」가 '인식 실패'로 표시됨 |
+| A구역 2번 책꽂이 3층 | `LIB001/A/A-02/A-02-3.jpg` | 31권 | |
 | A구역 3번 책꽂이 3층 | `LIB001/A/A-03/A-03-3.jpg` | 14권 | |
-| B구역 1번 책꽂이 2층 | `LIB001/B/B-01/B-01-2.jpg` | 21권 | 1번 책이 '기울어짐'으로 표시됨 |
+| B구역 1번 책꽂이 2층 | `LIB001/B/B-01/B-01-2.jpg` | 21권 | 1번 「색과 빛, 꿈을 담다」는 왼쪽 끝에 비스듬히 놓여 책등 아래쪽만 화면 구석에 찍혀 있음 |
+
+> 현재 모델(`yolo26l_1280_v9_last`) 기준 검출 권수는 네 층 모두 도서 목록과 같습니다(13 · 31 · 14 · 21권).
 
 > 이 사진들은 각 층의 정상 기준 사진과 같은 사진이라, "정리된 서가에서 알림이 나오지 않는지"를 확인하는 용도입니다. 오배열 · 누락 같은 이상 탐지는 기준과 다르게 찍은 사진으로 확인해야 합니다.
 
