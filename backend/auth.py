@@ -1,6 +1,8 @@
 import hashlib
 import hmac
 import secrets
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
@@ -17,6 +19,40 @@ SESSION_COOKIE = "lib_session"
 SESSION_HOURS = 12
 ROLES = ("ADMIN", "LIBRARIAN")   # ADMIN: 지도 · 기준 사진 · 구조 · 사서 계정 설정 가능 / LIBRARIAN: 결과 확인 · 알림 처리 · 일괄 분석
 PBKDF2_ITERATIONS = 200_000
+LOGIN_FAIL_LIMIT = 5        # 이 횟수만큼 실패하면 잠시 로그인을 막음
+LOGIN_FAIL_WINDOW = 300     # 실패를 세는 기간 · 막는 시간 (초)
+_login_failures = {}        # 접속 IP → 최근 실패 시각 목록 (서버 메모리, 재시작하면 비워짐)
+_login_failures_lock = threading.Lock()
+
+
+def client_ip(request: Request) -> str:
+    """접속한 사람의 IP. Cloudflare Tunnel을 거치면 서버에는 127.0.0.1로 보이므로 Cloudflare가 넣어 주는 헤더를 먼저 봅니다."""
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
+
+
+def login_retry_seconds(ip: str) -> int:
+    """로그인이 막혀 있으면 남은 초, 아니면 0"""
+    now = time.monotonic()
+    with _login_failures_lock:
+        recent = [t for t in _login_failures.get(ip, []) if now - t < LOGIN_FAIL_WINDOW]
+        if recent:
+            _login_failures[ip] = recent
+        else:
+            _login_failures.pop(ip, None)
+    return int(LOGIN_FAIL_WINDOW - (now - recent[0])) + 1 if len(recent) >= LOGIN_FAIL_LIMIT else 0
+
+
+def record_login_failure(ip: str):
+    now = time.monotonic()
+    with _login_failures_lock:
+        for key in [k for k, v in _login_failures.items() if now - v[-1] >= LOGIN_FAIL_WINDOW]:
+            del _login_failures[key]
+        _login_failures.setdefault(ip, []).append(now)
+
+
+def clear_login_failures(ip: str):
+    with _login_failures_lock:
+        _login_failures.pop(ip, None)
 
 
 def sha256_hex(text: str) -> str:

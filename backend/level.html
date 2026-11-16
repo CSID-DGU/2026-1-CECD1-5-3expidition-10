@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>층 화면 · 서고 모니터링</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/assets/common.js?v=20261116b"></script>
+    <script src="/assets/app.js?v=20261116b"></script>
+</head>
+<!-- 층 화면: "가서 뭘 해야 하나" — 한 층의 최근 순찰 사진과 할 일(알림). ?shelf_id=층 (선택: &session_id=지난 순찰) -->
+<body class="bg-slate-50 text-slate-800 min-h-screen pb-24 lg:pb-0">
+    <div id="top-bar"></div>
+
+    <main class="max-w-6xl mx-auto px-4 md:px-8 py-5 md:py-6">
+        <a href="/home" class="inline-flex items-center gap-1.5 text-sm text-indigo-600 font-semibold mb-3"><i class="fa-solid fa-arrow-left"></i> 오늘의 서가</a>
+        <div class="flex flex-wrap items-end justify-between gap-3 mb-5">
+            <div class="min-w-0">
+                <h1 id="title" class="text-2xl md:text-3xl font-bold text-slate-900">불러오는 중...</h1>
+                <div id="subtitle" class="text-sm text-slate-500 mt-1"></div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="where-btn" onclick="showWhere()" class="hidden text-sm font-semibold px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50">
+                    <i class="fa-solid fa-map-location-dot"></i> 위치 보기</button>
+                <span id="nav-pos" class="hidden lg:inline text-sm text-slate-500"></span>
+                <a id="next-top" class="hidden lg:flex text-sm font-semibold px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white items-center gap-1.5"></a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6">
+            <section class="lg:col-span-8 min-w-0">
+                <div class="bg-white rounded-2xl border border-slate-200 p-3 md:p-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="flex bg-slate-100 rounded-lg p-0.5 text-sm font-semibold shrink-0">
+                            <button id="tab-latest" onclick="showPhoto('latest')" class="px-3 py-1 rounded-md">최근 순찰</button>
+                            <button id="tab-normal" onclick="showPhoto('normal')" class="px-3 py-1 rounded-md">정상일 때 사진</button>
+                        </div>
+                        <span id="photo-caption" class="hidden sm:inline text-xs text-slate-400 truncate"></span>
+                        <!-- 사진 위 문제 책 번호 테두리 켜기 / 끄기 -->
+                        <label id="marks-toggle" class="hidden ml-auto shrink-0 items-center gap-2 text-sm font-semibold text-slate-600 cursor-pointer select-none">
+                            <span class="hidden sm:inline">문제 위치 표시</span><span class="sm:hidden">위치 표시</span>
+                            <input id="marks-check" type="checkbox" class="peer sr-only" onchange="setMarksVisible(this.checked)">
+                            <span class="w-9 h-5 rounded-full bg-slate-300 peer-checked:bg-indigo-600 relative transition-colors
+                                         after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:transition-all
+                                         peer-checked:after:left-[18px]"></span>
+                        </label>
+                    </div>
+                    <div id="photo-wrap" class="relative hidden">
+                        <img id="photo" alt="" class="block w-full rounded-xl cursor-zoom-in bg-slate-100">
+                        <div id="photo-marks" class="absolute inset-0 pointer-events-none"></div>
+                    </div>
+                    <div id="photo-empty" class="hidden rounded-xl bg-slate-50 border border-slate-200 h-64 flex items-center justify-center text-sm text-slate-400 text-center px-6"></div>
+
+                    <!-- 왼쪽부터 책 순서 띠: 옆으로 끌어서(휴대폰은 밀어서) 넘겨 봄 -->
+                    <div id="strip-box" class="hidden mt-4">
+                        <div class="flex items-center justify-between gap-2 mb-2 px-0.5">
+                            <h3 class="text-sm font-bold text-slate-700">왼쪽부터 책 순서</h3>
+                            <span class="text-xs text-slate-400"><i class="fa-solid fa-left-right"></i> 옆으로 끌어서 넘겨 보기</span>
+                        </div>
+                        <div class="relative">
+                            <button id="strip-prev" onclick="scrollStrip(-1)" title="왼쪽으로" aria-label="왼쪽으로"
+                                    class="hidden absolute -left-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white border border-slate-200 shadow text-slate-600 items-center justify-center">
+                                <i class="fa-solid fa-chevron-left"></i></button>
+                            <div id="strip" class="flex gap-1 overflow-x-auto pt-3 pb-1 cursor-grab select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"></div>
+                            <button id="strip-next" onclick="scrollStrip(1)" title="오른쪽으로" aria-label="오른쪽으로"
+                                    class="hidden absolute -right-2 top-1/2 -translate-y-1/2 z-10 w-9 h-9 rounded-full bg-white border border-slate-200 shadow text-slate-600 items-center justify-center">
+                                <i class="fa-solid fa-chevron-right"></i></button>
+                        </div>
+                        <!-- 지금 보고 있는 범위 + 문제 책 위치 -->
+                        <div id="strip-bar" class="relative h-1.5 bg-slate-100 rounded-full mt-2.5">
+                            <div id="strip-thumb" class="absolute inset-y-0 bg-slate-300 rounded-full"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="lg:col-span-4 flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-bold text-lg">할 일 <span id="todo-count" class="text-slate-400 font-normal"></span></h2>
+                    <span class="text-xs text-slate-400">다른 서가 책부터 보여 줘요</span>
+                </div>
+                <div id="tasks" class="flex flex-col gap-3"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- 휴대폰: 아래에 고정한 다음 층 버튼 -->
+    <div id="next-bottom-bar" class="hidden lg:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 p-3 z-20">
+        <a id="next-bottom" class="w-full py-3 rounded-xl bg-slate-900 text-white font-semibold flex items-center justify-center gap-1.5"></a>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(location.search);
+        const SHELF_ID = params.get("shelf_id");
+        const SESSION_ID = params.get("session_id");   // 지난 순찰을 볼 때만
+        let ME = null;
+        let levels = [];
+        let level = null;
+        let session = null;
+        let photoMode = "latest";
+
+        function updateHeader() {
+            if (!level) return;
+            const t = levelTitle(level);
+            document.getElementById("title").textContent = `${t.zone} ${t.main}`;
+            document.title = `${t.zone} ${t.main} · 서고 모니터링`;
+            const parts = [level.zone.zone_name, `도서 ${level.book_count}권`];
+            if (session) parts.push(`${formatTime(session.scan_time)} 순찰${SESSION_ID && level.latest_session?.session_id !== SESSION_ID ? " (지난 순찰)" : ""}`);
+            document.getElementById("subtitle").textContent = parts.filter(Boolean).join(" · ");
+
+            // 다음 층: 첫 화면 목록 순서(정리 필요 → 재촬영 → 확인) 중 이 층 다음
+            const todo = attentionLevels(levels);
+            const idx = todo.findIndex(l => l.shelf_id === SHELF_ID);
+            const next = todo.filter(l => l.shelf_id !== SHELF_ID)[idx >= 0 ? idx : 0];
+            document.getElementById("nav-pos").textContent = idx >= 0 ? `${idx + 1} / ${todo.length}` : "";
+            ["next-top", "next-bottom"].forEach(id => {
+                const a = document.getElementById(id);
+                if (next) {
+                    const nt = levelTitle(next);
+                    a.href = levelUrl(next);
+                    a.innerHTML = `다음 층: ${nt.zone} ${nt.main} <i class="fa-solid fa-arrow-right"></i>`;
+                } else {
+                    a.href = "/home";
+                    a.innerHTML = `<i class="fa-solid fa-house"></i> 오늘의 서가로`;
+                }
+            });
+            document.getElementById("next-bottom-bar").classList.remove("hidden");
+        }
+
+        // ===================== 사진 =====================
+        function showPhoto(mode) {
+            photoMode = mode;
+            ["latest", "normal"].forEach(m => {
+                document.getElementById(`tab-${m}`).className = "px-3 py-1 rounded-md " + (m === mode ? "bg-white shadow-sm text-slate-800" : "text-slate-500");
+            });
+            const img = document.getElementById("photo");
+            const empty = document.getElementById("photo-empty");
+            const caption = document.getElementById("photo-caption");
+            const label = level ? level.location_label : "";
+            let url = "", text = "";
+            if (mode === "latest") {
+                if (session && session.image_path) { url = spineUrl(session.image_path); text = `${formatTime(session.scan_time)} 촬영`; }
+                else empty.innerHTML = session ? "이 순찰에는 원본 사진이 저장되어 있지 않습니다." : `<div><i class="fa-solid fa-route text-3xl block mb-2"></i>아직 순찰 기록이 없습니다.</div>`;
+            } else if (level && level.has_normal_image) {
+                url = `${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image?v=${Date.now()}`;
+                text = "정상 상태 기준 사진";
+            } else {
+                empty.innerHTML = `<div><i class="fa-solid fa-circle-check text-3xl block mb-2"></i>정상 상태 기준 사진이 없습니다.</div>`;
+            }
+            document.getElementById("photo-wrap").classList.toggle("hidden", !url);
+            empty.classList.toggle("hidden", !!url);
+            if (url) {
+                img.src = url;
+                img.alt = `${label} ${text}`;
+                img.onclick = () => openLightbox(url, label, text);
+            }
+            caption.textContent = text;
+            renderMarks();
+        }
+
+        // ===================== 사진 위 번호 테두리 =====================
+        // 문제 책마다 같은 번호를 사진 · 책 순서 띠 · 오른쪽 카드에 붙입니다. (row.marker_no, renderTasks에서 매김)
+        const MARKS_KEY = "level.showMarks";
+        let marksVisible = localStorage.getItem(MARKS_KEY) !== "0";
+        let markedRows = [];   // 번호를 붙인 미처리 알림 (카드 표시 순서)
+
+        function setMarksVisible(on) {
+            marksVisible = on;
+            localStorage.setItem(MARKS_KEY, on ? "1" : "0");
+            renderMarks();
+        }
+
+        function markBadge(row, extra = "-top-3.5 w-6 h-6 text-xs") {
+            return `<span class="absolute left-1/2 -translate-x-1/2 rounded-full text-white font-bold flex items-center justify-center border-2 border-white shadow ${extra}"
+                          style="background:${GROUP_COLOR[row.issues[0].group]}">${row.marker_no}</span>`;
+        }
+
+        // 사진에 없는 책(분실 위험)은 양옆 책 사이에 점선으로 표시 (양옆 책의 위치를 알 때만)
+        function gapLine(row) {
+            const cells = stripCells();
+            const i = cells.indexOf(row);
+            const prev = cells.slice(0, i).reverse().find(r => r.sequence_order > 0);
+            const next = cells.slice(i + 1).find(r => r.sequence_order > 0);
+            const a = prev?.spine_box, b = next?.spine_box;
+            if (!a && !b) return null;
+            const x = a && b ? (a[2] + b[0]) / 2 : a ? a[2] : b[0];
+            const boxes = [a, b].filter(Boolean);
+            return { x, y1: Math.min(...boxes.map(v => v[1])), y2: Math.max(...boxes.map(v => v[3])) };
+        }
+
+        function renderMarks() {
+            const layer = document.getElementById("photo-marks");
+            const toggle = document.getElementById("marks-toggle");
+            const located = photoMode === "latest" ? markedRows.filter(r => r.spine_box || (r.sequence_order < 0 && gapLine(r))) : [];
+            toggle.classList.toggle("hidden", located.length === 0);
+            toggle.classList.toggle("flex", located.length > 0);
+            document.getElementById("marks-check").checked = marksVisible;
+            layer.innerHTML = "";
+            if (!marksVisible) return;
+            located.forEach(row => {
+                const color = GROUP_COLOR[row.issues[0].group];
+                const el = document.createElement("button");
+                el.type = "button";
+                el.title = `${row.marker_no}. ${row.issues[0].label} ${cardTitle(row).replace(/<[^>]+>/g, "")}`;
+                el.dataset.resultId = row.result_id;
+                el.className = "absolute pointer-events-auto rounded-md transition-shadow";
+                if (row.spine_box) {
+                    const [x1, y1, x2, y2] = row.spine_box;
+                    Object.assign(el.style, { left: `${x1 * 100}%`, top: `${y1 * 100}%`, width: `${(x2 - x1) * 100}%`, height: `${(y2 - y1) * 100}%`,
+                                              border: `3px solid ${color}`, boxShadow: "0 0 0 2px rgba(255,255,255,.6)" });
+                } else {
+                    const g = gapLine(row);
+                    Object.assign(el.style, { left: `calc(${g.x * 100}% - 8px)`, top: `${g.y1 * 100}%`, width: "16px", height: `${(g.y2 - g.y1) * 100}%`,
+                                              borderLeft: `4px dashed ${color}`, marginLeft: "6px", background: "transparent" });
+                }
+                el.innerHTML = markBadge(row);
+                el.addEventListener("click", e => { e.stopPropagation(); focusCard(row); });
+                layer.appendChild(el);
+            });
+        }
+
+        // 번호를 누르면 오른쪽 카드로 (접힌 그룹이면 펼침)
+        function focusCard(row) {
+            const card = document.querySelector(`#tasks [data-result-id="${row.result_id}"]`);
+            if (!card) return;
+            card.closest("details")?.setAttribute("open", "");
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+            flash(card);
+        }
+
+        function flash(el) {
+            el.classList.add("ring-4", "ring-indigo-300");
+            setTimeout(() => el.classList.remove("ring-4", "ring-indigo-300"), 1400);
+        }
+
+        // ===================== 왼쪽부터 책 순서 띠 =====================
+        // 사진에서 찾은 책(sequence_order 1, 2, ...) + 이 층에 있어야 하는데 없는 책(분실 위험)을 원래 순서 자리에 끼워 넣음
+        function stripCells() {
+            if (!session) return [];
+            const results = session.results || [];
+            const cells = results.filter(r => r.sequence_order > 0).sort((a, b) => a.sequence_order - b.sequence_order);
+            const missing = results.filter(r => r.sequence_order < 0 && isPending(r) && r.issues[0].group === "lost"
+                                                && r.home_shelf_id === SHELF_ID && r.home_order > 0)
+                                   .sort((a, b) => a.home_order - b.home_order);
+            missing.forEach(m => {
+                let at = 0;
+                cells.forEach((c, i) => { if (c.home_shelf_id === SHELF_ID && c.home_order > 0 && c.home_order < m.home_order) at = i + 1; });
+                cells.splice(at, 0, m);
+            });
+            return cells;
+        }
+
+        function stripCellHtml(row) {
+            const pending = isPending(row);
+            const color = pending ? GROUP_COLOR[row.issues[0].group] : null;
+            const name = row.title ? escapeHtml(row.title)
+                : row.reg_no && row.reg_no !== "UNKNOWN" ? escapeHtml(row.reg_no) : "알 수 없는 책";
+            const missing = row.sequence_order < 0;
+            const style = missing ? `border:2px dashed ${color};color:${color};background:#fff1f2`
+                        : color ? `background:${color};color:#fff` : "";
+            const cls = missing ? "" : color ? "font-semibold shadow" : row.issues.length ? "bg-slate-100 text-slate-500" : "bg-emerald-50 text-emerald-700";
+            return `<button type="button" data-result-id="${row.result_id}" title="${missing ? "없어진 책" : `왼쪽에서 ${row.sequence_order}번째`} · ${name}"
+                        class="relative shrink-0 w-16 h-[76px] rounded-lg px-1 pt-2 flex flex-col items-center gap-0.5 ${cls}" style="${style}">
+                    ${pending && row.marker_no ? markBadge(row, "-top-3.5 w-[18px] h-[18px] text-[10px] border") : ""}
+                    <b class="text-[13px] leading-none mt-0.5">${missing ? "?" : row.sequence_order}</b>
+                    <span class="text-[10px] leading-tight text-center break-all line-clamp-2 opacity-90">${name}${missing ? " 없음" : ""}</span>
+                </button>`;
+        }
+
+        function renderStrip() {
+            const box = document.getElementById("strip-box");
+            const strip = document.getElementById("strip");
+            const cells = stripCells();
+            box.classList.toggle("hidden", cells.length === 0);
+            if (!cells.length) return;
+            strip.innerHTML = cells.map(stripCellHtml).join("");
+            strip.querySelectorAll("[data-result-id]").forEach((el, i) => {
+                el.addEventListener("click", () => { if (!stripDragged && cells[i].marker_no && isPending(cells[i])) focusCard(cells[i]); });
+            });
+            // 막대 위 문제 책 위치
+            const bar = document.getElementById("strip-bar");
+            bar.querySelectorAll("[data-pin]").forEach(p => p.remove());
+            cells.forEach((row, i) => {
+                if (!isPending(row)) return;
+                bar.insertAdjacentHTML("beforeend", `<span data-pin class="absolute -top-1 w-1 h-3.5 rounded-sm"
+                    style="left:calc(${(i + 0.5) / cells.length * 100}% - 2px);background:${GROUP_COLOR[row.issues[0].group]}"></span>`);
+            });
+            updateStripBar();
+        }
+
+        function updateStripBar() {
+            const strip = document.getElementById("strip");
+            const total = strip.scrollWidth, view = strip.clientWidth;
+            const thumb = document.getElementById("strip-thumb");
+            thumb.style.left = `${total ? strip.scrollLeft / total * 100 : 0}%`;
+            thumb.style.width = `${total ? Math.min(100, view / total * 100) : 100}%`;
+            const canLeft = strip.scrollLeft > 2, canRight = strip.scrollLeft + view < total - 2;
+            document.getElementById("strip-prev").classList.toggle("hidden", !canLeft);
+            document.getElementById("strip-prev").classList.toggle("flex", canLeft);
+            document.getElementById("strip-next").classList.toggle("hidden", !canRight);
+            document.getElementById("strip-next").classList.toggle("flex", canRight);
+        }
+
+        function scrollStrip(dir) {
+            const strip = document.getElementById("strip");
+            strip.scrollBy({ left: dir * strip.clientWidth * 0.8, behavior: "smooth" });
+        }
+
+        // 카드를 누르면 띠가 그 책 위치로 넘어가고, 사진의 테두리가 잠깐 강조됨
+        function showOnStrip(resultId) {
+            const cell = document.querySelector(`#strip [data-result-id="${resultId}"]`);
+            if (cell) {
+                const strip = document.getElementById("strip");
+                strip.scrollTo({ left: cell.offsetLeft - strip.clientWidth / 2 + cell.offsetWidth / 2, behavior: "smooth" });
+                flash(cell);
+            }
+            const mark = document.querySelector(`#photo-marks [data-result-id="${resultId}"]`);
+            if (mark) flash(mark);
+        }
+
+        // 마우스로 끌어서 넘기기 (휴대폰은 기본 스크롤로 밀어서 넘김)
+        let stripDragged = false;
+        (() => {
+            const strip = document.getElementById("strip");
+            let startX = null, startLeft = 0;
+            strip.addEventListener("pointerdown", e => {
+                if (e.pointerType !== "mouse") return;
+                startX = e.clientX; startLeft = strip.scrollLeft; stripDragged = false;
+            });
+            window.addEventListener("pointermove", e => {
+                if (startX === null) return;
+                const dx = e.clientX - startX;
+                if (Math.abs(dx) > 5) { stripDragged = true; strip.classList.add("cursor-grabbing"); }
+                strip.scrollLeft = startLeft - dx;
+            });
+            window.addEventListener("pointerup", () => {
+                startX = null;
+                strip.classList.remove("cursor-grabbing");
+                setTimeout(() => { stripDragged = false; }, 0);
+            });
+            strip.addEventListener("scroll", updateStripBar, { passive: true });
+            window.addEventListener("resize", updateStripBar);
+        })();
+
+        function showWhere() {
+            openLightbox(libraryMapUrl(), "도서관 지도", level ? `${level.location_label} · ${level.zone.zone_name || ""}` : "");
+        }
+
+        // ===================== 할 일 =====================
+        async function updateAction(row, status) {
+            try {
+                const updated = await fetchJson(`${API_BASE}/results/${row.result_id}/action`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status }),
+                });
+                Object.assign(row, { action_status: updated.action_status, action_time: updated.action_time, action_by_name: updated.action_by_name });
+                renderTasks();
+                refreshLevels();
+            } catch (e) {
+                alert(`조치 상태 저장 실패: ${e.message}`);
+            }
+        }
+
+        function renderTasks() {
+            const box = document.getElementById("tasks");
+            box.innerHTML = "";
+            const count = document.getElementById("todo-count");
+            markedRows = [];
+            if (!session) {
+                count.textContent = "";
+                box.appendChild(noticeBox("bg-slate-50 border-slate-300 text-slate-600", "fa-route",
+                    level && level.status === "no_reference"
+                        ? `정상 상태 기준 사진이 없어 이 층은 분석할 수 없습니다. ${ME.is_admin ? `<a href="/manage" class="font-semibold text-indigo-600">관리 화면</a>에서 등록해 주세요.` : "관리자에게 알려 주세요."}`
+                        : "아직 이 층의 순찰 기록이 없습니다. 순찰 사진이 들어오면 첫 화면에서 분석해 주세요."));
+                return;
+            }
+            const results = session.results || [];
+            const quality = session.quality;
+            const reliable = !quality || quality.is_reliable;
+            const withIssues = results.filter(r => r.issues.length > 0);
+            const pending = sortByPriority(withIssues.filter(isPending));
+            const handled = sortByPriority(withIssues.filter(r => !isPending(r)));
+            count.textContent = pending.length ? String(pending.length) : "";
+
+            // 카드가 보이는 순서대로 번호 (사진 테두리 · 책 순서 띠와 같은 번호)
+            results.forEach(r => { delete r.marker_no; });
+            markedRows = DASHBOARD_GROUP_ORDER.flatMap(g => pending.filter(r => r.issues[0].group === g.key));
+            markedRows.forEach((r, i) => { r.marker_no = i + 1; });
+
+            if (level?.reference_mismatch) {
+                const m = level.reference_mismatch;
+                box.appendChild(noticeBox("bg-amber-50 border-amber-500 text-amber-800", "fa-triangle-exclamation",
+                    `기준 사진의 책(${m.detected}권)과 이 층에 연결된 책(${m.expected}권)의 수가 달라, 책이 다른 도서로 판정될 수 있습니다. `
+                    + (ME.is_admin ? "관리 화면에서 기준 사진과 배가 위치를 확인해 주세요." : "관리자에게 알려 주세요.")));
+            }
+
+            let list = box;
+            if (!reliable) {
+                box.appendChild(noticeBox("bg-rose-50 border-rose-500 text-rose-800", "fa-camera-rotate",
+                    `<b>사진을 다시 찍어야 해요.</b> 인식 신뢰도가 낮아 아래 판정은 틀릴 수 있습니다.
+                     <ul class="list-disc ml-5 mt-1 text-xs">${quality.reasons.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul>`));
+                if (pending.length) {
+                    const d = document.createElement("details");
+                    d.innerHTML = `<summary class="cursor-pointer text-xs font-bold text-slate-500 py-1">참고용 판정 ${pending.length}건 보기</summary><div class="flex flex-col gap-3 mt-2"></div>`;
+                    box.appendChild(d);
+                    list = d.querySelector("div");
+                }
+            }
+
+            const unknown = session.unknown_books;
+            const hintGroup = unknown ? pending.find(r => r.reg_no === "UNKNOWN")?.issues[0].group : null;
+            let othersLabel = false;
+            DASHBOARD_GROUP_ORDER.forEach(group => {
+                const rows = pending.filter(r => r.issues[0].group === group.key);
+                if (!rows.length) return;
+                const open = OPEN_GROUPS.has(group.key);
+                if (!open && !othersLabel) {
+                    const label = document.createElement("div");
+                    label.className = "text-xs font-semibold text-slate-400 mt-1";
+                    label.textContent = pending.some(r => OPEN_GROUPS.has(r.issues[0].group)) ? "그 밖의 알림" : "알림 (눌러서 펼치기)";
+                    list.appendChild(label);
+                    othersLabel = true;
+                }
+                const section = buildSection(group, rows, open, updateAction);
+                if (group.key === hintGroup) section.querySelector("div").prepend(noticeBox("bg-sky-50 border-sky-400 text-sky-800", "fa-tower-broadcast", unknownBooksMessage(unknown)));
+                list.appendChild(section);
+            });
+            if (unknown && !unknown.matched && !hintGroup) {
+                list.appendChild(noticeBox("bg-sky-50 border-sky-400 text-sky-800", "fa-tower-broadcast", unknownBooksMessage(unknown)));
+            }
+
+            if (pending.length === 0 && reliable) {
+                box.prepend(noticeBox("bg-emerald-50 border-emerald-500 text-emerald-800", "fa-circle-check",
+                    withIssues.length ? `<b>모두 처리했어요.</b> 이 순찰에서 발견된 ${withIssues.length}건을 모두 처리했습니다.`
+                                      : `<b>정돈되어 있어요.</b> 이 순찰에서 정리할 책이 발견되지 않았습니다.`));
+            }
+            if (handled.length) {
+                box.appendChild(buildSection(HANDLED_GROUP, handled, false, updateAction));
+            }
+            renderStrip();
+            renderMarks();
+        }
+
+        // ===================== 데이터 =====================
+        async function refreshLevels() {
+            levels = flattenLevels(await fetchJson(`${API_BASE}/locations`));
+            level = levels.find(l => l.shelf_id === SHELF_ID) || null;
+            updateHeader();
+        }
+
+        async function loadSession() {
+            const sid = SESSION_ID || level?.latest_session?.session_id;
+            session = sid ? await fetchJson(`${API_BASE}/dashboard/results?session_id=${encodeURIComponent(sid)}`) : null;
+            if (session && !session.session_id) session = null;
+        }
+
+        (async () => {
+            ME = await loadMe();
+            renderTopBar(ME, "home");
+            if (!SHELF_ID) { location.href = "/home"; return; }
+            try {
+                await refreshLevels();
+                if (!level) {
+                    document.getElementById("title").textContent = "층을 찾을 수 없습니다";
+                    document.getElementById("tasks").appendChild(noticeBox("bg-slate-50 border-slate-300 text-slate-600", "fa-circle-question",
+                        `이 도서관에 없는 층입니다. <a href="/home" class="font-semibold text-indigo-600">오늘의 서가</a>로 돌아가 주세요.`));
+                    return;
+                }
+                await loadSession();
+            } catch (e) {
+                document.getElementById("tasks").appendChild(noticeBox("bg-rose-50 border-rose-500 text-rose-800", "fa-circle-exclamation", `불러오지 못했습니다: ${escapeHtml(e.message)}`));
+                return;
+            }
+            updateHeader();
+            renderTasks();
+            showPhoto("latest");
+            // 카드를 누르면(버튼 · 책등 사진 제외) 띠와 사진에서 그 책을 보여 줌
+            document.getElementById("tasks").addEventListener("click", e => {
+                if (e.target.closest("button, summary, a")) return;
+                const card = e.target.closest("[data-result-id]");
+                if (card) showOnStrip(card.dataset.resultId);
+            });
+            const probe = new Image();   // 지도가 있을 때만 '위치 보기' 버튼 표시
+            probe.onload = () => document.getElementById("where-btn").classList.remove("hidden");
+            probe.src = libraryMapUrl();
+        })();
+    </script>
+</body>
+</html>

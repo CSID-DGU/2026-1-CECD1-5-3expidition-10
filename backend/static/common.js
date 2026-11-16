@@ -1,4 +1,4 @@
-// 대시보드(dashboard.html)와 일일 리포트(report.html)가 함께 쓰는 설정과 유틸리티
+// 화면들(home · level · dashboard_classic · report)이 함께 쓰는 설정과 유틸리티
 const API_BASE = "/api";
 const SPINE_BASE = "/api/files/spine";   // 세션 원본 사진 · 책등 크롭 (로그인한 도서관 것만 내려줌)
 
@@ -24,6 +24,16 @@ async function logout() {
     location.href = "/login";
 }
 
+// 세션의 RFID 출처 표시 (없으면 빈 문자열)
+function rfidLabel(source) {
+    const label = { READER: "RFID 리더", VIRTUAL: "가상 RFID", NONE: "RFID 미수신" }[source];
+    return label ? ` · ${label}` : "";
+}
+
+// 터치 화면에서는 작은 버튼도 손가락으로 누르기 쉽게 키움
+document.head.insertAdjacentHTML("beforeend",
+    "<style>@media (pointer: coarse) { button, select, input { min-height: 40px; } button { min-width: 40px; } }</style>");
+
 // 상단 바의 도서관 · 사서 표시 + 로그아웃 버튼 (요소 id: user-box)
 function renderUserBox(me) {
     const box = document.getElementById("user-box");
@@ -32,27 +42,32 @@ function renderUserBox(me) {
         ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">관리자</span>`
         : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">사서</span>`;
     box.innerHTML = `
-        <span class="text-sm text-slate-600 flex items-center gap-1.5">
+        <span class="text-sm text-slate-600 flex items-center gap-1.5 whitespace-nowrap">
             <i class="fa-solid fa-building-columns text-slate-400"></i>
             <b class="text-slate-700">${escapeHtml(me.library_name)}</b>
             <span class="text-slate-300">|</span> ${escapeHtml(me.display_name)} ${role}
         </span>
         ${me.is_admin && typeof openAccountModal === "function" ? `
-        <button onclick="openAccountModal()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
+        <button onclick="openAccountModal()" class="whitespace-nowrap text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
             <i class="fa-solid fa-users"></i> 사서 계정
         </button>` : ""}
-        <button onclick="logout()" class="text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
+        ${typeof openMyPassword === "function" ? `
+        <button onclick="openMyPassword()" class="whitespace-nowrap text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
+            <i class="fa-solid fa-key"></i> 내 비밀번호
+        </button>` : ""}
+        <button onclick="logout()" class="whitespace-nowrap text-xs text-slate-500 hover:text-slate-800 border border-slate-200 rounded-lg px-2 py-1">
             <i class="fa-solid fa-right-from-bracket"></i> 로그아웃
         </button>`;
 }
 
 // 알림 그룹 표시 설정. 순서 = 심각도 순서이며, 그룹 분류 자체는 서버(analyzer.classify_issues)가 결정합니다.
 const ISSUE_GROUPS = [
-    { key: "lost",     title: "분실 위험", icon: "fa-eye-slash",            color: "border-red-500 bg-red-50 text-red-700",          badge: "bg-red-100 text-red-700" },
-    { key: "foreign",  title: "오배가",    icon: "fa-right-left",           color: "border-orange-500 bg-orange-50 text-orange-700", badge: "bg-orange-100 text-orange-700" },
-    { key: "misorder", title: "오배열",    icon: "fa-shuffle",              color: "border-violet-500 bg-violet-50 text-violet-700", badge: "bg-violet-100 text-violet-700" },
-    { key: "physical", title: "외형 이상", icon: "fa-triangle-exclamation", color: "border-amber-500 bg-amber-50 text-amber-700",    badge: "bg-amber-100 text-amber-700" },
-    { key: "check",    title: "확인 필요", icon: "fa-magnifying-glass",     color: "border-slate-400 bg-slate-50 text-slate-700",    badge: "bg-slate-200 text-slate-700" },
+    { key: "lost",     title: "분실 위험", icon: "fa-eye-slash",            color: "border-red-500 bg-red-50 text-red-700",          badge: "bg-red-100 text-red-700",       stripe: "border-l-red-500",    text: "text-red-700",    hint: "다른 책꽂이에 꽂혀 있을 가능성이 높음" },
+    { key: "foreign",  title: "오배가",    icon: "fa-right-left",           color: "border-orange-500 bg-orange-50 text-orange-700", badge: "bg-orange-100 text-orange-700", stripe: "border-l-orange-500", text: "text-orange-700", hint: "다른 서가의 책이 섞여 있음" },
+    { key: "status",   title: "상태이상",  icon: "fa-rotate-left",          color: "border-pink-500 bg-pink-50 text-pink-700",       badge: "bg-pink-100 text-pink-700",     stripe: "border-l-pink-500",   text: "text-pink-700",   hint: "대출 중으로 되어 있는데 서가에 있음" },
+    { key: "misorder", title: "오배열",    icon: "fa-shuffle",              color: "border-violet-500 bg-violet-50 text-violet-700", badge: "bg-violet-100 text-violet-700", stripe: "border-l-violet-500", text: "text-violet-700", hint: "같은 층 안에서 순서만 바뀐 책" },
+    { key: "physical", title: "외형 이상", icon: "fa-triangle-exclamation", color: "border-amber-500 bg-amber-50 text-amber-700",    badge: "bg-amber-100 text-amber-700",   stripe: "border-l-amber-500",  text: "text-amber-700",  hint: "책은 제자리에 있음 · 정돈만 필요" },
+    { key: "check",    title: "확인 필요", icon: "fa-magnifying-glass",     color: "border-slate-400 bg-slate-50 text-slate-700",    badge: "bg-slate-200 text-slate-700",   stripe: "border-l-slate-400",  text: "text-slate-600",  hint: "AI가 어떤 책인지 확인하지 못함" },
 ];
 const GROUP_INFO = Object.fromEntries(ISSUE_GROUPS.map(g => [g.key, g]));
 const GROUP_RANK = Object.fromEntries(ISSUE_GROUPS.map((g, i) => [g.key, i]));
@@ -93,10 +108,37 @@ function seqLabel(row) {
     return row.sequence_order > 0 ? `${row.sequence_order}번째` : "위치 불명";
 }
 
-// 도서 ID + 서명 (서가 정보 BOOK_MASTER에 등록된 도서만 서명이 있음)
+// 도서 ID(등록번호) + 서명 (도서 정보 BO_BOOK_TBL에 있는 도서만 서명이 있음)
 function bookLabel(row) {
-    const id = escapeHtml(row.book_id || "Unknown");
+    if (row.reg_no === "UNKNOWN") return "알 수 없는 책";
+    const id = escapeHtml(row.reg_no || "Unknown");
     return row.title ? `${id} 「${escapeHtml(row.title)}」` : id;
+}
+
+// 서명만 표시 (서명이 없는 도서는 등록번호)
+function bookTitle(row) {
+    return row.title ? `「${escapeHtml(row.title)}」` : bookLabel(row);
+}
+
+// 알림에서 책을 부르는 이름: 제목 → (제목 없으면) 등록번호 → (어떤 책인지 모르면) 왼쪽에서 몇 번째. 뒤에 "책이"를 붙여 씀
+function bookName(row) {
+    if (row.title) return `「${escapeHtml(row.title)}」`;
+    if (row.reg_no && row.reg_no !== "UNKNOWN") return `등록번호 ${escapeHtml(row.reg_no)}`;
+    return row.sequence_order > 0 ? `왼쪽에서 ${row.sequence_order}번째` : "위치 불명";
+}
+
+// 제목 옆에 작게 붙이는 서가 위치 (사진에서 찾은 책만)
+function seqHint(row) {
+    return (row.title || (row.reg_no && row.reg_no !== "UNKNOWN")) && row.sequence_order > 0
+        ? ` <span class="text-slate-400 text-xs font-normal">(왼쪽에서 ${row.sequence_order}번째)</span>` : "";
+}
+
+// 어떤 책인지 알 수 없는 책과 대조한 RFID 후보 안내 문구 (서버 analyzer.find_unknown_book_candidates). 어떤 책인지 확정하지는 않음
+function unknownBooksMessage(hint) {
+    const books = hint.candidates.map(c => `<b>${bookLabel(c)}</b>`).join(", ");
+    return hint.matched
+        ? `RFID로는 아래 책이 있지만 사진에서 확인되지 않았습니다: ${books} — 어떤 책인지 알 수 없는 책 ${hint.unknown_count}권일 가능성이 높습니다.`
+        : `참고: RFID로는 아래 책이 있지만 사진에서 확인되지 않았습니다: ${books} — 어떤 책인지 알 수 없는 책 ${hint.unknown_count}권과 권수가 달라 특정할 수 없습니다. 직접 확인해 주세요.`;
 }
 
 function spineUrl(path) {

@@ -2,10 +2,10 @@ import os
 import shutil
 import mysql.connector
 from mysql.connector import Error
-from config import DB_CONFIG, PATROL_INBOX_DIR, SPINE_STORE_DIR
+from config import DB_CONFIG, SPINE_STORE_DIR
 
-# 분석 세션 데이터와 순찰 사진 수신함을 초기화합니다.
-# 가상 서가/도서 정보(SHELF_INFO, BOOK_MASTER)는 지우지 않습니다. (재설정: python setup_db.py)
+# 분석 세션 데이터와 순찰 사진 수신함(PATROL_PHOTO, 사진 포함)을 초기화합니다.
+# 서가/도서 정보(SHELF_INFO, BOOK_LOCATION, BO_BOOK_TBL, IDX_BO_TBL)는 지우지 않습니다. (재설정: python setup_db.py)
 
 def reset_database():
     try:
@@ -55,17 +55,6 @@ def clear_spine_store():
         shutil.rmtree(os.path.join(SPINE_STORE_DIR, d))
     print(f"  ✔️ spine_store 책등 이미지 세션 폴더 {len(session_dirs)}개 삭제 완료!")
 
-def clear_patrol_inbox():
-    """순찰 사진 수신함(patrol_inbox/<구역>/<책꽂이>/)의 사진을 모두 삭제합니다. (폴더 구조는 유지)"""
-    if not os.path.isdir(PATROL_INBOX_DIR):
-        return
-    removed = 0
-    for dirpath, _, filenames in os.walk(PATROL_INBOX_DIR):
-        for name in filenames:
-            os.remove(os.path.join(dirpath, name))
-            removed += 1
-    print(f"  ✔️ patrol_inbox 순찰 사진 {removed}장 삭제 완료!")
-
 if __name__ == "__main__":
     print("=========================================")
     print(" 🚨 VLM 도서관 DB 완전 초기화 도구 🚨")
@@ -76,6 +65,5 @@ if __name__ == "__main__":
         # DB 초기화에 성공했을 때만 이미지도 지워, DB 기록과 이미지가 어긋나지 않게 합니다.
         if reset_database():
             clear_spine_store()
-            clear_patrol_inbox()
     else:
         print("🛑 초기화 작업이 취소되었습니다.")
