@@ -6,10 +6,11 @@
     <title>오늘의 서가 · 서고 모니터링</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="/assets/common.js?v=20261108b"></script>
-    <script src="/assets/app.js?v=20261108b"></script>
+    <script src="/assets/common.js?v=20261116"></script>
+    <script src="/assets/app.js?v=20261116"></script>
 </head>
-<!-- 첫 화면: "어디로 가야 하나" — 정리가 필요한 층 목록, 도서관 지도, 층별 상태. 층을 누르면 층 화면(/level)으로 이동 -->
+<!-- 첫 화면: "어디가 이상한가" — 층별 관리(책꽂이 모양 그대로, 칸 안에 무슨 문제인지), 문제 있는 층 표, 도서관 지도.
+     칸이나 표의 층을 누르면 층 화면(/level)으로 이동 -->
 <body class="bg-slate-50 text-slate-800 min-h-screen">
     <div id="top-bar"></div>
 
@@ -32,29 +33,36 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <section class="lg:col-span-8 flex flex-col gap-3" id="work-list"></section>
+        <!-- 층별 관리: 화면에서 가장 크게. 책꽂이를 실제처럼 세워 놓고(맨 위가 가장 높은 층) 칸 안에 문제를 바로 적음 -->
+        <section class="bg-white rounded-2xl border border-slate-200 p-4 md:p-6">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 md:mb-5">
+                <h2 class="text-lg md:text-xl font-extrabold">층별 관리</h2>
+                <div id="zone-tabs" class="flex flex-wrap gap-1.5 text-sm font-bold"></div>
+                <span id="zone-name" class="text-sm text-slate-400"></span>
+                <div id="legend" class="lg:ml-auto flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-slate-500"></div>
+            </div>
+            <div id="board" class="overflow-x-auto pb-1"></div>
+            <div class="flex flex-wrap justify-between gap-2 mt-4 text-xs md:text-sm text-slate-500">
+                <span>칸을 누르면 그 층의 사진과 문제 책 위치로 이동해요 · <span id="board-axis-hint"></span></span>
+                <span id="board-summary"></span>
+            </div>
+        </section>
 
-            <aside class="lg:col-span-4 flex flex-col gap-4">
-                <div class="bg-white rounded-2xl border border-slate-200 p-5">
-                    <div class="flex items-center justify-between mb-3">
-                        <h2 class="font-bold">도서관 지도</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 mt-5 lg:mt-6">
+            <section class="lg:col-span-8 bg-white rounded-2xl border border-slate-200 p-4 md:p-5">
+                <h2 class="font-extrabold mb-1">문제 있는 층</h2>
+                <div id="work-list"></div>
+            </section>
+
+            <aside class="lg:col-span-4">
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 md:p-5">
+                    <div class="flex items-center gap-2 mb-3">
+                        <h2 class="font-extrabold">도서관 지도</h2>
                         <span id="map-hint" class="text-xs text-slate-400 hidden"><i class="fa-solid fa-magnifying-glass-plus"></i> 눌러서 크게</span>
                     </div>
                     <img id="map-img" alt="도서관 전체 지도" class="hidden w-full rounded-lg border border-slate-100 cursor-zoom-in"
                          onload="onMapLoaded(true)" onerror="onMapLoaded(false)">
                     <div id="map-empty" class="text-sm text-slate-400 text-center py-6"><i class="fa-regular fa-map text-3xl block mb-2"></i>등록된 지도가 없습니다.</div>
-                </div>
-
-                <div class="bg-white rounded-2xl border border-slate-200 p-5">
-                    <div class="flex items-center justify-between gap-2 mb-4">
-                        <h2 class="font-bold">층별 상태</h2>
-                        <div id="zone-tabs" class="flex flex-wrap gap-1 text-xs font-semibold"></div>
-                    </div>
-                    <div id="zone-name" class="text-xs text-slate-500 -mt-2 mb-3"></div>
-                    <div id="mini-map" class="flex gap-2 overflow-x-auto pb-1"></div>
-                    <div id="legend" class="flex flex-wrap gap-x-3 gap-y-1 mt-4 text-[11px] text-slate-500"></div>
-                    <div class="text-xs text-slate-400 mt-3">칸을 누르면 그 층 화면으로 이동해요 · 맨 아래가 1층</div>
                 </div>
             </aside>
         </div>
@@ -66,153 +74,163 @@
         let ME = null;
         let tree = [];
         let activeZoneId = null;
-        let showAllOk = false;
         let patrolRunning = false;
         let patrolProgress = -1;
         let patrolTimer = null;
 
-        // 층별 상태 칸 색 (미니맵)
-        const CELL = {
-            pending_action: "bg-rose-400 text-white", retake: "bg-orange-400 text-white", pending_check: "bg-amber-300 text-amber-900",
-            ok: "bg-emerald-200 text-emerald-800", no_reference: "bg-violet-200 text-violet-800",
-            unpatrolled: "bg-slate-100 text-slate-400", no_books: "bg-slate-50 text-slate-300",
+        // 층별 관리 칸 모양 (상태 판정은 서버 main.level_status)
+        const BOARD_CELL = {
+            pending_action: { cls: "bg-rose-50 border-2 border-rose-400 shadow-[0_4px_14px_rgba(244,63,94,.15)]", tag: "text-rose-600", icon: "fa-circle-exclamation", text: "조치 필요", swatch: "bg-rose-400" },
+            retake:         { cls: "bg-orange-50 border-2 border-orange-400", tag: "text-orange-600", icon: "fa-camera-rotate", text: "다시 찍기", swatch: "bg-orange-400", legend: "사진 다시" },
+            pending_check:  { cls: "bg-yellow-50 border-[1.5px] border-yellow-300", tag: "text-yellow-700", icon: "fa-eye", text: "확인만", swatch: "bg-yellow-300" },
+            no_reference:   { cls: "bg-violet-50 border-[1.5px] border-dashed border-violet-300", tag: "text-violet-700", icon: "fa-image", text: "기준 사진 없음", swatch: "bg-violet-300" },
+            ok:             { cls: "bg-emerald-50", swatch: "bg-emerald-200", legend: "정상" },
+            unpatrolled:    { cls: "bg-[repeating-linear-gradient(135deg,#f1f5f9_0_8px,#e9eef4_8px_16px)]", swatch: "bg-slate-200", legend: "순찰 안 함" },
+            no_books:       { cls: "bg-slate-50 border border-slate-100", swatch: "bg-slate-100", legend: "도서 없음" },
         };
 
-        function chipsFor(level) {
-            if (level.status === "retake") {
-                const reasons = level.latest_session?.quality?.reasons || [];
-                return `<span class="text-sm font-semibold px-2.5 py-1 rounded-lg bg-orange-100 text-orange-700">사진을 다시 찍어야 함</span>`
-                    + (reasons[0] ? `<span class="text-xs text-slate-400 self-center">${escapeHtml(reasons[0])}</span>` : "");
-            }
-            if (level.status === "no_reference") {
-                return `<span class="text-sm font-semibold px-2.5 py-1 rounded-lg bg-violet-100 text-violet-700">정상 상태 기준 사진 없음</span>`
-                    + `<span class="text-xs text-slate-400 self-center">${ME.is_admin ? "관리 화면에서 등록해 주세요" : "관리자에게 알려 주세요"}</span>`;
-            }
+        // 칸 · 표에 쓰는 문제 칩 (오배가 2, 분실 위험 1 …)
+        function issueChips(level, size = "text-[11.5px] px-1.5 py-0.5") {
             const byGroup = level.latest_session?.summary.pending_by_group || {};
             return DASHBOARD_GROUP_ORDER.filter(g => byGroup[g.key]).map(g =>
-                `<span class="text-sm font-semibold px-2.5 py-1 rounded-lg ${g.badge}">${g.title} <b>${byGroup[g.key]}</b></span>`).join("");
+                `<span class="${size} font-bold rounded-md whitespace-nowrap ${g.badge}">${g.title} ${byGroup[g.key]}</span>`).join("");
         }
 
-        function workCard(level, first) {
-            const t = levelTitle(level);
-            const work = WORK_STATUSES.has(level.status);
-            const stripe = { pending_action: "bg-rose-400", retake: "bg-orange-400", pending_check: "bg-amber-300", no_reference: "bg-violet-300" }[level.status];
-            const when = level.latest_session ? `${formatTime(level.latest_session.scan_time)} 순찰` : "";
-            const a = document.createElement("a");
-            a.href = levelUrl(level);
-            a.className = `bg-white rounded-2xl border p-4 md:p-5 flex items-center gap-4 md:gap-5 hover:border-indigo-300 transition-colors `
-                + (first ? "border-indigo-300 ring-4 ring-indigo-50" : "border-slate-200") + (work ? "" : " opacity-90");
-            a.innerHTML = `
-                <div class="w-1.5 self-stretch rounded-full ${stripe}"></div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex flex-wrap items-baseline gap-x-2">
-                        <span class="text-lg md:text-xl font-bold text-slate-900">${t.zone} ${t.main}</span>
-                        <span class="text-sm text-slate-400">${escapeHtml(level.zone.zone_name || "")}${when ? " · " + when : ""}</span>
-                    </div>
-                    <div class="flex flex-wrap gap-1.5 mt-2.5">${chipsFor(level)}</div>
-                </div>
-                <span class="shrink-0 text-sm font-semibold px-3 md:px-4 py-2.5 rounded-xl ${first ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-700"}">
-                    <span class="hidden sm:inline">보러 가기</span> <i class="fa-solid fa-arrow-right sm:ml-1"></i></span>`;
-            return a;
-        }
-
-        function renderWorkList() {
-            const levels = flattenLevels(tree);
-            const todo = attentionLevels(levels);
-            const work = todo.filter(l => WORK_STATUSES.has(l.status));
-            const light = todo.filter(l => !WORK_STATUSES.has(l.status));
-            const count = s => levels.filter(l => l.status === s).length;
-
-            document.getElementById("headline").innerHTML = levels.length === 0
-                ? "등록된 서가가 없어요"
-                : work.length ? `정리가 필요한 곳 <span class="text-rose-600">${work.length}층</span>` : `오늘은 정리할 곳이 없어요 <span class="text-emerald-600">✓</span>`;
-
-            const box = document.getElementById("work-list");
-            box.innerHTML = "";
-            if (levels.length === 0) {
-                box.innerHTML = `<div class="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
-                    <i class="fa-solid fa-building-columns text-3xl text-slate-300 mb-2 block"></i>
-                    ${ME.is_admin ? `<a href="/classic" class="text-indigo-600 font-semibold">관리 화면</a>에서 구역 · 책꽂이 · 층을 먼저 만들어 주세요.` : "관리자가 도서관 구조를 등록하면 여기에 표시됩니다."}</div>`;
-                return;
+        function boardCell(level) {
+            const st = BOARD_CELL[level.status] || BOARD_CELL.no_books;
+            const base = "block h-20 md:h-24 rounded-xl p-2 md:p-2.5 hover:ring-2 hover:ring-indigo-300 transition";
+            const href = levelUrl(level);
+            const title = `${level.location_label} · ${LEVEL_STATUS[level.status]?.text || ""}`;
+            if (level.status === "ok") {
+                return `<a href="${href}" title="${escapeHtml(title)}" class="${base} ${st.cls} flex items-center justify-center gap-1.5 text-sm font-semibold text-emerald-600">
+                    <i class="fa-solid fa-check"></i> 정상 <span class="text-emerald-300 font-medium">${level.book_count}권</span></a>`;
             }
-            work.forEach((l, i) => box.appendChild(workCard(l, i === 0)));
-            if (work.length === 0) {
-                box.innerHTML = `<div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 flex items-center gap-4 text-emerald-800">
-                    <i class="fa-solid fa-circle-check text-3xl text-emerald-500"></i>
-                    <div><div class="font-bold text-lg">모든 층이 정돈되어 있어요</div><div class="text-sm">최근 순찰에서 정리할 책이 발견되지 않았습니다.</div></div></div>`;
+            if (level.status === "unpatrolled" || level.status === "no_books") {
+                return `<a href="${href}" title="${escapeHtml(title)}" class="${base} ${st.cls} flex items-center justify-center text-xs md:text-sm text-slate-400">
+                    ${level.status === "unpatrolled" ? "순찰 사진 없음" : "도서 없음"}</a>`;
             }
-            if (light.length) {
-                const label = document.createElement("div");
-                label.className = "text-xs font-semibold text-slate-400 mt-2";
-                label.textContent = "확인만 하면 되는 곳";
-                box.appendChild(label);
-                light.forEach(l => box.appendChild(workCard(l, false)));
+            const go = WORK_STATUSES.has(level.status)
+                ? `<span class="hidden md:inline text-[11.5px] font-bold ${st.tag} whitespace-nowrap">보러 가기 <i class="fa-solid fa-arrow-right"></i></span>` : "";
+            let body = "";
+            if (level.status === "retake") {
+                const reason = level.latest_session?.quality?.reasons?.[0];
+                body = reason ? `<div class="text-[11px] text-orange-800 leading-snug line-clamp-2">${escapeHtml(reason)}</div>` : "";
+            } else if (level.status === "no_reference") {
+                body = `<div class="text-[11px] text-violet-700 leading-snug">${ME.is_admin ? "관리 화면에서 등록" : "관리자에게 알려 주세요"}</div>`;
+            } else {
+                body = `<div class="flex flex-wrap gap-1">${issueChips(level)}</div>`;
             }
-
-            // 나머지 층 요약 (정상 · 미순찰 · 도서 없음) — 펼치면 정상 층 목록
-            const ok = levels.filter(l => l.status === "ok");
-            const summary = document.createElement("div");
-            summary.className = "rounded-2xl border border-dashed border-slate-300 px-5 py-4 text-sm text-slate-500 mt-1";
-            summary.innerHTML = `
-                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span><i class="fa-solid fa-circle-check text-emerald-500"></i> 정상 <b class="text-slate-700">${ok.length}</b></span>
-                    <span class="text-slate-300">|</span><span>미순찰 <b class="text-slate-700">${count("unpatrolled")}</b></span>
-                    ${count("no_books") ? `<span class="text-slate-300">|</span><span>도서 없음 <b class="text-slate-700">${count("no_books")}</b></span>` : ""}
-                    ${ok.length ? `<button id="toggle-ok" class="ml-auto text-indigo-600 font-semibold">${showAllOk ? "접기" : "정상 층 보기"} <i class="fa-solid fa-chevron-${showAllOk ? "up" : "down"} text-xs"></i></button>` : ""}
-                </div>
-                ${showAllOk ? `<div class="flex flex-wrap gap-1.5 mt-3">${ok.map(l => `<a href="${levelUrl(l)}" class="text-xs px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-indigo-300">${levelTitle(l).zone} ${levelTitle(l).main}</a>`).join("")}</div>` : ""}`;
-            box.appendChild(summary);
-            summary.querySelector("#toggle-ok")?.addEventListener("click", () => { showAllOk = !showAllOk; renderWorkList(); });
+            return `<a href="${href}" title="${escapeHtml(title)}" class="${base} ${st.cls} flex flex-col gap-1.5 overflow-hidden">
+                <div class="flex items-center justify-between gap-1">
+                    <span class="text-xs md:text-[13px] font-extrabold ${st.tag} flex items-center gap-1 whitespace-nowrap"><i class="fa-solid ${st.icon}"></i> ${st.text}</span>${go}
+                </div>${body}</a>`;
         }
 
         function zoneAttention(zone) {
             return zone.bookcases.reduce((n, b) => n + b.levels.filter(l => WORK_STATUSES.has(l.status)).length, 0);
         }
 
-        function renderMiniMap() {
+        function renderBoard() {
             if (!tree.find(z => z.zone_id === activeZoneId)) {
                 activeZoneId = (tree.find(z => zoneAttention(z) > 0) || tree[0])?.zone_id ?? null;
             }
-            document.getElementById("zone-tabs").innerHTML = "";
+            const tabs = document.getElementById("zone-tabs");
+            tabs.innerHTML = "";
             tree.forEach(zone => {
                 const active = zone.zone_id === activeZoneId;
                 const n = zoneAttention(zone);
                 const tab = document.createElement("button");
-                tab.className = `px-2.5 py-1 rounded-md ${active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`;
-                tab.innerHTML = `${escapeHtml(zone.zone_code)}구역${n ? ` <span class="ml-0.5 px-1.5 rounded-full ${active ? "bg-rose-500" : "bg-rose-100 text-rose-600"}">${n}</span>` : ""}`;
-                tab.addEventListener("click", () => { activeZoneId = zone.zone_id; renderMiniMap(); });
-                document.getElementById("zone-tabs").appendChild(tab);
+                tab.className = `px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 ${active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`;
+                tab.innerHTML = `${escapeHtml(zone.zone_code)}구역${n ? ` <span class="text-[11px] px-1.5 rounded-full bg-rose-500 text-white">${n}</span>` : ""}`;
+                tab.addEventListener("click", () => { activeZoneId = zone.zone_id; renderBoard(); });
+                tabs.appendChild(tab);
             });
+
             const zone = tree.find(z => z.zone_id === activeZoneId);
-            const map = document.getElementById("mini-map");
-            map.innerHTML = "";
-            document.getElementById("zone-name").textContent = zone ? `${zone.zone_name || ""}${zone.location ? " · " + zone.location : ""}` : "";
-            if (!zone) return;
-            zone.bookcases.forEach(bookcase => {
-                const col = document.createElement("div");
-                col.className = "flex-1 min-w-[44px] flex flex-col justify-end";
-                const cells = [...bookcase.levels].sort((a, b) => b.level - a.level).map(level => {
-                    const st = LEVEL_STATUS[level.status];
-                    const n = level.latest_session?.summary.pending_count;
-                    const mark = { pending_action: n, pending_check: n, retake: "!", ok: "", no_reference: "?" }[level.status] ?? "";
-                    return `<a href="${levelUrl({ shelf_id: level.shelf_id })}" title="${escapeHtml(level.location_label)} · ${st.text}"
-                        class="h-7 rounded flex items-center justify-between px-1.5 text-[10px] font-semibold hover:ring-2 hover:ring-indigo-400 ${CELL[level.status]}">
-                        <span class="opacity-70">${level.level}</span><span>${mark}</span></a>`;
+            const board = document.getElementById("board");
+            document.getElementById("zone-name").textContent = zone ? [zone.zone_name, zone.location].filter(Boolean).join(" · ") : "";
+            board.innerHTML = "";
+            if (!zone) {
+                document.getElementById("board-summary").textContent = "";
+                return;
+            }
+            const levels = flattenLevels([zone]);
+            const top = Math.max(1, ...levels.map(l => l.level));
+            const bookcases = zone.bookcases;
+            // 왼쪽 층 번호 + 책꽂이 칸 (한 책꽂이에 없는 층은 빈 자리)
+            const axis = Array.from({ length: top }, (_, i) =>
+                `<div class="h-20 md:h-24 flex items-center text-xs md:text-sm font-bold text-slate-400">${top - i}층</div>`).join("");
+            const cases = bookcases.map(b => {
+                const byLevel = Object.fromEntries(b.levels.map(l => [l.level, { ...l, zone, bookcase: b }]));
+                const bad = b.levels.filter(l => WORK_STATUSES.has(l.status)).length;
+                const badge = bad ? `<span class="ml-auto text-xs font-bold px-2 rounded-full bg-rose-500 text-white">${bad}</span>`
+                    : b.levels.some(l => l.status === "ok") ? `<span class="ml-auto text-xs px-1.5 rounded-full bg-emerald-100 text-emerald-600"><i class="fa-solid fa-check"></i></span>` : "";
+                const cells = Array.from({ length: top }, (_, i) => {
+                    const level = byLevel[top - i];
+                    return level ? boardCell(level) : `<div class="h-20 md:h-24"></div>`;
                 }).join("");
-                col.innerHTML = `<div class="space-y-1">${cells || `<div class="h-7 text-[10px] text-slate-300 flex items-center justify-center">층 없음</div>`}</div>
-                    <div class="text-[11px] text-center text-slate-500 mt-1.5 font-semibold">${bookcase.bookcase_no}번</div>`;
-                map.appendChild(col);
-            });
-            const used = new Set(flattenLevels([zone]).map(l => l.status));
-            document.getElementById("legend").innerHTML = Object.entries(LEVEL_STATUS).filter(([k]) => used.has(k)).map(([k, st]) =>
-                `<span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm ${CELL[k].split(" ")[0]}"></span>${st.text}</span>`).join("");
+                return `<div class="bg-slate-50 border border-slate-200 rounded-2xl p-1.5 md:p-2 min-w-[150px] flex-1">
+                    <div class="h-7 flex items-center gap-1.5 px-1 mb-1.5 text-xs md:text-sm">
+                        <span class="text-slate-400 font-semibold">${escapeHtml(b.bookcase_code || "")}</span>
+                        <b class="text-slate-700">${b.bookcase_no}번 책꽂이</b>${badge}</div>
+                    <div class="flex flex-col gap-1.5 md:gap-2">${cells}</div></div>`;
+            }).join("");
+            board.innerHTML = bookcases.length
+                ? `<div class="flex gap-2 md:gap-3 min-w-max lg:min-w-0">
+                       <div class="flex flex-col gap-1.5 md:gap-2 pt-[38px] md:pt-[46px] w-8 md:w-10 shrink-0">${axis}</div>
+                       <div class="flex gap-2 md:gap-3 flex-1">${cases}</div></div>`
+                : `<div class="text-sm text-slate-400 text-center py-10">이 구역에는 아직 책꽂이가 없습니다.</div>`;
+
+            document.getElementById("board-axis-hint").textContent = `맨 위가 ${top}층, 맨 아래가 1층`;
+            const count = s => levels.filter(l => l.status === s).length;
+            const bad = levels.filter(l => WORK_STATUSES.has(l.status)).length;
+            document.getElementById("board-summary").innerHTML = `${escapeHtml(zone.zone_code)}구역 ${levels.length}층 중 `
+                + (bad ? `<b class="text-rose-600">문제 ${bad}층</b>` : `<b class="text-emerald-600">문제 없음</b>`)
+                + ` · 정상 ${count("ok")}` + (count("unpatrolled") ? ` · 순찰 안 함 ${count("unpatrolled")}` : "");
+
+            const used = new Set(levels.map(l => l.status));
+            document.getElementById("legend").innerHTML = Object.entries(BOARD_CELL).filter(([k]) => used.has(k)).map(([k, st]) =>
+                `<span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm ${st.swatch}"></span>${st.legend || st.text}</span>`).join("");
+        }
+
+        // 문제 있는 층 표: 정리 필요 · 재촬영 층을 구역 순서대로
+        function renderWorkList() {
+            const levels = flattenLevels(tree);
+            const work = attentionLevels(levels).filter(l => WORK_STATUSES.has(l.status));
+
+            document.getElementById("headline").innerHTML = levels.length === 0
+                ? "등록된 서가가 없어요"
+                : work.length ? `정리가 필요한 곳 <span class="text-rose-600">${work.length}층</span>` : `오늘은 정리할 곳이 없어요 <span class="text-emerald-600">✓</span>`;
+
+            const box = document.getElementById("work-list");
+            if (levels.length === 0) {
+                box.innerHTML = `<div class="text-center text-sm text-slate-500 py-6">
+                    ${ME.is_admin ? `<a href="/classic" class="text-indigo-600 font-semibold">관리 화면</a>에서 구역 · 책꽂이 · 층을 먼저 만들어 주세요.` : "관리자가 도서관 구조를 등록하면 여기에 표시됩니다."}</div>`;
+                return;
+            }
+            if (work.length === 0) {
+                box.innerHTML = `<div class="flex items-center gap-3 text-emerald-800 py-4">
+                    <i class="fa-solid fa-circle-check text-2xl text-emerald-500"></i>
+                    <div><div class="font-bold">모든 층이 정돈되어 있어요</div><div class="text-sm">최근 순찰에서 정리할 책이 발견되지 않았습니다.</div></div></div>`;
+                return;
+            }
+            box.innerHTML = work.map(l => {
+                const t = levelTitle(l);
+                const chips = l.status === "retake"
+                    ? `<span class="text-xs md:text-[13px] font-bold px-2 py-0.5 rounded-md bg-orange-100 text-orange-700">사진을 다시 찍어야 함</span>`
+                    : issueChips(l, "text-xs md:text-[13px] px-2 py-0.5");
+                return `<a href="${levelUrl(l)}" class="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1.5 py-3 border-t border-slate-100 first:border-t-0 hover:bg-slate-50 -mx-2 px-2 rounded-lg">
+                    <b class="w-full sm:w-40 shrink-0 text-slate-800">${escapeHtml(l.zone.zone_code)}-${l.bookcase.bookcase_no} ${l.level}층</b>
+                    <span class="flex flex-wrap gap-1 flex-1">${chips}</span>
+                    <span class="text-sm font-bold text-indigo-600 whitespace-nowrap">보러 가기 <i class="fa-solid fa-arrow-right"></i></span></a>`;
+            }).join("");
         }
 
         async function refreshLocations() {
             try {
                 tree = await fetchJson(`${API_BASE}/locations`);
                 renderWorkList();
-                renderMiniMap();
+                renderBoard();
             } catch (e) {
                 document.getElementById("headline").textContent = `서가 현황을 불러오지 못했습니다: ${e.message}`;
             }

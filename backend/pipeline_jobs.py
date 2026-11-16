@@ -15,6 +15,7 @@ from db import get_db_connection
 from locations import fetch_shelf_location
 from normal_images import get_normal_image_info
 from spine_archive import archive_spine_image
+from spine_box import normalized_spine_box, photo_size
 from vision_ai import run_vision_ai   # AI 분석 호출 (작업 프로세스를 띄워 두고 재사용, vision_ai.py)
 
 # AI는 *.jpg / *.png 만 읽으므로 그 외 확장자는 맞춰서 저장합니다.
@@ -87,6 +88,7 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
 
         # AI의 도서 ID(기준 사진의 n번째 책 = B00n) → 등록번호
         order_map = get_vision_id_map(shelf_id, conn)
+        size = photo_size(os.path.join(SPINE_STORE_DIR, image_rel_path))   # 책 위치를 사진 비율 좌표로 바꾸는 기준
         for item in ai_vision_items:
             seq_idx = item.get("sequence_order")
             # pipeline.py는 탐지 순서로 크롭을 저장하고 sequence_order는 좌→우 정렬 후 순서라 서로 다르므로,
@@ -94,11 +96,12 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
             spine_img_path = archive_spine_image(session_id, item.get("spine_img_file", ""))
             cursor.execute(
                 """INSERT INTO VISION_DATA
-                   (vision_id, session_id, reg_no, sequence_order, confidence_score, spine_img_path, visual_status)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                   (vision_id, session_id, reg_no, sequence_order, confidence_score, spine_img_path, visual_status, spine_box)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                 (f"V_{session_id}_{seq_idx}", session_id,
                  vision_book_id_to_reg_no(item.get("book_id"), order_map, item.get("visual_status")), seq_idx,
-                 item.get("confidence_score", 0.0), spine_img_path, item.get("visual_status", "normal"))
+                 item.get("confidence_score", 0.0), spine_img_path, item.get("visual_status", "normal"),
+                 normalized_spine_box((item.get("debug") or {}).get("box"), size))
             )
         conn.commit()
         print(f"💾 로그 DB 적재 성공 -> 세션: {session_id}")

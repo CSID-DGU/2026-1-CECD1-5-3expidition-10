@@ -69,22 +69,21 @@ function libraryMapUrl() {
 }
 
 // ===================== 층 목록 =====================
-// 첫 화면 목록 순서: 정리 필요 → 재촬영 → 확인만 필요 → 기준 사진 없음
+// 살펴봐야 하는 층: 정리 필요 · 재촬영 · 확인만 필요 · 기준 사진 없음
 const ATTENTION_ORDER = ["pending_action", "retake", "pending_check", "no_reference"];
 const WORK_STATUSES = new Set(["pending_action", "retake"]);   // '정리가 필요한 곳'으로 세는 상태
 
-// /api/locations 트리 → 층 목록 (구역 · 책꽂이 정보 포함)
+// /api/locations 트리 → 층 목록 (구역 · 책꽂이 정보 포함). 구역 → 책꽂이 순서, 한 책꽂이 안에서는 위층부터
 function flattenLevels(tree) {
     const levels = [];
-    tree.forEach(zone => zone.bookcases.forEach(bookcase => bookcase.levels.forEach(level =>
-        levels.push({ ...level, zone, bookcase }))));
+    tree.forEach(zone => zone.bookcases.forEach(bookcase =>
+        [...bookcase.levels].sort((a, b) => b.level - a.level).forEach(level => levels.push({ ...level, zone, bookcase }))));
     return levels;
 }
 
+// 어차피 모두 돌아야 하므로 구역 순서 그대로 (첫 화면 '문제 있는 층' 표, 층 화면 '다음 층')
 function attentionLevels(levels) {
-    return levels.filter(l => ATTENTION_ORDER.includes(l.status))
-        .sort((a, b) => (ATTENTION_ORDER.indexOf(a.status) - ATTENTION_ORDER.indexOf(b.status))
-            || (b.latest_session?.summary.pending_count || 0) - (a.latest_session?.summary.pending_count || 0));
+    return levels.filter(l => ATTENTION_ORDER.includes(l.status));
 }
 
 // "A구역 1번 책꽂이 5층" → 화면 제목용 { main: "1번 책꽂이 5층", zone: "A구역" }
@@ -95,6 +94,9 @@ function levelTitle(level) {
 function levelUrl(level) {
     return `/level?shelf_id=${encodeURIComponent(level.shelf_id)}`;
 }
+
+// 알림 그룹 색 (사진 위 번호 테두리 · 책 순서 띠 · 카드 번호). common.js ISSUE_GROUPS의 색과 같은 계열
+const GROUP_COLOR = { lost: "#ef4444", foreign: "#f97316", status: "#ec4899", misorder: "#8b5cf6", physical: "#f59e0b", check: "#64748b" };
 
 // ===================== 알림 카드 =====================
 // 오배가(다른 서가 책)만 펼쳐서 맨 위에, 나머지는 심각도 순으로 접어 둠
@@ -152,13 +154,17 @@ function buildTaskCard(row, onAction) {
     const spine = spineUrl(row.spine_img_path);
 
     const card = document.createElement("div");
-    card.className = "rounded-xl border border-slate-200 border-l-4 p-3 flex gap-3 "
+    card.className = "rounded-xl border border-slate-200 border-l-4 p-3 flex gap-3 transition-shadow "
         + (handled ? "border-l-slate-300 bg-slate-50 text-slate-400" : `${group.stripe} bg-white text-slate-700`);
+    card.dataset.resultId = row.result_id;
+    // 사진 · 책 순서 띠의 번호와 같은 번호 (층 화면이 row.marker_no를 매김)
+    const marker = row.marker_no && !handled
+        ? `<span class="inline-flex w-6 h-6 rounded-full text-white text-xs font-bold items-center justify-center mr-1.5 align-middle" style="background:${GROUP_COLOR[primary.group]}">${row.marker_no}</span>` : "";
     card.innerHTML = `
         ${spine ? `<button type="button" data-spine class="w-12 h-24 sm:w-14 sm:h-28 shrink-0 rounded-lg bg-slate-100 overflow-hidden cursor-zoom-in ${handled ? "opacity-50" : ""}"
             style="background:url('${spine}') center/contain no-repeat, #f1f5f9" title="책등 사진 크게 보기"></button>` : ""}
         <div class="flex-1 min-w-0">
-            <span class="text-[11px] font-bold px-1.5 py-0.5 rounded ${handled ? "bg-slate-200 text-slate-500" : group.badge}">${escapeHtml(primary.label)}</span>${extra}
+            ${marker}<span class="text-[11px] font-bold px-1.5 py-0.5 rounded ${handled ? "bg-slate-200 text-slate-500" : group.badge}">${escapeHtml(primary.label)}</span>${extra}
             <div class="font-bold mt-1.5 break-words ${handled ? "line-through decoration-slate-300" : "text-slate-900 sm:text-lg"}">${cardTitle(row)}${seq}</div>
             <div class="text-sm mt-0.5 leading-snug break-words ${handled ? "" : "text-slate-500"}">${message}</div>
             ${done}

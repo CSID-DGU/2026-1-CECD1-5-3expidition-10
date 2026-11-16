@@ -11,6 +11,7 @@ from mysql.connector import Error
 from auth import hash_password
 from config import BACKEND_DIR, DB_CONFIG, DEMO_ADMIN_PASSWORD, DEMO_LIBRARIAN_PASSWORD, NORMAL_SEED_DIR
 from image_check import detect_image_ext
+from spine_box import SPINE_BOX_COLUMN
 
 # DB를 최신 구조로 맞춥니다. 새 DB든 예전 DB든 여러 번 실행해도 안전합니다.
 #  1) 테이블 생성 (db_create/library_schema.sql, patrol_schema.sql). 기준 이미지 분석 결과(NORMAL_IMAGE_ANALYSIS)는 서버가 채움
@@ -67,6 +68,7 @@ ADDED_COLUMNS = [
      "MEDIUMTEXT NULL COMMENT 'RFID 리더값 JSON [{\"reg_no\", \"rssi\"}]. NULL = 리더값 없음, [] = 리더가 읽은 태그 없음'"),
     ("APP_USER", "deleted_at", "DATETIME NULL COMMENT '삭제한 시각 (조치 기록이 있어 이력용으로 남긴 계정. 아이디는 <아이디>#<user_id>로 바뀜)'"),
     ("BOOK_LOCATION", "reference_slot", "INT NULL COMMENT '기준 사진의 몇 번째 책인지 (자동 배정한 층, 기준 사진에 없던 미비치 도서는 NULL)'"),
+    ("VISION_DATA", "spine_box", SPINE_BOX_COLUMN),
 ]
 # 이름을 바꾼 컬럼 (테이블, 예전 이름, 새 이름, 컬럼 정의) — 도서 ID가 등록번호가 되면서 book_id → reg_no
 RENAMED_COLUMNS = [

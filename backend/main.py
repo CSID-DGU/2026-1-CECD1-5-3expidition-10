@@ -30,6 +30,7 @@ from patrol import (BatchAlreadyRunning, PhotoRejected, attach_rfid_tags, list_p
 from pipeline_jobs import ALLOWED_IMAGE_EXTS, pipeline_queue
 from retention import prune_old_patrols
 from spine_archive import PIPELINE_OUTPUT_DIR
+from spine_box import ensure_spine_box_column, parse_spine_box
 from vision_ai import prepare_reference_async, warm_up_async
 import accounts
 from accounts import AccountError
@@ -364,6 +365,12 @@ def prepare_on_startup():
     # 분석 도중 서버가 재시작되면 대기열(메모리)이 사라지므로, 진행 중이던 사진을 분석 대기로 되돌림
     try:
         recover_interrupted_photos()
+        conn = get_db_connection()
+        if conn:
+            try:
+                ensure_spine_box_column(conn)
+            finally:
+                conn.close()
     except Exception as e:
         print(f"⚠️ 시작 준비 실패 (DB가 켜져 있는지, setup_db.py를 실행했는지 확인): {e}")
     # AI 작업 프로세스를 미리 띄워 모델을 불러 둠 (첫 분석 대기 시간 단축, 백그라운드)
@@ -971,6 +978,7 @@ RESULTS_QUERY = """
         IFNULL(v.visual_status, 'normal') AS visual_status,
         r.final_status,
         IFNULL(v.spine_img_path, '') AS spine_img_path,
+        v.spine_box,
         r.action_status,
         r.action_time,
         u.display_name AS action_by_name,
@@ -1025,6 +1033,7 @@ def load_session_detail(conn, session: dict, master_cache: dict, locations: dict
         if shelf_id not in master_cache:
             master_cache[shelf_id] = get_master_book_info(shelf_id, conn)
         for row in results:
+            row["spine_box"] = parse_spine_box(row["spine_box"])   # 사진 속 위치 [x1, y1, x2, y2] (0~1 비율, 없으면 null)
             row["issues"] = classify_issues(row["final_status"], row["visual_status"])
             # 오배가 도서를 가져다 둘 곳 (RFID로 등록번호를 알기 때문에 찾을 수 있음)
             is_foreign = any(issue["group"] == "foreign" for issue in row["issues"])

@@ -31,6 +31,7 @@ CREATE TABLE VISION_DATA (
     confidence_score FLOAT NOT NULL COMMENT 'AI 인식 신뢰도',
     spine_img_path VARCHAR(255) NOT NULL COMMENT '책등 이미지 경로',
     visual_status VARCHAR(20) NOT NULL COMMENT 'Vision AI 1차 판별 상태',
+    spine_box VARCHAR(60) NULL COMMENT '순찰 사진 속 책 위치 x1,y1,x2,y2 (사진 가로 · 세로에 대한 0~1 비율, 층 화면 번호 테두리용)',
     FOREIGN KEY (session_id) REFERENCES SHELF_SESSION(session_id) ON DELETE CASCADE
 );
 
