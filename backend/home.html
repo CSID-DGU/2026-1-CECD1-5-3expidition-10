@@ -95,7 +95,7 @@
             const st = BOARD_CELL[level.status] || BOARD_CELL.no_books;
             const base = "block h-20 md:h-24 rounded-xl p-2 md:p-2.5 hover:ring-2 hover:ring-indigo-300 transition";
             const href = levelUrl(level);
-            const title = `${level.location_label} · ${LEVEL_STATUS[level.status]?.text || ""}`;
+            let title = `${level.location_label} · ${LEVEL_STATUS[level.status]?.text || ""}`;
             if (level.status === "ok") {
                 return `<a href="${href}" title="${escapeHtml(title)}" class="${base} ${st.cls} flex items-center justify-center gap-1.5 text-sm font-semibold text-emerald-600">
                     <i class="fa-solid fa-check"></i> 정상 <span class="text-emerald-300 font-medium">${level.book_count}권</span></a>`;
@@ -113,12 +113,39 @@
             } else if (level.status === "no_reference") {
                 body = `<div class="text-[11px] text-violet-700 leading-snug">${ME.is_admin ? "관리 화면에서 등록" : "관리자에게 알려 주세요"}</div>`;
             } else {
-                body = `<div class="flex flex-wrap gap-1">${issueChips(level)}</div>`;
+                // 칸 높이에 다 안 들어가면 fitCellChips()가 뒤쪽 칩을 숨기고 "+N"으로 줄임 (전체는 칸의 title 툴팁)
+                body = `<div class="cell-chips flex flex-wrap content-start gap-1 flex-1 min-h-0 overflow-hidden">${issueChips(level)}</div>`;
+                const byGroup = level.latest_session?.summary.pending_by_group || {};
+                const all = DASHBOARD_GROUP_ORDER.filter(g => byGroup[g.key]).map(g => `${g.title} ${byGroup[g.key]}`).join(", ");
+                if (all) title += ` (${all})`;
             }
             return `<a href="${href}" title="${escapeHtml(title)}" class="${base} ${st.cls} flex flex-col gap-1.5 overflow-hidden">
                 <div class="flex items-center justify-between gap-1">
                     <span class="text-xs md:text-[13px] font-extrabold ${st.tag} flex items-center gap-1 whitespace-nowrap"><i class="fa-solid ${st.icon}"></i> ${st.text}</span>${go}
                 </div>${body}</a>`;
+        }
+
+        // 칸에 다 안 들어가는 문제 칩은 앞에서부터 들어가는 만큼만 보이고 마지막에 "+N" (나머지 개수)
+        // (칸 크기가 정해지거나 바뀔 때마다 다시 맞춤: 스타일이 늦게 적용되거나 창 크기가 바뀌어도 맞게)
+        function fitChipBox(box) {
+            const chips = [...box.children].filter(c => !c.classList.contains("chip-more"));
+            chips.forEach(c => c.classList.remove("hidden"));
+            box.querySelector(".chip-more")?.remove();
+            const overflows = () => box.scrollHeight > box.clientHeight + 1;
+            if (!overflows()) return;
+            const more = document.createElement("span");
+            more.className = "chip-more text-[11.5px] px-1.5 py-0.5 font-bold rounded-md whitespace-nowrap bg-slate-200 text-slate-600";
+            box.appendChild(more);
+            for (let shown = chips.length - 1; shown >= 1; shown--) {
+                chips[shown].classList.add("hidden");
+                more.textContent = `+${chips.length - shown}`;
+                if (!overflows()) break;
+            }
+        }
+        const chipObserver = new ResizeObserver(entries => entries.forEach(e => fitChipBox(e.target)));
+        function fitCellChips() {
+            chipObserver.disconnect();
+            document.querySelectorAll("#board .cell-chips").forEach(box => chipObserver.observe(box));
         }
 
         function zoneAttention(zone) {
@@ -177,6 +204,7 @@
                        <div class="flex flex-col gap-1.5 md:gap-2 pt-[38px] md:pt-[46px] w-8 md:w-10 shrink-0">${axis}</div>
                        <div class="flex gap-2 md:gap-3 flex-1">${cases}</div></div>`
                 : `<div class="text-sm text-slate-400 text-center py-10">이 구역에는 아직 책꽂이가 없습니다.</div>`;
+            fitCellChips();
 
             document.getElementById("board-axis-hint").textContent = `맨 위가 ${top}층, 맨 아래가 1층`;
             const count = s => levels.filter(l => l.status === s).length;
