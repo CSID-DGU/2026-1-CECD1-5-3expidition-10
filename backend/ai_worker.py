@@ -38,7 +38,7 @@ PROTOCOL_PREFIX = "@@AI@@"
 AI_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))   # AI 코드(MakeResult.py, app/, model/)가 있는 저장소 루트
 RESULT_JSON_PATH = os.path.join(AI_DIR, "vision_output", "test_results.json")
 CACHE_SIZE = int(os.getenv("AI_REFERENCE_CACHE", "8"))   # 메모리에 기억해 둘 층(기준 사진) 수
-AI_ENTRY_FILES = ["MakeResult.py"]   # 지문에 넣을 AI 진입 파일
+AI_CODE_PATTERNS = ["app/*.py", "shelf_audit/**/*.py"]   # 지문에 넣을 AI 코드 (v5: shelf_audit 패키지 + app/ YOLO 파이프라인)
 
 _proto = None   # 응답 전용 통로 (setup_channels)
 
@@ -59,18 +59,19 @@ def send(message: dict):
 
 def ai_fingerprint() -> str:
     """
-    AI 코드(MakeResult.py, app/*.py)와 사용하는 모델 파일 내용의 지문. 바뀌면 저장된 분석 결과를 쓰지 않음
+    AI 코드(shelf_audit/**/*.py, app/*.py)와 사용하는 모델 파일 내용의 지문. 바뀌면 저장된 분석 결과를 쓰지 않음
     내용으로만 만들므로 줄바꿈 · 수정 시각이 달라도 같은 값 → 같은 DB를 쓰는 다른 컴퓨터도 분석 결과를 함께 씀
+    (파일 이름은 저장소 루트 기준 "/" 경로로 넣어, 하위 폴더의 같은 이름 파일(__init__.py 등)을 구분하고 OS와 상관없이 같은 값)
     """
     digest = hashlib.sha256()
-    entries = [os.path.join(AI_DIR, n) for n in AI_ENTRY_FILES if os.path.exists(os.path.join(AI_DIR, n))]
+    paths = {p for pattern in AI_CODE_PATTERNS for p in glob.glob(os.path.join(AI_DIR, pattern), recursive=True)}
     code = {}
-    for path in sorted(entries + glob.glob(os.path.join(AI_DIR, "app", "*.py"))):
-        with open(path, "rb") as f:
-            code[os.path.basename(path)] = f.read().replace(b"\r\n", b"\n")
-        digest.update(os.path.basename(path).encode() + code[os.path.basename(path)])
+    for rel in sorted(os.path.relpath(p, AI_DIR).replace(os.sep, "/") for p in paths):
+        with open(os.path.join(AI_DIR, rel), "rb") as f:
+            code[rel] = f.read().replace(b"\r\n", b"\n")
+        digest.update(rel.encode() + code[rel])
     # app/models.py가 불러오는 모델만 (컴퓨터마다 다를 수 있는 다른 .pt 파일은 지문에 넣지 않음)
-    for name in sorted(set(re.findall(r"model/([\w.-]+\.pt)", code.get("models.py", b"").decode("utf-8")))):
+    for name in sorted(set(re.findall(r"model/([\w.-]+\.pt)", code.get("app/models.py", b"").decode("utf-8")))):
         path = os.path.join(AI_DIR, "model", name)
         if os.path.exists(path):
             digest.update(name.encode())
