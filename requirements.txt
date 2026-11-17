@@ -12,8 +12,12 @@ requests>=2.32                # run_master.py, test_full_pipeline.py, ILS 연동
 
 # ---- Vision AI (MakeResult.py, app/) ----
 ultralytics>=8.4
-torch>=2.11
-torchvision>=0.26
+#   PyTorch 는 CUDA 12.6 빌드로 설치합니다 (다운로드 약 3GB). NVIDIA GPU 가 있으면 앱이 자동으로 GPU 를 쓰고,
+#   없으면 같은 빌드가 CPU 로 그대로 동작합니다 (app/config.py 가 GPU 유무를 보고 고름).
+#   CUDA 빌드는 PyPI 가 아니라 PyTorch 저장소에 있어서 아래 한 줄이 필요하고, 버전도 정확히 고정합니다. (Windows · Linux 용, macOS 는 해당 빌드 없음)
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch==2.13.0+cu126
+torchvision==0.28.0+cu126
 opencv-python>=4.13
 pillow>=12.1
 numpy>=2.4

@@ -19,6 +19,9 @@
 - 모델: v9 = 책등(`book-spine`, 0) + 종이면(`book-paper`, 1 — 종이면만 보이는 책, 비정상 플래그용) 2클래스 모델 하나로 검출한다. 종이면 전용 모델은 없앴다.
 - `app/pipeline.py`: 기울어진 책 오동작 수정 5가지(박스 NMS 0.95, 마스크 최대성분+축선상 조각, 끝변 수직 기준, 원형 opening, lying 판정 일치),
   촬영 대상 줄 선택(사진 가운데에 가장 가까운 줄만 남김), 종이면은 모델 마스크 그대로 출력(`quad` 는 마스크의 최소 외접 사각형).
+  종이면과 겹치는 책등은 종이면 마스크 기준으로만 뺀다(외접 사각형으로 재면 옆의 멀쩡한 책등이 지워짐).
+  선택 기능(기본 끔): 기운 책 묶음을 돌려 세워 다시 검출 — `process_bookshelf_perspective_pipeline(rotate_redetect=True)`, API 는 `/extract-features?rotate_redetect=true`.
+  `MakeResult.py` 는 이 인자 없이 부르므로 꺼진 상태로 동작한다.
 - 데이터셋: `dataset_own/`(직접 촬영 120장, 검수 완료), `dataset_cnu/`, `dataset_p2/`, 병합본 `dataset_merged/`.
   **모두 git 제외**(`.gitignore`)라 저장소에는 없고 AI 파트 담당 PC 에만 있다 — 스크립트·README 도 그 폴더 안에 있다. 테스트 사진 `dataset/` 은 별개로 추적한다.
   라벨을 고치면 `python dataset_own/from_labelme.py` → `python dataset_merged/build.py`. `to_labelme.py` 는 검수본을 초기화하므로 다시 돌리지 말 것.
