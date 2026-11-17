@@ -6,6 +6,8 @@
 
 ## 🌟 주요 기능
 - **Vision AI 분석** (`MakeResult.py`, `app/`): YOLO 세그멘테이션으로 책등을 찾고, ResNet 특징으로 정상 서가 이미지의 책과 매칭합니다. 누움 · 기울어짐 · 뒤집힘 · 책등 안 보임 같은 **외형 이상**을 판별합니다.
+  - 책등이 안 보이고 종이면만 보이게 꽂힌 책도 같은 모델로 함께 검출합니다(`book-paper`).
+  - 사진에 위 · 아래 층이 함께 찍혀도 **사진 가운데에 가장 가까운 층의 책만** 분석합니다.
 - **서가 상태 판정** (`backend/analyzer.py`): Vision 결과, 가상 RFID, 도서 정보를 교차 검증해 **누락 · 오배가 · 상태이상 · 미분석 · 오배열 · 인식 실패** 같은 **위치 이상**을 판정합니다.
   - 판정 이름은 실제 도서관의 장서점검 용어(멘토 자료)를 따릅니다. 오배열 · 인식 실패 같은 영상 기반 판정은 우리 시스템에만 있는 기능입니다.
   - 도서 정보는 실제 도서관 시스템(KOLAS)의 테이블 구조(`BO_BOOK_TBL` 도서, `IDX_BO_TBL` 서지)를 따르고, 도서 ID는 **등록번호**(RFID 태그에 기록된 값)입니다.
@@ -42,7 +44,7 @@
 ```
 CECD/
 ├── app/                      # Vision AI: 탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
-├── model/                    # YOLO 가중치 (서버는 yolo26l_1280_v3.pt 사용, app/models.py)
+├── model/                    # YOLO 가중치 (현재 사용: yolo26l_1280_v9_last.pt, app/models.py 참고)
 ├── MakeResult.py             # 정상 이미지와 비교해 도서별 상태를 판별 (서버가 사용하는 분석 코드)
 ├── dataset/                  # 정상 · 이상 시나리오별 테스트 사진
 ├── pipeline_outputs/         # 책등 크롭 작업 폴더 (분석마다 덮어씀, git 제외)
@@ -82,7 +84,7 @@ pip install -r requirements.txt
 > ⚠️ **백엔드 서버와 AI 분석은 같은 Python 환경을 써야 합니다.** 서버는 자신을 실행한 Python으로 AI 작업 프로세스(`MakeResult.py`)를 띄우기 때문에, AI 패키지(ultralytics, torch, pandas, scipy 등)가 없는 가상환경으로 서버를 띄우면 분석 단계에서 실패합니다.
 
 ### 2. AI 모델 파일
-`model/yolo26l_1280_v3.pt`가 있어야 합니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
+`model/yolo26l_1280_v9_last.pt`가 있어야 합니다(`app/models.py`가 가리키는 파일). 책등(`book-spine`)과 종이면(`book-paper`)을 함께 검출하는 2클래스 모델입니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 코드를 새로 받은 뒤에는 `git lfs pull`로 모델 파일을 받아 주세요. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
 
 ### 3. 데이터베이스 (MySQL 8.0, Docker)
 ```bash

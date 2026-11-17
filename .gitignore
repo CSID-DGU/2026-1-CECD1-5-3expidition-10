@@ -16,6 +16,8 @@ venv/
 # 개인 편집기 설정
 .vs/
 .vscode/
+# Claude Code 개인 설정 (팀 공용 설정은 .claude/settings.json, 지침은 CLAUDE.md)
+.claude/settings.local.json
 
 # AI 분석 작업 폴더: 대시보드에서 분석할 때마다 마지막으로 분석한 사진과 결과로 바뀜 (판정 테스트 예시는 backend/test_data/)
 /dataset/test/
@@ -28,3 +30,10 @@ howtotest.txt
 
 # 결과 화면 캡처 (대화 공유용)
 docs/test_captures_20261031/
+
+# 학습용 데이터셋 (사진·라벨·병합본). 용량이 크고 도서관 촬영본은 비공개라 git 에 올리지 않는다
+# (/dataset/ 은 테스트 사진 폴더로 별개 — 계속 추적)
+/dataset_own/
+/dataset_cnu/
+/dataset_p2/
+/dataset_merged/
