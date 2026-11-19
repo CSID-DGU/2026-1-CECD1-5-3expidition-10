@@ -144,6 +144,37 @@ def paperish(rgb: np.ndarray, ink_max: Optional[float] = None) -> bool:
     return sat < 0.25 and val > 0.55 and ink < (0.13 if ink_max is None else ink_max)
 
 
+def smooth_white_block(rgb: np.ndarray) -> bool:
+    """밝고(L>0.55) 채도 낮고(S<0.18) 밝기 편차가 작은(균일한) 크롭. 1280px 로 줄인 사진에서는 얇은 책의 종이면 줄무늬가 안 보여
+    paper_side_score 가 못 잡으므로, '책등 자리에 매끈한 흰 덩어리'라는 모양으로 종이면을 본다. 빈 자리의 흰 벽도 통과하므로
+    위쪽 대비(paper_top_contrast)와 함께 써야 한다."""
+    if rgb.size == 0 or rgb.shape[0] < 8 or rgb.shape[1] < 3:
+        return False
+    small = cv2.resize(rgb, (16, 96), interpolation=cv2.INTER_AREA)
+    hsv = cv2.cvtColor(small, cv2.COLOR_RGB2HSV).astype(np.float32) / 255.0
+    lab = cv2.cvtColor(small, cv2.COLOR_RGB2LAB).astype(np.float32) / 255.0
+    L = lab[..., 0]
+    return bool(L.mean() > 0.55 and hsv[..., 1].mean() < 0.18 and L.std() < 0.11)
+
+
+def paper_top_contrast(rgb_full: np.ndarray, box: Box) -> Optional[float]:
+    """박스 바로 위 띠(높이 12%)와 박스 위쪽 1/4 의 평균 밝기 차 (0~1). 종이면 책은 윗면 위가 어두운 선반 안쪽이라 차가 크고,
+    책이 빠진 빈 자리는 벽이 위아래로 이어져 차가 작다. 박스가 사진 위 끝에 닿으면 None."""
+    H, W = rgb_full.shape[:2]
+    bh = box["y2"] - box["y1"]
+    t = int(max(4, 0.12 * bh))
+    if box["y1"] - t < 0 or bh < 16:
+        return None
+    x1, x2 = max(0, box["x1"]), min(W, box["x2"])
+    if x2 - x1 < 3:
+        return None
+    above = rgb_full[box["y1"] - t:box["y1"], x1:x2]
+    top = rgb_full[box["y1"]:box["y1"] + max(4, bh // 4), x1:x2]
+    la = cv2.cvtColor(above, cv2.COLOR_RGB2LAB)[..., 0].astype(np.float32).mean() / 255.0
+    lt = cv2.cvtColor(top, cv2.COLOR_RGB2LAB)[..., 0].astype(np.float32).mean() / 255.0
+    return float(lt - la)
+
+
 def edge_energy(rgb: np.ndarray) -> float:
     g = cv2.cvtColor(cv2.resize(rgb, (64, 128), interpolation=cv2.INTER_AREA), cv2.COLOR_RGB2GRAY).astype(np.float32)
     return float(np.abs(cv2.Sobel(g, cv2.CV_32F, 1, 0)).mean() + np.abs(cv2.Sobel(g, cv2.CV_32F, 0, 1)).mean())

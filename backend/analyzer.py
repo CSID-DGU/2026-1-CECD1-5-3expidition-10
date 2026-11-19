@@ -413,7 +413,7 @@ def find_unknown_book_candidates(results: List[dict], rfid_reg_nos: Set[str]) ->
 
 def misorder_target(reg_no: str, master_data: Dict[str, dict]) -> Optional[str]:
     """
-    오배열 도서를 옮길 자리: "3번째 자리 (「앞 책」과 「뒤 책」 사이)". 층에 있어야 할 책 기준으로 세므로 대출 중인 책은 빠집니다.
+    오배열 도서를 옮길 자리: "「앞 책」과(와) 「뒤 책」 사이 (3번째 자리)". 사서는 제목으로 자리를 찾으므로 옆 책 제목을 앞에 둡니다. 층에 있어야 할 책 기준으로 세므로 대출 중인 책은 빠집니다.
     청구기호를 보지 않아도 옆 책의 제목으로 자리를 찾을 수 있게 합니다. 이 층 도서가 아니면 None
     """
     expected = sorted((info['correct_order'], key) for key, info in master_data.items() if info['on_shelf'])
@@ -431,7 +431,7 @@ def misorder_target(reg_no: str, master_data: Dict[str, dict]) -> Optional[str]:
         place = f"맨 오른쪽, 「{before}」 뒤"
     else:
         return f"{index + 1}번째 자리"
-    return f"{index + 1}번째 자리 ({place})"
+    return f"{place} ({index + 1}번째 자리)"
 
 
 def analyze_shelf_session(session_id: str, shelf_id: str, conn: mysql.connector.connection.MySQLConnection) -> Dict[str, Any]:

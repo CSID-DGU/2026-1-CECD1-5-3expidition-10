@@ -118,9 +118,11 @@ def build_backend_result(query_image: Image.Image, analysis: Dict[str, Any], ref
         conf = _backend_confidence(r, floor)
         rows.append({
             "book_id": book_id, "confidence_score": conf, "visual_status": VISUAL_STATUS.get(r["state"], "normal"),
+            # 겹친 이상 전부 (대표 상태 visual_status 와 같은 순서). 백엔드가 다중 상태를 받게 되면 이 목록을 쓴다
+            "visual_statuses": [VISUAL_STATUS.get(st, st) for st in (r.get("states") or ([r["state"]] if str(r["state"]).startswith("abnormal_") else []))],
             "x": x, "tie": slot, "quad": r.get("quad"), "box": r["box"],
             "file": f"adjusted_spine_{r['book_index']}.jpg" if r["book_index"] is not None else f"recovered_spine_slot{slot}.jpg",
-            "debug": {"slot": slot, "state": r["state"], "source": r["source"], "flags": r["flags"],
+            "debug": {"slot": slot, "state": r["state"], "states": list(r.get("states") or []), "source": r["source"], "flags": r["flags"],
                       "match_similarity": r["match_similarity"], "box": r["box"],
                       "inferred": "inferred_from_missing" in r["flags"],
                       "evidence_quality": r.get("evidence", {}).get("evidence_quality"), "origin_shelf": origin},
@@ -131,7 +133,7 @@ def build_backend_result(query_image: Image.Image, analysis: Dict[str, Any], ref
         cx = (e["box"]["x1"] + e["box"]["x2"]) / 2.0
         foreign = e.get("foreign")
         rows.append({
-            "book_id": "UNKNOWN", "confidence_score": 0.0, "visual_status": "normal",
+            "book_id": "UNKNOWN", "confidence_score": 0.0, "visual_status": "normal", "visual_statuses": [],
             "x": e.get("ub") if e.get("ub") is not None else cx, "tie": 1000 + k, "quad": e.get("quad"), "box": e["box"],
             "file": f"adjusted_spine_{e['book_index']}.jpg",
             "debug": {"slot": None, "state": "unmatched_box", "source": None, "flags": ["foreign_book"] if foreign else [],
@@ -146,7 +148,7 @@ def build_backend_result(query_image: Image.Image, analysis: Dict[str, Any], ref
         "sequence_order": BACKEND_SEQ_START + k,
         "book_id": t["book_id"],
         "confidence_score": t["confidence_score"],
-        "visual_status": t["visual_status"],
+        "visual_status": t["visual_status"], "visual_statuses": t.get("visual_statuses", []),
         "spine_img_file": _write_spine(rgb, t["quad"], t["box"], t["file"]) if save_crops else t["file"],
         "debug": t["debug"],
     } for k, t in enumerate(rows)]

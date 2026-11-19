@@ -49,6 +49,10 @@ if RFID_MODE not in ('virtual', 'real'):
 PATROL_KEEP_COUNT = int(os.getenv('PATROL_KEEP_COUNT', '2'))
 
 # 로그인 쿠키를 HTTPS로만 보낼지 (HTTPS로 서비스할 때 1로 설정. HTTP로 접속하면 로그인이 유지되지 않음)
+# 첫 화면(/, /dashboard)으로 보여 줄 대시보드: classic = 기존 한 화면 대시보드, new = 첫 화면 · 층 화면으로 나눈 새 화면
+# (2026-11-10~11: 멘토님 발표자료에 맞춰 잠시 classic으로 되돌렸다가 2026-11-12에 new로 복귀. 기존 화면은 /classic)
+DASHBOARD_UI = os.getenv('DASHBOARD_UI', 'new').lower()
+
 COOKIE_SECURE = os.getenv('COOKIE_SECURE', '0').lower() in ('1', 'true', 'yes')
 
 # 분석 세션마다 쌓이는 책등 크롭 보관소: spine_store/<session_id>/<파일명>

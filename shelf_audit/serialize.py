@@ -25,7 +25,7 @@ STATE_VERSION = 5
 
 _SLOT_FIELDS = ("slot", "ref_id", "book_index", "box", "u", "quad", "w", "h", "y2", "axis", "lsd", "desc", "M1", "M2",
                 "sift", "edge", "crop", "raw_g", "sigma1", "ambiguous_orient", "paper_score", "ref_paper", "kind",
-                "paper_expected", "paper_sig", "source", "series_id")
+                "paper_expected", "paper_sig", "source", "series_id", "depth_ok")
 
 
 def _np_or_none(v):
@@ -45,6 +45,7 @@ def slot_to_state(s: Slot) -> Dict[str, Any]:
         "sigma1": float(s.sigma1), "ambiguous_orient": bool(s.ambiguous_orient), "paper_score": float(s.paper_score),
         "ref_paper": bool(s.ref_paper), "kind": s.kind, "paper_expected": bool(s.paper_expected),
         "paper_sig": _np_or_none(s.paper_sig), "source": s.source, "series_id": None if s.series_id is None else int(s.series_id),
+        "depth_ok": bool(getattr(s, "depth_ok", True)),
     }
 
 
@@ -56,6 +57,7 @@ def slot_from_state(d: Dict[str, Any]) -> Slot:
     kw["kind"] = d.get("kind", "paper" if d.get("ref_paper") else "spine")
     kw["paper_expected"] = bool(d.get("paper_expected", kw["kind"] == "paper"))
     kw["source"] = d.get("source", "yolo")
+    kw["depth_ok"] = bool(d.get("depth_ok", True))
     return Slot(**kw)
 
 

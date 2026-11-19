@@ -2,7 +2,7 @@ import io
 import os
 import json
 import logging
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Query
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image, UnidentifiedImageError
@@ -28,7 +28,13 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024   # 20MB
 # async 를 제거한 일반 def: FastAPI가 스레드풀에서 실행하므로
 # YOLO/ResNet 추론 중에도 서버 이벤트 루프가 멈추지 않는다.
 @app.post("/extract-features", responses={200: {"content": {"image/jpeg": {}}}})
-def extract_features(file: UploadFile = File(...)):
+def extract_features(
+    file: UploadFile = File(...),
+    rotate_redetect: bool = Query(
+        False,
+        description="기운 책 묶음을 돌려 세워 한 번 더 검출합니다. 얇은 책이 촘촘하게 기울어 있는 서가에서 놓치는 책이 줄어듭니다. "
+                    "대상 줄에 같은 방향으로 기운 책이 3권 이상 있을 때만 동작하고, 그런 사진에서는 검출을 한 번 더 하는 만큼 느려집니다."),
+):
     # 1. 파일 읽기 + 입력 검증
     image_bytes = file.file.read(MAX_UPLOAD_BYTES + 1)
     if not image_bytes:
@@ -45,7 +51,7 @@ def extract_features(file: UploadFile = File(...)):
 
     # 2. 파이프라인 실행
     try:
-        books, visualized_jpeg = process_bookshelf_perspective_pipeline(image)
+        books, visualized_jpeg = process_bookshelf_perspective_pipeline(image, rotate_redetect=rotate_redetect)
     except Exception:
         logger.exception("파이프라인 처리 실패")
         raise HTTPException(status_code=500, detail="이미지 처리 중 오류가 발생했습니다.")

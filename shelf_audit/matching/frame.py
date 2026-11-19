@@ -10,35 +10,47 @@ from ..types import Box, BookObs, MatchContext, Slot
 
 
 def fit_frame(pairs, obs: List[BookObs], slots: List[Slot], sc0: float) -> Tuple[float, float, bool]:
-    """RANSAC 1D 변환. 반환 (a, b, reliable). reliable=False 면 위치 기반 판정의 신뢰도를 낮춘다."""
+    """선반 좌표계 u_q = a*u_ref + b 의 RANSAC 맞춤. 반환 (a, b, reliable). reliable=False 면 위치 기반 판정의 신뢰도를 낮춘다.
+    - 두 점으로 직선 후보를 만들 때 **두 점 사이가 줄 길이의 FRAME_MIN_BASE 보다 가까우면 쓰지 않는다**. 바로 옆 책 두 권으로 잰 배율은
+      밑단 위치 오차 3px 에 8% 씩 흔들린다 (확실한 짝이 3권뿐이고 그중 둘이 옆자리면, 예전엔 그 둘로 배율 0.79 를 잡고 끝났다. 참값 1.05).
+      긴 기준선 후보가 하나도 없을 때만(짝들이 한쪽에 몰림) 가까운 쌍도 쓴다.
+    - 인라이어 수가 같으면 잔차 제곱합이 작은(더 딱 맞는) 직선을 고른다 (예전엔 먼저 나온 후보가 이겼다)."""
     pts = [(slots[j].u, obs[i].ub, slots[j].w) for i, j in pairs]
     if len(pts) < 2:
         if pts:
             return sc0, pts[0][1] - sc0 * pts[0][0], False
         return sc0, 0.0, False
+    us = np.array([p[0] for p in pts], float)
+    vs = np.array([p[1] for p in pts], float)
     tol = 0.5 * float(np.median([p[2] for p in pts])) * sc0
-    best, best_in = None, -1
-    for x in range(len(pts)):
-        for y in range(x + 1, len(pts)):
-            if abs(pts[y][0] - pts[x][0]) < 1e-6:
-                continue
-            a = (pts[y][1] - pts[x][1]) / (pts[y][0] - pts[x][0])
-            if not (0.5 * sc0 < a < 2.0 * sc0):
-                continue
-            b = pts[x][1] - a * pts[x][0]
-            inl = [k for k, p in enumerate(pts) if abs(p[1] - (a * p[0] + b)) < tol]
-            if len(inl) > best_in:
-                best, best_in = (a, b, inl), len(inl)
+    span_all = float(us.max() - us.min())
+    best = None
+    for min_base in (CFG.FRAME_MIN_BASE * span_all, 1e-6):
+        for x in range(len(pts)):
+            du = us - us[x]
+            ok = np.abs(du) >= max(min_base, 1e-6)
+            ok[:x + 1] = False
+            for y in np.nonzero(ok)[0]:
+                a = (vs[y] - vs[x]) / du[y]
+                if not (0.5 * sc0 < a < 2.0 * sc0):
+                    continue
+                b = vs[x] - a * us[x]
+                res = np.abs(vs - (a * us + b))
+                inl = res < tol
+                score = (int(inl.sum()), -float((res[inl] ** 2).sum()))
+                if best is None or score > best[0]:
+                    best = (score, a, b, inl)
+        if best is not None:
+            break
     if best is None:
-        return sc0, float(np.median([p[1] - sc0 * p[0] for p in pts])), False
-    inl = best[2]
-    reliable = len(inl) >= max(3, int(0.5 * len(pts)))
-    A = np.array([[pts[k][0], 1.0] for k in inl])
-    y = np.array([pts[k][1] for k in inl])
-    if len(inl) >= 2:
-        sol = np.linalg.lstsq(A, y, rcond=None)[0]
+        return sc0, float(np.median(vs - sc0 * us)), False
+    _, a, b, inl = best
+    n_in = int(inl.sum())
+    reliable = n_in >= max(3, int(0.5 * len(pts)))
+    if n_in >= 2 and float(us[inl].max() - us[inl].min()) > 1e-6:
+        sol = np.linalg.lstsq(np.stack([us[inl], np.ones(n_in)], axis=1), vs[inl], rcond=None)[0]
         return float(sol[0]), float(sol[1]), reliable
-    return best[0], best[1], reliable
+    return float(a), float(b), reliable
 
 
 def robust_offset(values, prior: float = None, center: Optional[float] = None) -> float:

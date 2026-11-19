@@ -13,6 +13,7 @@ import json
 import os
 from typing import Any, Dict, Optional
 
+import cv2
 import numpy as np
 from PIL import Image
 
@@ -20,11 +21,12 @@ from ..config import CFG, SHELF_MANIFEST
 from ..errors import Diagnostics, ReferenceError
 from ..features.descriptor import describe_raw, finalize_desc, pair_score, prof_corr, strip_cos
 from ..features.keypoints import sift_extract
+from ..judging.sequence import column_strips
 from ..features.series import build_series_group, find_series_groups
-from ..geometry import unit
+from ..geometry import x_overlap_ratio, unit
 from ..imaging import (detect_vertical_segments, edge_energy, jitter, light_signature, paper_side_score, paper_signature, shelf_edge_roll,
                        prepare_image)
-from ..observation import observe, standing_stats
+from ..observation import fit_depth_map, observe, standing_stats
 from ..types import ShelfRef, Slot
 from .audit import audit_reference
 
@@ -47,6 +49,7 @@ def build_shelf_reference(path: str, detector, emb, diag: Optional[Diagnostics] 
     name = os.path.basename(path)
     img = prepare_image(Image.open(path).convert("RGB"))
     rgb = np.array(img)
+    H, W = rgb.shape[:2]
     segs = detect_vertical_segments(rgb)
 
     with diag.stage("ref_detect", critical=True):
@@ -54,10 +57,58 @@ def build_shelf_reference(path: str, detector, emb, diag: Optional[Diagnostics] 
     if len(obs) < 3:
         raise ReferenceError(f"기준 사진 {name}에서 책이 3권 미만 검출되었습니다", file=name, n=len(obs))
 
+    # 조각 박스 정리: 높이가 그 줄 책 높이의 절반도 안 되면서 더 큰 박스와 가로로 대부분 겹치는 박스는 같은 책의 조각(라벨·모서리)이다.
+    # 기준에 자리로 등록되면 검사 때마다 '없음/판정불가'가 나고 순서 오탐을 만들므로 뺀다
+    if CFG.REF_DROP_FRAGMENTS and len(obs) >= 4:
+        hs = sorted(q.h for q in obs)
+        med_h = hs[len(hs) // 2]
+        keep = []
+        ws = sorted(q.w for q in obs if q.source == "yolo") or sorted(q.w for q in obs)
+        med_w = ws[len(ws) // 2]
+        for q in obs:
+            frag = False
+            if q.source != "yolo" and q.w < CFG.REF_FB_MIN_W_REL * med_w:
+                frag = True                                   # 보정 탐지가 만든 너무 좁은 띠(벽·이웃 책 가장자리)는 자리가 아니다
+            bw = q.box["x2"] - q.box["x1"]
+            at_edge = q.box["x1"] <= 2 or q.box["x2"] >= W - 2
+            if at_edge and bw < CFG.REF_EDGE_MIN_W_REL * med_w:
+                frag = True                                   # 사진 가장자리에 잘려 폭 몇 px 만 보이는 책: 자리로 두면 늘 '없음·얹힘'으로 떨어진다
+            if at_edge and not frag and bw < med_w:
+                for o in obs:                                 # 책 한 권 폭도 안 되는 가장자리 띠가 더 넓은 옆 박스 안에 7할 넘게 들어가 있다: 그 책의 가장자리(표지 단면)를 따로 잡은 것
+                    if o is q or (o.box["x2"] - o.box["x1"]) < CFG.REF_EDGE_NESTED_W * bw:
+                        continue
+                    inter = max(0, min(q.box["x2"], o.box["x2"]) - max(q.box["x1"], o.box["x1"]))
+                    if inter >= 0.7 * max(1, bw):
+                        frag = True
+                        break
+            if q.source != "yolo" and bw < CFG.REF_FB_INSIDE_W_REL * med_w:
+                for o in obs:                                 # 좁은 보정 띠가 YOLO 책의 bbox 안으로 3할 넘게 들어가 있다: 그 책의 가장자리(quad 가 덜 덮은 띠)이지 다른 책이 아니다
+                    if o.source == "yolo" and x_overlap_ratio(q.box, o.box) > CFG.FB_MAX_YOLO_OVERLAP:
+                        frag = True
+                        break
+            if q.h < CFG.REF_FRAGMENT_H * med_h:
+                for o in obs:
+                    if o is q or o.h <= q.h:
+                        continue
+                    inter = max(0, min(q.box["x2"], o.box["x2"]) - max(q.box["x1"], o.box["x1"]))
+                    if inter >= 0.7 * max(1, q.box["x2"] - q.box["x1"]):
+                        frag = True
+                        break
+            if not frag:
+                keep.append(q)
+        if len(keep) != len(obs):
+            diag.warn("ref_fragments_dropped", f"기준 사진의 조각 박스 {len(obs) - len(keep)}개를 자리에서 뺐습니다", count=len(obs) - len(keep))
+            obs = keep
+            for i, q in enumerate(obs):
+                q.idx = i
     raws = [describe_raw(emb, q.crop, (0, 180)) for q in obs]
     mu_g = np.mean([r[0]["g"] for r in raws], axis=0)
     mu_s = np.mean([r[0]["s"].mean(axis=0) for r in raws], axis=0)
     stats = standing_stats(obs)
+    # 기준 밑단 직선: 밑단이 그 선보다 책 높이의 REF_BOTTOM_CUT_REL 넘게 위에 뜬 박스는 아래가 잘린 박스다 (얇은 책의 아랫부분을 YOLO 가 놓침)
+    # → 그 자리는 앞뒤 정렬을 재지 않는다 (조금 들어가 꽂힌 책은 기준이 정상이므로 제 밑단을 그대로 쓴다)
+    row = fit_depth_map([(q.cx, q.box["y2"]) for q in obs if q.h > 0 and q.w / q.h < 0.5 and q.source == "yolo"],
+                        tol=max(0.02 * stats["med_h"], 4.0), slope_max=0.3)
 
     mf = (manifest or {}).get(name, {})
     # 사람이 '기준 사진의 이 자리는 사실 이상 상태였다'고 아는 경우만 적는다: {"baseline_abnormal": {"7": "paper"}}
@@ -67,7 +118,8 @@ def build_shelf_reference(path: str, detector, emb, diag: Optional[Diagnostics] 
     for n, (q, r) in enumerate(zip(obs, raws)):
         d0, d180 = finalize_desc(r[0], mu_g, mu_s), finalize_desc(r[180], mu_g, mu_s)
         ps = paper_side_score(q.crop)
-        is_paper = bool(ps >= CFG.BASELINE_PAPER_T)
+        det_paper = getattr(q, "label", "spine") == "paper" and q.det_conf >= CFG.PAPER_DET_CONF
+        is_paper = bool(det_paper or ps >= CFG.BASELINE_PAPER_T)      # 탐지기(v9)의 종이면 클래스가 우선, 없으면 줄무늬 점수
         slots.append(Slot(
             slot=n, ref_id=f"ref_{name}_slot_{n}", book_index=q.idx, box=q.box, u=q.ub, quad=q.quad,
             w=float(q.w), h=float(q.h), y2=float(q.box["y2"]), axis=q.axis, lsd=q.lsd, desc=d0,
@@ -77,10 +129,12 @@ def build_shelf_reference(path: str, detector, emb, diag: Optional[Diagnostics] 
             paper_score=float(ps), ref_paper=is_paper, kind="paper" if is_paper else "spine",
             paper_expected=bool(is_paper and n not in baseline_abnormal),
             paper_sig=paper_signature(q.crop) if is_paper else None, source=q.source,
+            depth_ok=row is None or (q.box["y2"] - (row[0] * q.cx + row[1])) >= -CFG.REF_BOTTOM_CUT_REL * stats["med_h"],
         ))
 
     # --- 자동 캘리브레이션 (합성 변형으로 양성 분포, 타 슬롯으로 음성 분포). 종이면 슬롯은 외형 분포에서 뺀다 ---
     rng = np.random.RandomState(CFG.SEED)
+    cv2.setRNGSeed(CFG.SEED)
     pos, sig1 = [], {s.slot: [] for s in slots}
     spine_slots = [s for s in slots if s.kind == "spine"] or slots
     if CFG.CALIB_JITTER > 0:
@@ -107,6 +161,8 @@ def build_shelf_reference(path: str, detector, emb, diag: Optional[Diagnostics] 
         "mu_g": mu_g, "mu_s": mu_s, "tau_floor": tau_floor, "tau_ok": tau_ok, "tau_neg": tau_neg,
         "med_axis": stats["med_axis"], "med_y2": stats["med_y2"], "med_h": stats["med_h"], "med_w": stats["med_w"],
         "light": light_signature(rgb),
+        "row_line": None if row is None else [float(row[0]), float(row[1])],         # 밑단 직선 (색 띠 정렬의 높이 기준)
+        "strip": column_strips(rgb, row, stats["med_h"]) if CFG.SEQ_ENABLE else None,   # 열별 평균색 띠 (3 x W x 3): 탐지 없이 책 차례를 확인하는 바코드
         "h_roll": shelf_edge_roll(rgb, stats["med_y2"] - 0.03 * rgb.shape[0], min(rgb.shape[0], stats["med_y2"] + 0.25 * rgb.shape[0])),
     }
     ref = ShelfRef(slots=slots, meta=meta)
