@@ -2,7 +2,8 @@
 """
 app.pipeline (YOLO 세그 + 투시변환) 어댑터.
 
-파이프라인의 책 항목은 {book_index, quad, tilt_deg, feature_vector} 뿐이다. 여기서 Detection 으로 바꾼다.
+파이프라인(v9)의 책 항목은 {book_index, label, quad, tilt_deg, confidence, feature_vector} 다. label 은 "book-spine" 또는 "book-paper"
+(종이면만 보이는 책: feature_vector 가 null). 파이프라인이 촬영 대상 줄(가운데 칸)만 돌려주므로 여기서 줄을 고르지 않는다. 여기서 Detection 으로 바꾼다.
 파이프라인 예외는 DetectionError 로 감싸서 올린다(치명). 콘솔 출력('[spine N] ...')은 막는다.
 """
 import contextlib
@@ -40,9 +41,12 @@ def book_to_detection(b: Dict[str, Any]) -> Optional[Detection]:
     else:
         box = {k: int(box[k]) for k in ("x1", "y1", "x2", "y2")}
     poly = b.get("polygon")
+    lab = str(b.get("label") or "spine").lower()
+    label = "paper" if "paper" in lab else "spine"
     return Detection(box=box, quad=quad,
                      polygon=None if poly is None else np.asarray(poly, np.float32).reshape(-1, 2),
-                     book_index=b.get("book_index"), confidence=float(b.get("confidence", 0.0) or 0.0), source="yolo")
+                     book_index=b.get("book_index"), confidence=float(b.get("confidence", 0.0) or 0.0),
+                     source=str(b.get("source") or "yolo"), label=label)
 
 
 class YoloDetector:
@@ -65,10 +69,24 @@ class YoloDetector:
             except Exception as e:
                 raise DetectionError(f"app.pipeline 을 불러올 수 없습니다: {e}") from e
 
+    def _kwargs(self) -> Dict[str, Any]:
+        """파이프라인이 받는 인자만 넘긴다 (conf_threshold, rotate_redetect — 옛 파이프라인에는 없을 수 있다)."""
+        kw: Dict[str, Any] = {}
+        try:
+            import inspect
+            params = inspect.signature(self._fn).parameters
+        except Exception:                                   # noqa: BLE001
+            params = {}
+        if self.conf is not None and "conf_threshold" in params:
+            kw["conf_threshold"] = self.conf
+        if CFG.ROTATE_REDETECT and "rotate_redetect" in params:
+            kw["rotate_redetect"] = True
+        return kw
+
     def _run(self, image: Image.Image) -> List[Detection]:
         try:
             with contextlib.redirect_stdout(io.StringIO()):
-                books, _ = self._fn(image) if self.conf is None else self._fn(image, conf_threshold=self.conf)
+                books, _ = self._fn(image, **self._kwargs())
         except Exception as e:
             raise DetectionError(f"YOLO 파이프라인 실패: {e}") from e
         return [d for d in (book_to_detection(b) for b in books) if d is not None]
@@ -126,7 +144,7 @@ def tiled_detect(run_fn, image: Image.Image, base: List[Detection]) -> List[Dete
             if any(_iou(bx, b.box) >= CFG.TILE_DUP_IOU for b in base) or any(_iou(bx, o.box) >= CFG.TILE_DUP_IOU for o in out):
                 continue
             poly = None if d.polygon is None else (np.asarray(d.polygon, np.float32) / scale + np.float32([x1, y1]))
-            out.append(Detection(box=bx, quad=q, polygon=poly, book_index=None, confidence=d.confidence, source="yolo"))
+            out.append(Detection(box=bx, quad=q, polygon=poly, book_index=None, confidence=d.confidence, source="yolo", label=d.label))
     return out
 
 
@@ -152,7 +170,7 @@ def dump_detections(dets: List[Detection], name: Optional[str], image_size=None)
         return
     try:
         os.makedirs(CFG.DUMP_DIR, exist_ok=True)
-        rows = [{"book_index": d.book_index, "box": d.box, "source": d.source, "confidence": d.confidence,
+        rows = [{"book_index": d.book_index, "box": d.box, "source": d.source, "confidence": d.confidence, "label": d.label,
                  "refined_quadrilateral": None if d.quad is None else np.asarray(d.quad, np.float64).tolist(),   # 반올림하지 않음 (재현 시 크롭이 달라지지 않도록)
                  "polygon": None if d.polygon is None else np.asarray(d.polygon, np.float64).tolist()} for d in dets]
         payload = {"image_size": list(image_size) if image_size else None, "detections": rows}
@@ -160,6 +178,19 @@ def dump_detections(dets: List[Detection], name: Optional[str], image_size=None)
             json.dump(payload, f, ensure_ascii=False, default=to_py)
     except Exception as e:
         print(f"(검출 덤프 저장 실패: {e})")
+
+
+def sub_dump_name(image_name: str, key: str) -> str:
+    """재탐지 부분 영상의 덤프 이름: <사진 이름>__sub_<x1_y1_x2_y2_변형_각도>.json (잘라낸 자리와 변형으로 키를 만들어 픽셀 차이에 흔들리지 않는다)."""
+    return f"{os.path.splitext(image_name)[0]}__sub_{key}.json"
+
+
+def _sub_key_box(key: str):
+    try:
+        x1, y1, x2, y2 = (int(v) for v in key.split("_")[:4])
+        return x1, y1, x2, y2, "_".join(key.split("_")[4:])
+    except Exception:                                        # noqa: BLE001
+        return None
 
 
 class DumpDetector:
@@ -184,5 +215,36 @@ class DumpDetector:
         rows = data["detections"] if isinstance(data, dict) else data
         size = data.get("image_size") if isinstance(data, dict) else None
         if size and list(image.size) != list(size):
-            return []                                     # 누락 복구의 부분 이미지 재검출: 기록이 없으므로 '못 찾음'
+            # 누락 복구의 부분 영상 재탐지: 같은 자리·변형의 기록(<사진>__sub_<x1_y1_x2_y2_변형>.json)이 있으면 그대로 돌려준다.
+            # 꼭 같은 기록이 없으면(코드가 조금 바뀌어 잘라낸 자리가 몇 px 달라짐) 같은 변형 중 겹침(IoU) 0.8 이상인 기록을 쓴다. 없으면 '못 찾음'
+            key = getattr(self, "sub_key", "") or ""
+            ps = os.path.join(self.dump_dir, sub_dump_name(self.current_name, key)) if key else ""
+            if not (ps and os.path.isfile(ps)):
+                ps = self._nearest_sub(key)
+            if not ps:
+                return []
+            with open(ps, encoding="utf-8") as f:
+                rows = json.load(f).get("detections", [])
         return [d for d in (book_to_detection(r) for r in rows) if d is not None]
+
+    def _nearest_sub(self, key: str):
+        kb = _sub_key_box(key)
+        if kb is None:
+            return None
+        stem = os.path.splitext(self.current_name)[0] + "__sub_"
+        best, best_v = None, 0.8
+        try:
+            names = [n for n in os.listdir(self.dump_dir) if n.startswith(stem) and n.endswith(".json")]
+        except OSError:
+            return None
+        for n in names:
+            ob = _sub_key_box(n[len(stem):-5])
+            if ob is None or ob[4] != kb[4]:
+                continue
+            ix = max(0, min(kb[2], ob[2]) - max(kb[0], ob[0])); iy = max(0, min(kb[3], ob[3]) - max(kb[1], ob[1]))
+            inter = ix * iy
+            union = (kb[2] - kb[0]) * (kb[3] - kb[1]) + (ob[2] - ob[0]) * (ob[3] - ob[1]) - inter
+            v = inter / max(union, 1)
+            if v > best_v:
+                best, best_v = os.path.join(self.dump_dir, n), v
+        return best

@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from ..config import CFG
+from ..geometry import wrap180
 from ..features.descriptor import pair_score
 from ..features.keypoints import sift_extract, sift_pose
 from ..observation import make_obs
@@ -41,7 +42,9 @@ def split_wide_boxes(obs: List[BookObs], mr: MatchResult, ref: ShelfRef, ctx: Ma
     strong_slots = {j for i, j in mr.pairs.items() if mr.source.get(i) in STRONG}
 
     # 1) 후보 박스: YOLO 이고, 확실한 짝이 없는 것
-    cand_boxes = [i for i in range(len(obs)) if obs[i].source == "yolo" and mr.source.get(i) not in STRONG]
+    cand_boxes = [i for i in range(len(obs)) if obs[i].source == "yolo" and mr.source.get(i) not in STRONG
+                  and getattr(obs[i], "label", "spine") != "paper"
+                  and obs[i].ratio < CFG.SPLIT_MAX_RATIO]          # 표지를 앞으로 돌린 책(가로/세로 0.5 이상)은 여러 권이 합쳐진 박스가 아니다
     # 2) 가로로 겹치는 후보끼리 영역으로 묶는다 (union-find 간단판)
     groups: List[List[int]] = []
     for i in sorted(cand_boxes, key=lambda k: obs[k].box["x1"]):
@@ -53,6 +56,61 @@ def split_wide_boxes(obs: List[BookObs], mr: MatchResult, ref: ShelfRef, ctx: Ma
                 break
         if not placed:
             groups.append([i])
+
+    # 0) 기울어진 합쳐진 박스: 세로로 자르면 조각마다 여러 책이 섞이고 기울기도 모른다. 사각형(quad)을 긴 축 방향으로 평행하게 잘라
+    #    조각마다 자기 사각형을 주면 크롭·기울기가 제대로 나온다 (30° 쏠린 책 무더기를 YOLO 가 한 덩어리로 잡는 경우)
+    tilted_done: set = set()
+    for i in list(cand_boxes):
+        q = obs[i]
+        if q.quad is None or q.axis is None or abs(q.axis - 90.0) < CFG.SPLIT_TILT_MIN:
+            continue
+        Q = np.asarray(q.quad, np.float32)
+        bl, br = (Q[3], Q[2]) if Q[3][0] <= Q[2][0] else (Q[2], Q[3])
+        tl, tr = (Q[0], Q[1]) if Q[0][0] <= Q[1][0] else (Q[1], Q[0])
+        bx1, bx2 = float(bl[0]), float(br[0])
+        inside = [(j, u, w) for j, (u, w) in enumerate(pred) if bx1 + 0.2 * w <= u <= bx2 - 0.2 * w and j not in strong_slots]
+        if len(inside) < 2:
+            continue
+        exp_w = float(np.median([w for _, _, w in inside]))
+        if (bx2 - bx1) < CFG.SPLIT_MIN_W_REL * exp_w:
+            continue
+        inside.sort(key=lambda t: t[1])
+        cuts = [bx1] + [(inside[k][1] + inside[k + 1][1]) / 2.0 for k in range(len(inside) - 1)] + [bx2]
+        pieces: List[Tuple[int, BookObs]] = []
+        for k, (j, u, w) in enumerate(inside):
+            f1, f2 = (cuts[k] - bx1) / max(bx2 - bx1, 1.0), (cuts[k + 1] - bx1) / max(bx2 - bx1, 1.0)
+            if (f2 - f1) * (bx2 - bx1) < max(6, 0.4 * w):
+                continue
+            pq = np.array([tl + (tr - tl) * f1, tl + (tr - tl) * f2, bl + (br - bl) * f2, bl + (br - bl) * f1], np.float32)
+            box = {"x1": int(pq[:, 0].min()), "y1": int(pq[:, 1].min()), "x2": int(pq[:, 0].max()) + 1, "y2": int(pq[:, 1].max()) + 1}
+            det = Detection(box=box, quad=pq, polygon=None, book_index=None, confidence=float(q.det_conf), source="yolo")
+            p = make_obs(det, rgb, len(obs) + len(pieces), segs)
+            pieces.append((j, p))
+        if len(pieces) < 2:
+            continue
+        mr.pairs.pop(i, None)
+        mr.source.pop(i, None)
+        q.source = "merged"
+        tilted_done.add(i)
+        for j, p in pieces:
+            sl = slots[j]
+            ensure_desc(emb, p, ctx.meta, (0, 180))
+            raw = {h: pair_score(d, sl.desc)[0] for h, d in p.desc.items()}
+            pose = sift_pose(sift_extract(p.crop), sl.sift)
+            idx = len(obs)
+            obs.append(p)
+            mr.pairs[idx] = j
+            best = max(raw.values())
+            strong = best >= ctx.tau_floor or bool(pose and pose.get("reliable") and pose["inliers"] >= CFG.SIFT_ID_MIN)
+            mr.source[idx] = "split" if strong else "split_position"
+            mr.poses[idx] = pose
+            for h, v in raw.items():
+                mr.raw[(idx, j, h)] = v
+            out[sl.slot] = {"obs_index": idx, "strong": bool(strong), "tilted_split": True}
+            strong_slots.add(j) if strong else None
+    cand_boxes = [i for i in cand_boxes if i not in tilted_done]
+    groups = [[k for k in g if k not in tilted_done] for g in groups]
+    groups = [g for g in groups if g]
 
     for g in groups:
         x1 = min(obs[k].box["x1"] for k in g)
@@ -68,6 +126,12 @@ def split_wide_boxes(obs: List[BookObs], mr: MatchResult, ref: ShelfRef, ctx: Ma
             continue
         inside.sort(key=lambda t: t[1])
         bounds = [x1] + [int(round((inside[k][1] + inside[k + 1][1]) / 2.0)) for k in range(len(inside) - 1)] + [x2]
+        # 영역 박스들의 축(기울기) 중앙값: 조각은 세로로 자른 것이라 자체 사각형이 없으므로 원래 박스의 기울기를 물려받는다
+        # (30° 쏠린 책 여러 권이 한 박스로 잡힌 경우, 조각마다 기울기를 모르면 전부 '판정불가'가 된다)
+        g_axes = [obs[k].axis for k in g if obs[k].axis is not None]
+        g_axis = None
+        if g_axes:
+            g_axis = float(np.median([wrap180(a - 90.0) for a in g_axes])) + 90.0
         pieces: List[Tuple[int, BookObs]] = []
         for k, (j, u, w) in enumerate(inside):
             # 조각은 예측 중심 ±0.65폭 안으로 (영역 끝까지 늘리면 벽·이웃이 섞인다)
@@ -77,7 +141,7 @@ def split_wide_boxes(obs: List[BookObs], mr: MatchResult, ref: ShelfRef, ctx: Ma
             det = Detection(box={"x1": int(px1), "y1": y1, "x2": int(px2), "y2": y2}, quad=None, polygon=None,
                             book_index=None, confidence=float(np.mean([obs[k2].det_conf for k2 in g])), source="yolo")
             p = make_obs(det, rgb, len(obs) + len(pieces), segs)
-            p.axis = None
+            p.axis = g_axis
             pieces.append((j, p))
         if len(pieces) < 2:
             continue

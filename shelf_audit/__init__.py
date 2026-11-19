@@ -67,7 +67,7 @@ def package_hash() -> str:
             if f.endswith(".py"):
                 p = os.path.join(dp, f)
                 with open(p, "rb") as fh:
-                    h.update(os.path.relpath(p, root).encode() + fh.read().replace(b"\r\n", b"\n"))
+                    h.update(os.path.relpath(p, root).replace(os.sep, "/").encode() + fh.read().replace(b"\r\n", b"\n"))   # 경로 구분자도 통일 (윈도우·리눅스 같은 지문)
     return h.hexdigest()[:16]
 
 

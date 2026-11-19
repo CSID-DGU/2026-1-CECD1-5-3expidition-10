@@ -19,6 +19,7 @@ class Detection:
     book_index: Optional[int] = None      # 파이프라인이 매긴 번호 (spine_<n>.jpg 와 대응). 보정 탐지는 None
     confidence: float = 0.0
     source: str = "yolo"                  # yolo | fallback | template | redetect
+    label: str = "spine"                  # spine | paper  (v9 파이프라인의 book-spine / book-paper 클래스)
 
 
 @dataclass
@@ -37,6 +38,7 @@ class BookObs:
     lsd: Optional[Tuple[float, float]]
     source: str = "yolo"
     det_conf: float = 0.0
+    label: str = "spine"                  # 탐지기가 준 클래스: spine | paper (paper 는 외형 신원이 없다 -> 위치로만 짝짓는다)
     _matched: bool = False                # 어떤 슬롯과 짝지어졌는지 (판정불가 중재에서 '덮는 박스' 판단용)
     desc: Dict[int, Desc] = field(default_factory=dict)       # 자세 가설별 서술자(서가 기준으로 중심화)
     raw_g: Dict[int, np.ndarray] = field(default_factory=dict)  # 중심화 전 전역 벡터(단위) - 전 서가 카탈로그용
@@ -45,6 +47,21 @@ class BookObs:
     @property
     def ratio(self) -> float:
         return self.w / max(self.h, 1)
+
+    @property
+    def tilt_abs(self) -> float:
+        """축 기울기(도, 세운 책 = 0). 축을 모르면 0."""
+        if self.axis is None:
+            return 0.0
+        t = (self.axis - 90.0 + 90.0) % 180.0 - 90.0
+        return abs(float(t))
+
+    @property
+    def eff_w(self) -> float:
+        """책등 폭: 기운 책(8° 이상)은 바깥 박스가 기운 만큼 넓어지므로 원근 보정된 책등 폭(w)을, 세운 책은 박스 폭을 쓴다."""
+        if self.quad is not None and self.tilt_abs >= 8.0:
+            return float(self.w)
+        return float(self.box["x2"] - self.box["x1"])
 
 
 @dataclass
@@ -78,6 +95,7 @@ class Slot:
     source: str = "yolo"                  # 기준 등록에 쓰인 탐지 출처 (fallback 이면 quad 없음)
     series_id: Optional[int] = None
     color_sig: Optional[np.ndarray] = None   # 색 서명 (필요할 때 crop 에서 계산해 캐시; 저장하지 않음)
+    depth_ok: bool = True                 # 기준 박스의 밑단이 같은 줄 책들의 밑단 직선 위에 있음. 잘린 박스(밑단이 위로 떠 있음)면 앞뒤 정렬을 재지 않는다
 
 
 @dataclass
@@ -138,6 +156,16 @@ class MatchContext:
     frame_reliable: bool = True
     roll_h: Optional[float] = None        # 선반 앞턱 가로선으로 잰 카메라 롤 차(질의-기준). 없으면 None
     frame_ab: Optional[Tuple[float, float]] = None   # 선반 좌표계 (scale, offset) — 매칭 뒤에 채워진다
+    redetect_calls: int = 0                          # 이 사진에서 재탐지(확대·회전)로 탐지기를 부른 횟수 (CFG.REDETECT_MAX_CALLS 상한)
+    local_tilt: Dict[int, float] = field(default_factory=dict)   # 슬롯 번호 -> 그 둘레 책들의 기울기(도, 수직 기준). 회전 재탐지용
+    gap_roi: Dict[int, Tuple[float, float, bool]] = field(default_factory=dict)   # 슬롯 번호 -> 그 자리를 품은 빈 공간 (x1, x2, 질감 있음)
+    depth_map: Optional[Tuple[float, float]] = None  # 앞뒤 정렬 기준선: (질의 밑단 − 기준 밑단) ≈ a*cx + b. 짝지어진 서 있는 책들로 강건하게 맞춤
+    h_rel_med: float = 1.0                           # 짝지어진 서 있는 책들의 h_rel(질의 높이 / 기준 높이·배율) 중앙값. 크기 단서의 영점
+    h_rel_map: Optional[Tuple[float, float]] = None  # 그 영점의 x 의존 (투시): h_rel ≈ a*cx + b. 없으면 h_rel_med
+    quad_bias: Dict[int, float] = field(default_factory=dict)    # 슬롯 번호 -> 그 둘레에서 (박스 축각 기울기 − LSD 기울기) 중앙값. LSD 없는 책의 축각 기울기 보정용
+    no_room: set = field(default_factory=set)         # 빈 공간이 없어 따로 보일 자리가 없는 슬롯들
+    image_name: Optional[str] = None                  # 이 사진의 파일명 (재탐지 부분 영상 덤프 이름에 쓴다)
+    taken_boxes: List[Dict[str, int]] = field(default_factory=list)   # 이미 책으로 설명된 박스들 (탐지 전체 + 복구로 찾은 것). 재탐지 중복 거르기용
 
 
 @dataclass

@@ -51,6 +51,7 @@ def sift_pose(q, r) -> Optional[Dict[str, float]]:
         return {"inliers": 0, "n_good": len(good), "reliable": False, "theta": 0.0, "ratio": 0.0}
     src = np.float32([qp[g.queryIdx] for g in good])
     dst = np.float32([rp[g.trainIdx] for g in good])
+    cv2.setRNGSeed(CFG.SEED)                      # RANSAC 표본 추출을 호출마다 같은 자리에서 시작: 앞서 몇 번 불렀는지와 무관하게 같은 답
     M, inl = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC, ransacReprojThreshold=5.0)
     if M is None:
         return {"inliers": 0, "n_good": len(good), "reliable": False, "theta": 0.0, "ratio": 0.0}
@@ -65,3 +66,4 @@ def sift_pose(q, r) -> Optional[Dict[str, float]]:
 def sift_inliers(q, r) -> int:
     p = sift_pose(q, r)
     return int(p["inliers"]) if p and p.get("reliable") else 0
+
