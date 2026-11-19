@@ -20,12 +20,23 @@ BOX_NMS_IOU = 0.95      # YOLO 내부 축정렬 박스 NMS. 기울어진 책등�
                         # 박스 NMS 는 사실상 끄고 중복 제거는 아래 mask_nms(마스크 기준)가 맡는다.
 MAX_DET = 600           # 박스 NMS 를 느슨하게 두면 후보가 늘어나므로 상한도 함께 올림
 SPINE_LABEL, PAPER_LABEL = "book-spine", "book-paper"   # 학습 데이터의 클래스 이름
+SPINE_MIN_ASPECT = 1.2        # 책등 검출의 긴 변 / 짧은 변이 이보다 작으면 버린다. 1.5 였을 때는 앞에 세운 책에 가려 윗부분 30~50px 만 보이는 책
+                              # (모델 신뢰도 0.6~0.86)이 걸러졌다. 1.0 까지 풀면 책이 아닌 덩어리가 잡히기 시작한다
 PAPER_CONF = 0.5              # 종이면은 이 신뢰도 이상만 채택 (자체 검증 사진에서 0.5 이상 14개 중 10개 정답, 그 아래는 오검출이 대부분)
 PAPER_LEN_RANGE = (0.45, 1.8) # 종이면의 긴 변 / 같은 줄 책 길이 중앙값 허용 범위 (선반 옆판·바닥 같은 큰 면, 작은 잡동사니 제외)
+PAPER_EDGE_FRAGMENT = 0.3     # 종이면의 외접 사각형 안에 든 책등 검출이 종이면 긴 변의 이 비율보다 짧으면 그 책의 표지 가장자리 조각으로 보고 뺀다
 # 촬영 대상 줄(선반 한 칸) 고르기 — select_target_row
 ROW_SHRINK = 0.15             # 줄을 나눌 때 책의 세로 구간을 위아래로 이만큼 줄여서 센다 (살짝 걸친 책 때문에 두 줄이 이어지지 않게)
 ROW_MIN_COVER = 0.12          # 어떤 높이를 덮는 책 수가 (가장 많은 높이의) 이 비율을 넘어야 줄로 본다 (최소 2권)
+ROW_TOUCH_GAP = 0.02          # 줄 위에 얹힌 작은 묶음이 줄과 가로로 이만큼(사진 폭 대비) 안으로 닿아 있으면, 중심이 줄 범위를 벗어나도 그 줄에 붙인다
+                              # (줄 끝의 책이 눕힌 책이면 책 중심으로 잰 줄 범위가 실제보다 좁아, 눕혀 쌓은 더미의 바닥 책이 빠졌다)
 ROW_SIDE_OVERLAP = 0.4        # 줄 아래로 내려간 책이라도, 가로로 가까운 줄 책들과 세로로 이만큼(자기 높이 대비) 겹치면 같은 선반의 책으로 본다
+# 기운 책 묶음 다시 검출 — redetect_tilted_groups (선택 기능, 기본은 끔)
+REDETECT_TILT_RANGE = (20.0, 60.0)   # 이 범위(도)로 기운 책등만 '기운 책'으로 센다 (60도를 넘으면 눕힌 책)
+REDETECT_MIN_BOOKS = 3               # 같은 방향으로 기운 책등이 이만큼 있어야 다시 검출한다
+REDETECT_TILT_TOL = 20.0             # 다시 검출한 것 중 묶음의 중앙값 기울기에서 이 안에 드는 책등만 쓴다
+REDETECT_MARGIN = 0.06               # 묶음을 감싸는 영역의 여유 (영역 긴 변 대비)
+REDETECT_MAX_ZOOM = 3.0              # 영역을 TARGET_SIZE 까지 키울 때의 확대 상한
 
 def encode_jpeg(img: Image.Image, quality: int = JPEG_QUALITY) -> bytes:
     buf = io.BytesIO()
@@ -535,7 +546,7 @@ def _refine_detections(image, segments_poly, segments_extra, confs, cls_ids, wan
         short_side = min(rw, rh)
         aspect_ratio = long_side / max(short_side, 1)
         
-        if aspect_ratio < 1.5 or long_side < 25:
+        if aspect_ratio < SPINE_MIN_ASPECT or long_side < 25:
             continue
             
         rx, ry, rw_b, rh_b = cv2.boundingRect(pts)
@@ -604,9 +615,35 @@ def _quad_ios(a, b):
     return inter / max(min(cv2.contourArea(ha), cv2.contourArea(hb)), 1e-6)
 
 
+def _mask_ios(quad, parts):
+    """사각형 quad 와 마스크(parts = 폴리곤 목록)의 겹친 넓이 / 작은 쪽 넓이."""
+    q = np.asarray(quad, dtype=np.float32)
+    pts = [np.asarray(p, dtype=np.int32).reshape(-1, 2) for p in parts]
+    allp = np.vstack([q] + pts)
+    x0, y0 = np.floor(allp.min(axis=0)).astype(int)
+    x1, y1 = np.ceil(allp.max(axis=0)).astype(int)
+    a = np.zeros((y1 - y0 + 1, x1 - x0 + 1), dtype=np.uint8)
+    b = np.zeros_like(a)
+    off = np.array([x0, y0])
+    cv2.fillPoly(a, [np.round(q - off).astype(np.int32)], 1)
+    cv2.fillPoly(b, [p - off for p in pts], 1)
+    return int((a & b).sum()) / max(min(int(a.sum()), int(b.sum())), 1)
+
+
+def _same_book_as_paper(spine, paper):
+    """책등 검출 spine 이 종이면 paper 와 같은 책을 책등으로 잘못 읽은 것인가.
+    겹침은 종이면의 외접 사각형이 아니라 모델이 낸 종이면 마스크로 잰다 — 기울거나 쐐기 모양인 종이면은 외접 사각형이 실제보다 커서
+    바로 옆의 멀쩡한 책등을 덮는다 (사각형으로 재던 때 이 규칙에 걸린 책등 9개 중 8개가 진짜 책이었다).
+    다만 외접 사각형 안에 든 아주 짧은 조각(종이면 긴 변의 PAPER_EDGE_FRAGMENT 미만)은 그 책 표지의 가장자리가 따로 잡힌 것이므로 뺀다."""
+    sq, pq = spine["refined_quadrilateral"], paper["refined_quadrilateral"]
+    if _mask_ios(sq, paper["parts"]) > 0.5:
+        return True
+    return _quad_ios(sq, pq) > 0.5 and max(quad_size(sq)) < PAPER_EDGE_FRAGMENT * max(quad_size(pq))
+
+
 def merge_paper_books(spines, papers):
     """신뢰도 PAPER_CONF 이상인 종이면(book-paper)을 책 목록에 합친다.
-    서로 절반 넘게 겹치는 종이면은 신뢰도 높은 쪽만 남기고, 채택된 종이면과 절반 넘게 겹치는 책등 검출은 같은 책을 책등으로 잘못 읽은 것이므로 뺀다.
+    서로 절반 넘게 겹치는 종이면은 신뢰도 높은 쪽만 남기고, 채택된 종이면과 같은 책을 책등으로 잘못 읽은 검출(_same_book_as_paper)은 뺀다.
     (예전의 '책등 바로 옆에 있어야 한다'는 조건은 없앴다 — 종이면만 꽂힌 줄을 통째로 버렸다. 위치는 select_target_row 가 판단한다.)"""
     accepted = []
     for p in sorted(papers, key=lambda d: -d["confidence"]):
@@ -615,8 +652,7 @@ def merge_paper_books(spines, papers):
         if any(_quad_ios(p["refined_quadrilateral"], a["refined_quadrilateral"]) > 0.5 for a in accepted):
             continue
         accepted.append(p)
-    kept = [s for s in spines
-            if not any(_quad_ios(s["refined_quadrilateral"], a["refined_quadrilateral"]) > 0.5 for a in accepted)]
+    kept = [s for s in spines if not any(_same_book_as_paper(s, a) for a in accepted)]
     return kept + accepted
 
 
@@ -645,6 +681,11 @@ def _group_rows(spans, H):
             rows[int(np.argmax(overlap))].append(i)
         else:
             loose.append(i)
+    if any(len(r) >= 2 for r in rows):                                # 한 권뿐인 '줄'은 줄이 아니다 (줄 위에 눕혀 쌓은 책 한 권이
+        for r in rows:                                                # 따로 줄이 되면 아래의 대상 줄에 붙지 못하고 버려진다) -> 작은 묶음으로
+            if len(r) == 1:
+                loose.extend(r)
+                r.clear()
     groups = []                                                       # 남은 것끼리는 세로 구간이 겹치면 한 묶음
     for i in sorted(loose, key=lambda i: shrunk[i][0]):
         if groups and shrunk[i][0] <= groups[-1][0]:
@@ -674,6 +715,13 @@ def _on_same_shelf(spans, xr, i, r, W):
     return ratio if ratio >= ROW_SIDE_OVERLAP else 0.0
 
 
+def _x_gap(xr, ids_a, ids_b):
+    """두 책 묶음의 가로 범위(책의 왼쪽·오른쪽 끝 기준) 사이의 틈. 겹치면 0."""
+    a0, a1 = min(xr[i][0] for i in ids_a), max(xr[i][1] for i in ids_a)
+    b0, b1 = min(xr[i][0] for i in ids_b), max(xr[i][1] for i in ids_b)
+    return max(0.0, a0 - b1, b0 - a1)
+
+
 def select_target_row(books, H, W):
     """사진에 여러 칸이 함께 찍혔을 때 촬영 대상인 한 줄의 책(책등·종이면)만 남긴다.
     1) 책을 줄로 묶는다 (_group_rows)
@@ -681,6 +729,7 @@ def select_target_row(books, H, W):
        줄의 아래 끝보다 아래로 내려간 묶음은 다른 칸의 책이다 -> 붙이지 않는다.
        다만 그런 묶음의 책이라도 줄에 가로로 붙어 있고 가까운 줄 책들과 세로로 많이 겹치면 같은 선반의 책이므로 한 권씩 붙인다 (_on_same_shelf)
     3) 세로 중심이 사진 가운데에 가장 가까운 줄을 고른다 (촬영 규칙: 대상 칸을 화면 가운데에 둔다).
+       어느 줄에도 못 붙은 한 권짜리 묶음은 다른 후보가 있으면 고르지 않는다 (잘못된 검출 하나가 줄 전체를 밀어내지 않게).
        '위아래가 사진 끝에 잘린 줄 제외 + 책 넓이 합' 으로 고르던 이전 규칙과 148장 중 own_080(라벨이 두 칸) 한 장만 달랐다
     4) 그 줄에서 길이가 유난한 종이면(같은 줄 책 길이 중앙값의 PAPER_LEN_RANGE 밖)을 뺀다
     줄이 하나뿐인 사진(집 책장 등)은 그대로 통과한다."""
@@ -698,7 +747,8 @@ def select_target_row(books, H, W):
         cand = [r for r in rows
                 if g["b"] <= r["b"] + 0.02 * H and g["t"] >= r["t"] - 0.5 * (r["b"] - r["t"])
                 and g["n"] <= max(3, 0.3 * r["n"])
-                and r["x0"] - 0.1 * W <= (g["x0"] + g["x1"]) / 2 <= r["x1"] + 0.1 * W]
+                and (r["x0"] - 0.1 * W <= (g["x0"] + g["x1"]) / 2 <= r["x1"] + 0.1 * W
+                     or _x_gap(xr, g["ids"], r["ids"]) <= ROW_TOUCH_GAP * W)]
         if cand:
             r = min(cand, key=lambda r: max(0, r["t"] - g["b"]))       # 가장 가까운 줄
             r.update(_row_info(spans, r["ids"] + g["ids"]))
@@ -714,7 +764,10 @@ def select_target_row(books, H, W):
         if left:
             rest.append(_row_info(spans, left))
 
-    best = min(rows + rest, key=lambda r: abs((r["t"] + r["b"]) / 2 - H / 2))
+    # 줄에 못 붙은 한 권짜리 묶음은, 줄이나 여러 권 묶음이 따로 있으면 대상 줄 후보에서 뺀다.
+    # (서가 옆판을 종이면으로 잘못 검출한 것 하나가 세로 중심이 사진 가운데에 더 가깝다는 이유로 43권짜리 줄을 이긴 적이 있다)
+    pool = rows + [g for g in rest if g["n"] >= 2] or rows + rest
+    best = min(pool, key=lambda r: abs((r["t"] + r["b"]) / 2 - H / 2))
 
     med_len = float(np.median([max(quad_size(books[i]["refined_quadrilateral"])) for i in best["ids"]]))
     keep = [i for i in best["ids"]
@@ -750,7 +803,112 @@ def books_in_target_row(image, det, spine_id, papers):
     return select_target_row(merge_paper_books(spines, [d for d in rough if d["label"] == PAPER_LABEL]), H, W)
 
 
-def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: float = 0.2):
+def _tilted_groups(image, det, spine_id, paper_id):
+    """대상 줄에서 같은 방향으로 기운 책등 묶음을 찾는다 -> [(중앙값 기울기, 묶음을 감싸는 영역 (x0, y0, x1, y1))].
+    왼쪽으로 기운 묶음과 오른쪽으로 기운 묶음을 따로 보고, REDETECT_MIN_BOOKS 권 미만이면 묶음으로 치지 않는다."""
+    H, W = image.height, image.width
+    papers = _paper_detections(image, *det, paper_id) if paper_id is not None else []
+    rough = select_target_row(_raw_spine_candidates(*det, spine_id) + merge_paper_books([], papers), H, W)
+    spines = [(spine_tilt_deg(d["refined_quadrilateral"]), np.asarray(d["refined_quadrilateral"]))
+              for d in rough if d["label"] == SPINE_LABEL]
+    groups = []
+    for sign in (1, -1):
+        g = [(t, q) for t, q in spines if REDETECT_TILT_RANGE[0] <= sign * t <= REDETECT_TILT_RANGE[1]]
+        if len(g) < REDETECT_MIN_BOOKS:
+            continue
+        pts = np.vstack([q for _, q in g])
+        x0, y0 = pts.min(axis=0)
+        x1, y1 = pts.max(axis=0)
+        m = REDETECT_MARGIN * max(x1 - x0, y1 - y0)
+        groups.append((float(np.median([t for t, _ in g])), (max(0, x0 - m), max(0, y0 - m), min(W, x1 + m), min(H, y1 + m))))
+    return groups
+
+
+def _redetect_rotated(model, image, conf, theta, region, spine_id):
+    """영역 region 을 책이 수직이 되게 theta 만큼 돌리고 긴 변이 TARGET_SIZE 가 되게 키워 다시 검출한다.
+    기울기가 theta 근처(±REDETECT_TILT_TOL)이고 중심이 영역 안인 책등만 원래 좌표로 되돌려 (polys, extras, confs) 로 돌려준다."""
+    x0, y0, x1, y1 = region
+    c = ((x0 + x1) / 2, (y0 + y1) / 2)
+    corners = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], dtype=np.float32)
+    axis = np.array([np.sin(np.radians(theta)), np.cos(np.radians(theta))])        # 책의 장축 방향
+    ang = min((theta, -theta), key=lambda a: abs((cv2.getRotationMatrix2D(c, a, 1.0)[:, :2] @ axis)[0]))   # 장축이 수직이 되는 쪽
+    M = cv2.getRotationMatrix2D(c, ang, 1.0)
+    rc = corners @ M[:, :2].T + M[:, 2]
+    w, h = rc.max(axis=0) - rc.min(axis=0)
+    M = cv2.getRotationMatrix2D(c, ang, min(REDETECT_MAX_ZOOM, TARGET_SIZE / max(w, h)))
+    rc = corners @ M[:, :2].T + M[:, 2]
+    M[:, 2] -= rc.min(axis=0)
+    rc = rc - rc.min(axis=0)
+    canvas = cv2.warpAffine(np.array(image), M, (int(np.ceil(rc[:, 0].max())), int(np.ceil(rc[:, 1].max()))),
+                            flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    det = _detect(model, Image.fromarray(canvas), conf)
+    polys, extras, confs = [], [], []
+    if det is None:
+        return polys, extras, confs
+    Mi = cv2.invertAffineTransform(M)
+    back = lambda p: (np.asarray(p, dtype=np.float32).reshape(-1, 2) @ Mi[:, :2].T + Mi[:, 2]).astype(np.float32)
+    for poly, extra, cf, cls_id in zip(*det):
+        if int(cls_id) != spine_id or len(poly) < 3:
+            continue
+        p, ex = back(poly), [back(e) for e in extra]
+        q = order_quad(cv2.boxPoints(cv2.minAreaRect(np.vstack([p] + ex))))
+        cx, cy = q.mean(axis=0)
+        if abs(spine_tilt_deg(q) - theta) > REDETECT_TILT_TOL or not (x0 <= cx <= x1 and y0 <= cy <= y1):
+            continue
+        polys.append(p)
+        extras.append([e.astype(np.int32) for e in ex])
+        confs.append(float(cf))
+    return polys, extras, confs
+
+
+def _merge_redetected(det, new, spine_id):
+    """다시 검출한 책등(new)을 검출 목록에 넣고, 그것과 마스크가 절반 넘게(작은 쪽 기준) 겹치는 1차 책등 검출은 뺀다."""
+    polys2, extras2, confs2 = new
+    if not polys2:
+        return det
+
+    def local(p):                                    # 폴리곤을 자기 박스 안에서만 래스터화
+        p = np.round(p).astype(np.int32)
+        bx0, by0 = p.min(axis=0)
+        bx1, by1 = p.max(axis=0)
+        m = np.zeros((by1 - by0 + 1, bx1 - bx0 + 1), dtype=np.uint8)
+        cv2.fillPoly(m, [p - [bx0, by0]], 1)
+        return (bx0, by0, bx1, by1), m, int(m.sum())
+
+    def inter(a, b):
+        (ax0, ay0, ax1, ay1), ma, _ = a
+        (bx0, by0, bx1, by1), mb, _ = b
+        ix0, iy0, ix1, iy1 = max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)
+        if ix1 < ix0 or iy1 < iy0:
+            return 0
+        return int((ma[iy0 - ay0:iy1 - ay0 + 1, ix0 - ax0:ix1 - ax0 + 1] & mb[iy0 - by0:iy1 - by0 + 1, ix0 - bx0:ix1 - bx0 + 1]).sum())
+
+    new_masks = [local(p) for p in polys2]
+    keep = []
+    for i, (poly, cls_id) in enumerate(zip(det[0], det[3])):
+        if int(cls_id) == spine_id and len(poly) >= 3:
+            a = local(poly)
+            if any(inter(a, b) / max(min(a[2], b[2]), 1) > 0.5 for b in new_masks):
+                continue
+        keep.append(i)
+    return (polys2 + [det[0][i] for i in keep], extras2 + [det[1][i] for i in keep],
+            np.concatenate([np.asarray(confs2, dtype=np.float32), det[2][keep]]),
+            np.concatenate([np.full(len(polys2), spine_id, dtype=np.float32), det[3][keep]]))
+
+
+def redetect_tilted_groups(model, image, det, conf, spine_id, paper_id):
+    """기운 책 묶음을 돌려 세워 다시 검출한다 (선택 기능, process_bookshelf_perspective_pipeline(rotate_redetect=True) 일 때만).
+    얇은 책이 촘촘하게 기울어 있으면 축에 나란한 박스가 서로 거의 같아져 모델이 두 권을 한 덩어리로 내거나 일부만 낸다.
+    회전 증강(±50도)·추론 해상도로는 풀리지 않았고, 사진을 돌려 책을 세우면 같은 모델이 책을 갈라 낸다.
+    대상 줄에 기운 묶음이 없으면 아무 일도 하지 않으므로(추가 검출 없음) 반듯한 서가 사진의 결과와 시간은 그대로다.
+    근거 수치는 docs/claude-memory/pipeline-tilted-fixes-2026-11.md 의 '회전 재검출' 절."""
+    for theta, region in _tilted_groups(image, det, spine_id, paper_id):
+        det = _merge_redetected(det, _redetect_rotated(model, image, conf, theta, region, spine_id), spine_id)
+    return det
+
+
+def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: float = 0.2, rotate_redetect: bool = False):
+    """rotate_redetect=True 면 대상 줄의 기운 책 묶음을 돌려 세워 한 번 더 검출한다 (redetect_tilted_groups). 기본은 끔."""
     reset_output_dir()
 
     # 🎯 0. 학습 해상도(1280)에 맞춰 입력 전처리
@@ -760,14 +918,19 @@ def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: f
     det = _detect(yolo_model, image, conf_threshold)
     if det is None:
         return [], encode_jpeg(image)
+    spine_id = _class_id(yolo_model, SPINE_LABEL, 0)
+    paper_id = _class_id(yolo_model, PAPER_LABEL)
+
+    # 🎯 1-1. (선택) 기운 책 묶음을 돌려 세워 다시 검출
+    if rotate_redetect:
+        det = redetect_tilted_groups(yolo_model, image, det, conf_threshold, spine_id, paper_id)
 
     # 🎯 2. 종이면만 보이는 책(book-paper) 후보를 같은 검출에서 가져온다 (모델에 book-paper 클래스가 없으면 종이면 없이 진행).
     #         책등이 하나도 없는 사진(종이면만 꽂힌 줄)도 처리한다.
-    paper_id = _class_id(yolo_model, PAPER_LABEL)
     papers = _paper_detections(image, *det, paper_id) if paper_id is not None else []
 
     # 🎯 2-1. 촬영 대상 줄을 먼저 고르고(위·아래 칸의 책 제외), 그 줄의 책등에만 마스크 정제·사각형 추정을 한다
-    valid_spine_data = books_in_target_row(image, det, _class_id(yolo_model, SPINE_LABEL, 0), papers)
+    valid_spine_data = books_in_target_row(image, det, spine_id, papers)
 
     total_spines = len(valid_spine_data)
     visualized_image = image.copy()
