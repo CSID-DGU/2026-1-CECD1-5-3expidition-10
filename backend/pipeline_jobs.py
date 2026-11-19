@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 
 from analyzer import (analyze_shelf_session, get_virtual_rfid_items, get_vision_id_map, vision_book_id_to_reg_no,
-                      RFID_INSERT_SQL)
+                      visual_statuses_text, RFID_INSERT_SQL)
 from config import RFID_MODE, SPINE_STORE_DIR
 from db import get_db_connection
 from locations import fetch_shelf_location
@@ -96,12 +96,15 @@ def execute_full_pipeline_task(session_id: str, shelf_id: str, image_rel_path: s
             spine_img_path = archive_spine_image(session_id, item.get("spine_img_file", ""))
             cursor.execute(
                 """INSERT INTO VISION_DATA
-                   (vision_id, session_id, reg_no, sequence_order, confidence_score, spine_img_path, visual_status, spine_box)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                   (vision_id, session_id, reg_no, sequence_order, confidence_score, spine_img_path, visual_status, spine_box,
+                    visual_statuses)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (f"V_{session_id}_{seq_idx}", session_id,
                  vision_book_id_to_reg_no(item.get("book_id"), order_map, item.get("visual_status")), seq_idx,
                  item.get("confidence_score", 0.0), spine_img_path, item.get("visual_status", "normal"),
-                 normalized_spine_box((item.get("debug") or {}).get("box"), size))
+                 normalized_spine_box((item.get("debug") or {}).get("box"), size),
+                 # 한 책에서 찾은 외형 문제 전체 (예: 기울어짐 + 앞뒤로 정렬되지 않음). 하나뿐이면 NULL
+                 visual_statuses_text(item.get("visual_status"), item.get("visual_statuses")))
             )
         conn.commit()
         print(f"💾 로그 DB 적재 성공 -> 세션: {session_id}")

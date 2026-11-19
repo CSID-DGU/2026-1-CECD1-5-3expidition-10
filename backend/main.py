@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from mysql.connector import Error
 from analyzer import (analyze_shelf_session, assess_session_quality, classify_issues, find_unknown_book_candidates,
                       get_master_book_info, get_virtual_rfid_items, get_vision_id_map, misorder_target,
-                      vision_book_id_to_reg_no,
+                      vision_book_id_to_reg_no, visual_codes, visual_statuses_text, ensure_visual_statuses_column,
                       RFID_INSERT_SQL)
 from auth import (SESSION_COOKIE, SESSION_HOURS, AuthContext, authenticate, clear_login_failures, client_ip,
                   context_from_session_token, create_session, delete_session, login_retry_seconds, optional_auth,
@@ -93,6 +93,7 @@ class VisionItem(BaseModel):
     confidence_score: Optional[float] = 0.0
     spine_img_path: Optional[str] = ""
     visual_status: Optional[str] = "normal"
+    visual_statuses: Optional[List[str]] = None   # 외형 문제 전체 (대표 상태가 맨 앞, 선택)
 
 class VisionScanRequest(BaseModel):
     session_id: str
@@ -263,10 +264,11 @@ def receive_vision(payload: VisionScanRequest, ctx: AuthContext = Depends(requir
         for item in payload.vision_items:
             cursor.execute(
                 """INSERT INTO VISION_DATA
-                   (vision_id, session_id, reg_no, sequence_order, confidence_score, spine_img_path, visual_status)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                   (vision_id, session_id, reg_no, sequence_order, confidence_score, spine_img_path, visual_status, visual_statuses)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
                 (item.vision_id, payload.session_id, vision_book_id_to_reg_no(item.book_id, order_map, item.visual_status),
-                 item.sequence_order, item.confidence_score, item.spine_img_path, item.visual_status)
+                 item.sequence_order, item.confidence_score, item.spine_img_path, item.visual_status,
+                 visual_statuses_text(item.visual_status, item.visual_statuses))
             )
         conn.commit()
         return {"status": "success", "inserted_vision_count": len(payload.vision_items)}
@@ -369,6 +371,7 @@ def prepare_on_startup():
         if conn:
             try:
                 ensure_spine_box_column(conn)
+                ensure_visual_statuses_column(conn)
             finally:
                 conn.close()
     except Exception as e:
@@ -976,6 +979,7 @@ RESULTS_QUERY = """
         b.title,
         r.current_order AS sequence_order,
         IFNULL(v.visual_status, 'normal') AS visual_status,
+        v.visual_statuses,
         r.final_status,
         IFNULL(v.spine_img_path, '') AS spine_img_path,
         v.spine_box,
@@ -1034,7 +1038,8 @@ def load_session_detail(conn, session: dict, master_cache: dict, locations: dict
             master_cache[shelf_id] = get_master_book_info(shelf_id, conn)
         for row in results:
             row["spine_box"] = parse_spine_box(row["spine_box"])   # 사진 속 위치 [x1, y1, x2, y2] (0~1 비율, 없으면 null)
-            row["issues"] = classify_issues(row["final_status"], row["visual_status"])
+            row["visual_statuses"] = visual_codes(row["visual_status"], row["visual_statuses"])   # 외형 문제 코드 목록
+            row["issues"] = classify_issues(row["final_status"], row["visual_status"], row["visual_statuses"])
             # 오배가 도서를 가져다 둘 곳 (RFID로 등록번호를 알기 때문에 찾을 수 있음)
             is_foreign = any(issue["group"] == "foreign" for issue in row["issues"])
             row["home_location"] = home_location_text(row, locations) if is_foreign else None

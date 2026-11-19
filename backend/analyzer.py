@@ -140,8 +140,48 @@ STATUS_TRANSLATION = {
     "abnormal_upside": "뒤집힘",
     "abnormal_stack": "가로로 누움",
     "abnormal_paper": "책등 안 보임",
-    "abnormal_tilted": "기울어짐"
+    "abnormal_tilted": "기울어짐",
+    "abnormal_depth": "앞뒤로 정렬되지 않음"   # 앞으로 당겨졌거나 안쪽으로 밀려 들어간 책 (shelf_audit 개선편에서 추가)
 }
+
+# AI가 한 책에서 찾은 외형 문제 전체 (대표 상태 visual_status + 겹친 상태 목록 visual_statuses)
+#  VISION_DATA.visual_statuses 에 "abnormal_tilted,abnormal_depth"처럼 쉼표로 이어 저장합니다. (대표 상태가 맨 앞)
+VISUAL_STATUSES_COLUMN = ("VARCHAR(200) NULL COMMENT 'Vision AI가 찾은 외형 문제 전체 (쉼표로 구분, 대표 상태가 맨 앞. "
+                          "NULL이면 visual_status 하나뿐)'")
+
+
+def visual_codes(visual_status: Optional[str], visual_statuses=None) -> List[str]:
+    """
+    외형 문제 코드 목록 (정상은 빼고, 대표 상태가 맨 앞, 중복 없음).
+    visual_statuses: AI의 목록(list) 또는 DB에 저장한 쉼표 문자열. 없으면 대표 상태 하나만 씁니다.
+    """
+    if isinstance(visual_statuses, str):
+        visual_statuses = [s.strip() for s in visual_statuses.split(",")]
+    codes = []
+    for code in [visual_status or "normal", *(visual_statuses or [])]:
+        if code and code != "normal" and code not in codes:
+            codes.append(code)
+    return codes
+
+
+def visual_statuses_text(visual_status: Optional[str], visual_statuses=None) -> Optional[str]:
+    """DB 저장용 쉼표 문자열. 문제가 하나 이하이면 visual_status로 충분하므로 None"""
+    codes = visual_codes(visual_status, visual_statuses)
+    return ",".join(codes) if len(codes) > 1 else None
+
+
+def ensure_visual_statuses_column(conn):
+    """VISION_DATA.visual_statuses가 없으면 추가 (setup_db.py를 다시 실행하지 않은 DB도 서버를 켜면 바로 쓸 수 있게)"""
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""SELECT COUNT(*) FROM information_schema.COLUMNS
+                          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'VISION_DATA' AND COLUMN_NAME = 'visual_statuses'""")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute(f"ALTER TABLE VISION_DATA ADD COLUMN visual_statuses {VISUAL_STATUSES_COLUMN}")
+            conn.commit()
+            print("  ✔️ VISION_DATA.visual_statuses 컬럼 추가 (한 책의 외형 문제 여러 개)")
+    finally:
+        cursor.close()
 
 
 # 사서 알림 그룹 (리스트 순서 = 심각도 순서). 대시보드와 일일 리포트가 같은 분류를 쓰도록 서버에서 결정합니다.
@@ -169,18 +209,19 @@ UNKNOWN_PAPER_STATUS = "알 수 없는 책 (책등 안 보임)"
 UNKNOWN_CANDIDATE_STATUS = "위치 확인 필요 (RFID로만 감지)"
 
 
-def classify_issues(final_status: str, visual_status: str) -> List[dict]:
+def classify_issues(final_status: str, visual_status: str, visual_statuses=None) -> List[dict]:
     """
     도서 한 권의 판정 결과를 사서 알림 목록 [{"group", "label"}]으로 변환합니다.
-    위치 문제와 외형 문제가 동시에 있을 수 있으며, 가장 심각한 문제가 맨 앞에 옵니다. 문제가 없으면 빈 리스트.
+    위치 문제와 외형 문제가 동시에 있을 수 있고, 외형 문제도 여러 개일 수 있습니다(visual_statuses).
+    가장 심각한 문제가 맨 앞에 옵니다. 문제가 없으면 빈 리스트.
     """
     issues = []
     for keyword, group, label in LOGICAL_ISSUE_RULES:
         if keyword in (final_status or ""):
             issues.append({"group": group, "label": label})
             break
-    if visual_status and visual_status != "normal":
-        issues.append({"group": "physical", "label": STATUS_TRANSLATION.get(visual_status, visual_status)})
+    for code in visual_codes(visual_status, visual_statuses):
+        issues.append({"group": "physical", "label": STATUS_TRANSLATION.get(code, code)})
     return sorted(issues, key=lambda issue: ISSUE_GROUPS.index(issue["group"]))
 
 
@@ -211,14 +252,23 @@ def longest_increasing_subsequence(values: List[int]) -> Set[int]:
     return kept
 
 
-def merge_status(logical_status: str, raw_visual_status: str) -> str:
-    """논리적 상태(위치)와 물리적 상태(외형)를 하나의 문장으로 융합합니다."""
-    physical_status = STATUS_TRANSLATION.get(raw_visual_status, raw_visual_status)
-    if physical_status == "정상":
+def merge_status(logical_status: str, raw_visual_status) -> str:
+    """
+    논리적 상태(위치)와 물리적 상태(외형)를 하나의 문장으로 융합합니다.
+    raw_visual_status: 상태 코드 하나 또는 목록 (여러 개면 "기울어짐, 앞뒤로 정렬되지 않음"처럼 이어 씀)
+    """
+    codes = visual_codes(None, [raw_visual_status] if isinstance(raw_visual_status, str) else raw_visual_status)
+    if not codes:
         return logical_status
+    physical_status = ", ".join(STATUS_TRANSLATION.get(code, code) for code in codes)
     if logical_status == "정상":
         return f"위치 정상, 단 외형 불량 ({physical_status})"
     return f"{logical_status} 및 {physical_status}"
+
+
+def row_visual_codes(row: dict) -> List[str]:
+    """vision row의 외형 문제 코드 목록 (visual_statuses가 없으면 visual_status 하나)"""
+    return visual_codes(row.get('visual_status'), row.get('visual_statuses'))
 
 
 def is_identified(row: dict) -> bool:
@@ -293,7 +343,7 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
     Vision / RFID / 서가 정답지(master)를 교차 검증해 도서별 최종 상태를 판정합니다. (DB 비의존 순수 함수)
     도서 ID는 모두 등록번호(REG_NO)입니다.
 
-    - vision_rows: [{"reg_no", "sequence_order", "confidence_score", "visual_status"}, ...]
+    - vision_rows: [{"reg_no", "sequence_order", "confidence_score", "visual_status", "visual_statuses"(선택)}, ...]
     - rfid_reg_nos: RFID로 읽은 등록번호
     - master_data: get_master_book_info() 결과 (이 층에 있어야 할 도서)
     - unregistered_ids: 읽힌 등록번호 중 도서 DB에 아예 없는 것 → '미분석'
@@ -316,14 +366,16 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
             results.append({
                 "reg_no": "UNKNOWN",
                 "current_order": row['sequence_order'],
-                "final_status": UNKNOWN_PAPER_STATUS
+                # 책등 안 보임에 다른 외형 문제가 겹치면 이어 씀 (예: "알 수 없는 책 (책등 안 보임) 및 기울어짐")
+                "final_status": merge_status(UNKNOWN_PAPER_STATUS,
+                                             [c for c in row_visual_codes(row) if c != PAPER_VISUAL_STATUS])
             })
         elif not is_identified(row):
             unknown_count += 1
             results.append({
                 "reg_no": "UNKNOWN",
                 "current_order": row['sequence_order'],
-                "final_status": merge_status("미확인 도서 (육안 확인 필요)", row.get('visual_status') or "normal")
+                "final_status": merge_status("미확인 도서 (육안 확인 필요)", row_visual_codes(row))
             })
         elif reg_no in identified:
             duplicates.append(row)
@@ -334,7 +386,7 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
         results.append({
             "reg_no": row['reg_no'],
             "current_order": row['sequence_order'],
-            "final_status": merge_status("중복 인식 (육안 확인 필요)", row.get('visual_status') or "normal")
+            "final_status": merge_status("중복 인식 (육안 확인 필요)", row_visual_codes(row))
         })
 
     # [2] 미비치(대출 등) 도서를 제외한 '서가에 있어야 할 책'의 상대적 기대 순서 (Dynamic Re-indexing)
@@ -386,7 +438,7 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
             logical_status = "누락 (분실 위험)"
 
         row = identified.get(reg_no)
-        raw_visual_status = (row.get('visual_status') or "normal") if row else "normal"
+        raw_visual_status = row_visual_codes(row) if row else []
         results.append({
             "reg_no": reg_no,
             "current_order": row['sequence_order'] if row else -1,
@@ -441,7 +493,7 @@ def analyze_shelf_session(session_id: str, shelf_id: str, conn: mysql.connector.
         print(f"🔍 [분석 시작] 세션 ID: {session_id} 교차 검증 알고리즘 가동 중...")
 
         cursor.execute(
-            "SELECT reg_no, sequence_order, confidence_score, visual_status FROM VISION_DATA WHERE session_id = %s",
+            "SELECT reg_no, sequence_order, confidence_score, visual_status, visual_statuses FROM VISION_DATA WHERE session_id = %s",
             (session_id,)
         )
         vision_rows = cursor.fetchall()

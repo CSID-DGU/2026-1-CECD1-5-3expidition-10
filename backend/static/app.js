@@ -119,6 +119,7 @@ const MESSAGE_BY_LABEL = {
     "RFID 미인식":   r => `사진에서는 확인되었으나 RFID 태그가 감지되지 않았습니다. 태그를 점검해 주세요.`,
     "뒤집힘":        r => `거꾸로 꽂혀 있습니다. 똑바로 세워 주세요.`,
     "기울어짐":      r => `기울어져 있습니다. 정돈해 주세요.`,
+    "앞뒤로 정렬되지 않음": r => `앞으로 나와 있거나 안쪽으로 밀려 들어가 있습니다. 가지런히 맞춰 주세요.`,
     "가로로 누움":   r => `가로로 눕혀져 있거나 다른 책 위에 쌓여 있습니다. 세워서 꽂아 주세요.`,
     "책등 안 보임": r => `책등이 보이지 않아 어떤 책인지 알 수 없습니다. 거꾸로 꽂혔거나 종이가 끼어 있을 수 있으니 확인해 주세요.`,
 };
@@ -145,7 +146,9 @@ function buildTaskCard(row, onAction) {
     const [primary, ...others] = row.issues;
     const group = GROUP_INFO[primary.group];
     const handled = row.action_status !== "PENDING";
-    const message = (MESSAGE_BY_LABEL[primary.label] || (() => ""))(row);
+    // 대표 문제 문구 + 함께 있는 외형 문제 문구 (한 책에 기울어짐 · 앞뒤로 정렬되지 않음 등이 겹친 경우)
+    const message = [primary, ...others.filter(o => o.group === "physical")]
+        .map(issue => (MESSAGE_BY_LABEL[issue.label] || (() => ""))(row)).filter(Boolean).join(" ");
     const seq = (row.title || (row.reg_no && row.reg_no !== "UNKNOWN")) && row.sequence_order > 0
         ? `<span class="text-xs font-normal text-slate-400 ml-1">왼쪽에서 ${row.sequence_order}번째</span>` : "";
     const extra = others.map(o => `<span class="ml-1 text-[11px] font-semibold px-1.5 py-0.5 rounded ${GROUP_INFO[o.group].badge}">+ ${escapeHtml(o.label)}</span>`).join("");

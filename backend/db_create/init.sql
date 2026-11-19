@@ -32,6 +32,7 @@ CREATE TABLE VISION_DATA (
     spine_img_path VARCHAR(255) NOT NULL COMMENT '책등 이미지 경로',
     visual_status VARCHAR(20) NOT NULL COMMENT 'Vision AI 1차 판별 상태',
     spine_box VARCHAR(60) NULL COMMENT '순찰 사진 속 책 위치 x1,y1,x2,y2 (사진 가로 · 세로에 대한 0~1 비율, 층 화면 번호 테두리용)',
+    visual_statuses VARCHAR(200) NULL COMMENT 'Vision AI가 찾은 외형 문제 전체 (쉼표로 구분, 대표 상태가 맨 앞. NULL이면 visual_status 하나뿐)',
     FOREIGN KEY (session_id) REFERENCES SHELF_SESSION(session_id) ON DELETE CASCADE
 );
 

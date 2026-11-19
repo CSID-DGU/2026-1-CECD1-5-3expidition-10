@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from analyzer import (UNKNOWN_CANDIDATE_STATUS, UNKNOWN_PAPER_STATUS, assess_session_quality, classify_issues,
                       find_unknown_book_candidates, judge_shelf, longest_increasing_subsequence, merge_status,
-                      misorder_target, vision_book_id_to_reg_no)
+                      misorder_target, vision_book_id_to_reg_no, visual_codes, visual_statuses_text)
 
 
 def book(order, on_shelf=True, tagged=True):
@@ -251,10 +251,51 @@ class MergeStatusTest(unittest.TestCase):
         self.assertEqual(merge_status("정상", "normal"), "정상")
         self.assertEqual(merge_status("정상", "abnormal_tilted"), "위치 정상, 단 외형 불량 (기울어짐)")
         self.assertEqual(merge_status("오배열", "abnormal_upside"), "오배열 및 뒤집힘")
+        self.assertEqual(merge_status("정상", "abnormal_depth"), "위치 정상, 단 외형 불량 (앞뒤로 정렬되지 않음)")
 
     def test_worst_issue_comes_first(self):
         issues = classify_issues("누락 (분실 위험)", "abnormal_tilted")
         self.assertEqual([i["group"] for i in issues], ["lost", "physical"])
+
+
+class MultiStatusTest(unittest.TestCase):
+    """한 책에 외형 문제가 여러 개 (AI의 visual_statuses)"""
+
+    def test_codes(self):
+        self.assertEqual(visual_codes("abnormal_tilted", ["abnormal_depth", "abnormal_tilted"]), ["abnormal_tilted", "abnormal_depth"])
+        self.assertEqual(visual_codes("abnormal_tilted", "abnormal_tilted,abnormal_depth"), ["abnormal_tilted", "abnormal_depth"])
+        self.assertEqual(visual_codes("normal", None), [])
+        self.assertEqual(visual_codes("normal", []), [])
+
+    def test_saved_text_only_when_several(self):
+        self.assertEqual(visual_statuses_text("abnormal_tilted", ["abnormal_tilted", "abnormal_depth"]), "abnormal_tilted,abnormal_depth")
+        self.assertIsNone(visual_statuses_text("abnormal_tilted", ["abnormal_tilted"]))
+        self.assertIsNone(visual_statuses_text("normal", []))
+
+    def test_merge(self):
+        self.assertEqual(merge_status("정상", ["abnormal_tilted", "abnormal_depth"]),
+                         "위치 정상, 단 외형 불량 (기울어짐, 앞뒤로 정렬되지 않음)")
+        self.assertEqual(merge_status("오배열", ["abnormal_upside", "abnormal_depth"]), "오배열 및 뒤집힘, 앞뒤로 정렬되지 않음")
+        self.assertEqual(merge_status("정상", []), "정상")
+
+    def test_issues(self):
+        issues = classify_issues("오배열", "abnormal_tilted", "abnormal_tilted,abnormal_depth")
+        self.assertEqual([(i["group"], i["label"]) for i in issues],
+                         [("misorder", "오배열"), ("physical", "기울어짐"), ("physical", "앞뒤로 정렬되지 않음")])
+
+    def test_judge_shelf_uses_all_statuses(self):
+        rows = seen("R1", "R2", "R3")
+        rows[1].update(visual_status="abnormal_tilted", visual_statuses="abnormal_tilted,abnormal_depth")
+        result = status(judge_shelf(rows, {"R1", "R2", "R3"}, master(3)))
+        self.assertEqual(result["R2"], "위치 정상, 단 외형 불량 (기울어짐, 앞뒤로 정렬되지 않음)")
+        self.assertEqual(result["R1"], "정상")
+
+    def test_paper_with_tilt(self):
+        rows = seen("R1", "R2")
+        rows[1].update(reg_no="UNKNOWN", visual_status="abnormal_paper", confidence_score=0.55,
+                       visual_statuses="abnormal_paper,abnormal_tilted")
+        results = judge_shelf(rows, {"R1", "R2"}, master(2))
+        self.assertIn(f"{UNKNOWN_PAPER_STATUS} 및 기울어짐", [r["final_status"] for r in results])
 
 
 if __name__ == "__main__":
