@@ -1,8 +1,9 @@
 """
 사서 계정 관리 (관리자가 대시보드의 '사서 계정' 창에서 사용)
 
-- 관리자는 자기 도서관의 계정 목록을 보고, 일반 사서(LIBRARIAN) 계정을 추가 · 삭제할 수 있습니다.
-- 관리자 계정의 추가 · 삭제와 비밀번호 변경은 명령줄(manage_users.py)로 합니다.
+- 관리자는 자기 도서관의 계정 목록을 보고, 일반 사서(LIBRARIAN) 계정을 추가 · 삭제하고 비밀번호를 바꿀 수 있습니다.
+- 관리자 · 사서 모두 상단의 '내 비밀번호'에서 현재 비밀번호를 확인하고 자기 비밀번호를 바꿀 수 있습니다.
+- 관리자 계정의 추가 · 삭제와 다른 관리자의 비밀번호 변경은 명령줄(manage_users.py)로 합니다.
 - 삭제: 알림 조치 기록(ANALYSIS_RESULT.action_by)이 없는 계정은 DB에서 지웁니다.
   조치 기록이 있는 계정은 '누가 처리했는지'가 순찰 이력에 남도록 행은 남기고 삭제 표시(deleted_at)만 합니다.
   이때 아이디는 '<아이디>#<user_id>'로 바꿔 같은 아이디를 다시 쓸 수 있게 합니다. 로그인 세션은 모두 끊습니다.
@@ -10,7 +11,7 @@
 import re
 from datetime import datetime
 
-from auth import hash_password
+from auth import hash_password, sha256_hex, verify_password
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,30}$")
 MIN_PASSWORD = 8
@@ -62,6 +63,59 @@ def create_librarian(conn, library_id: str, username: str, display_name: str, pa
             (library_id, username, hash_password(password), display_name, datetime.now()))
         conn.commit()
         return {"user_id": cursor.lastrowid, "username": username, "display_name": display_name}
+    finally:
+        cursor.close()
+
+
+def set_librarian_password(conn, library_id: str, user_id: int, password: str) -> dict:
+    """일반 사서의 비밀번호를 바꾸고 그 계정의 로그인을 모두 끊습니다."""
+    if len(password or "") < MIN_PASSWORD:
+        raise AccountError(400, f"비밀번호는 {MIN_PASSWORD}자 이상이어야 합니다.")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute(
+            "SELECT username, display_name, role FROM APP_USER WHERE user_id = %s AND library_id = %s AND deleted_at IS NULL",
+            (user_id, library_id))
+        user = cursor.fetchone()
+        if user is None:
+            raise AccountError(404, "계정이 없습니다.")
+        if user["role"] != "LIBRARIAN":
+            raise AccountError(403, "관리자 계정의 비밀번호는 대시보드에서 바꿀 수 없습니다. (manage_users.py 사용)")
+        cursor.execute("UPDATE APP_USER SET password_hash = %s WHERE user_id = %s", (hash_password(password), user_id))
+        cursor.execute("DELETE FROM AUTH_SESSION WHERE user_id = %s", (user_id,))
+        conn.commit()
+        return {"username": user["username"], "display_name": user["display_name"]}
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+
+
+def change_own_password(conn, user_id: int, current: str, new: str, session_token: str) -> bool:
+    """
+    로그인한 사람이 자기 비밀번호를 바꿉니다. 지금 쓰는 세션만 남기고 다른 기기의 로그인은 끊습니다.
+    현재 비밀번호가 틀리면 False (호출한 쪽에서 반복 실패를 셈)
+    """
+    if len(new or "") < MIN_PASSWORD:
+        raise AccountError(400, f"새 비밀번호는 {MIN_PASSWORD}자 이상이어야 합니다.")
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("SELECT password_hash FROM APP_USER WHERE user_id = %s AND deleted_at IS NULL", (user_id,))
+        user = cursor.fetchone()
+        if user is None:
+            raise AccountError(404, "계정이 없습니다.")
+        if not verify_password(current or "", user["password_hash"]):
+            return False
+        if verify_password(new, user["password_hash"]):
+            raise AccountError(400, "새 비밀번호가 현재 비밀번호와 같습니다.")
+        cursor.execute("UPDATE APP_USER SET password_hash = %s WHERE user_id = %s", (hash_password(new), user_id))
+        cursor.execute("DELETE FROM AUTH_SESSION WHERE user_id = %s AND token_hash <> %s", (user_id, sha256_hex(session_token)))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         cursor.close()
 

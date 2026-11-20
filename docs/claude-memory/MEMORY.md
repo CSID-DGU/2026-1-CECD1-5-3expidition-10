@@ -1,0 +1,5 @@
+- [User owns app/ AI pipeline](user-owns-app-pipeline.md) — 검사·수정 범위는 app/ 로 한정, 다른 폴더는 팀원 담당
+- [Own photos & dataset_own](own-photos-testcase.md) — 자체 120장 검수 완료(2026-11-17), 서가 단위 분할, v3~v11 비교 수치, val.txt 53장·test 없음, 데이터셋은 git 제외, 학습은 GPU 서버에서 train.py
+- [Pipeline tilted-book fixes 2026-11](pipeline-tilted-fixes-2026-11.md) — 기운 책 수정 5가지, 종이면 마스크 출력, 대상 줄 선택(가운데 기준), 앱 모델 v9 단일화·종이면 전용 모델 제거(2026-11-17), 남은 한계
+- [Training dataset findings](training-dataset-findings.md) — P2 중복·누수·도메인 문제, CNU 312장·P2 선별본 확보 경위, 회전 증강 ±50°(v11) 효과 없음, 추론 해상도 비교
+- [Korean path gotcha](env-korean-path-gotcha.md) — Desktop 경로는 Bash 대신 PowerShell/ctypes 로

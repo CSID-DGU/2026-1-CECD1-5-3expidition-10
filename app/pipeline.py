@@ -9,12 +9,34 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from app.models import load_yolo_model, load_resnet_model, resnet_preprocess
 from app.config import DEVICE, OUTPUT_DIR
 
-yolo_model = load_yolo_model()
+yolo_model = load_yolo_model()       # 책등(book-spine)과 종이면(book-paper)을 함께 검출하는 2클래스 모델
 resnet_model = load_resnet_model()
 
 TARGET_SIZE = 1280   # YOLO 학습 해상도 (1280x1280)
 JPEG_QUALITY = 85
 MAX_WARP_SIDE = 2048    # 투시변환 결과의 긴 변 상한
+BOX_NMS_IOU = 0.95      # YOLO 내부 축정렬 박스 NMS. 기울어진 책등은 길이 350·폭 18px 가 16도만 기울어도 박스 폭이 110px 를 넘어
+                        # 20px 옆 이웃과 박스 IoU 가 0.7 을 넘는다(25도 0.78, 30도 0.81). 여기서 지워지면 pipeline 은 그 책을 본 적도 없으므로
+                        # 박스 NMS 는 사실상 끄고 중복 제거는 아래 mask_nms(마스크 기준)가 맡는다.
+MAX_DET = 600           # 박스 NMS 를 느슨하게 두면 후보가 늘어나므로 상한도 함께 올림
+SPINE_LABEL, PAPER_LABEL = "book-spine", "book-paper"   # 학습 데이터의 클래스 이름
+SPINE_MIN_ASPECT = 1.2        # 책등 검출의 긴 변 / 짧은 변이 이보다 작으면 버린다. 1.5 였을 때는 앞에 세운 책에 가려 윗부분 30~50px 만 보이는 책
+                              # (모델 신뢰도 0.6~0.86)이 걸러졌다. 1.0 까지 풀면 책이 아닌 덩어리가 잡히기 시작한다
+PAPER_CONF = 0.5              # 종이면은 이 신뢰도 이상만 채택 (자체 검증 사진에서 0.5 이상 14개 중 10개 정답, 그 아래는 오검출이 대부분)
+PAPER_LEN_RANGE = (0.45, 1.8) # 종이면의 긴 변 / 같은 줄 책 길이 중앙값 허용 범위 (선반 옆판·바닥 같은 큰 면, 작은 잡동사니 제외)
+PAPER_EDGE_FRAGMENT = 0.3     # 종이면의 외접 사각형 안에 든 책등 검출이 종이면 긴 변의 이 비율보다 짧으면 그 책의 표지 가장자리 조각으로 보고 뺀다
+# 촬영 대상 줄(선반 한 칸) 고르기 — select_target_row
+ROW_SHRINK = 0.15             # 줄을 나눌 때 책의 세로 구간을 위아래로 이만큼 줄여서 센다 (살짝 걸친 책 때문에 두 줄이 이어지지 않게)
+ROW_MIN_COVER = 0.12          # 어떤 높이를 덮는 책 수가 (가장 많은 높이의) 이 비율을 넘어야 줄로 본다 (최소 2권)
+ROW_TOUCH_GAP = 0.02          # 줄 위에 얹힌 작은 묶음이 줄과 가로로 이만큼(사진 폭 대비) 안으로 닿아 있으면, 중심이 줄 범위를 벗어나도 그 줄에 붙인다
+                              # (줄 끝의 책이 눕힌 책이면 책 중심으로 잰 줄 범위가 실제보다 좁아, 눕혀 쌓은 더미의 바닥 책이 빠졌다)
+ROW_SIDE_OVERLAP = 0.4        # 줄 아래로 내려간 책이라도, 가로로 가까운 줄 책들과 세로로 이만큼(자기 높이 대비) 겹치면 같은 선반의 책으로 본다
+# 기운 책 묶음 다시 검출 — redetect_tilted_groups (선택 기능, 기본은 끔)
+REDETECT_TILT_RANGE = (20.0, 60.0)   # 이 범위(도)로 기운 책등만 '기운 책'으로 센다 (60도를 넘으면 눕힌 책)
+REDETECT_MIN_BOOKS = 3               # 같은 방향으로 기운 책등이 이만큼 있어야 다시 검출한다
+REDETECT_TILT_TOL = 20.0             # 다시 검출한 것 중 묶음의 중앙값 기울기에서 이 안에 드는 책등만 쓴다
+REDETECT_MARGIN = 0.06               # 묶음을 감싸는 영역의 여유 (영역 긴 변 대비)
+REDETECT_MAX_ZOOM = 3.0              # 영역을 TARGET_SIZE 까지 키울 때의 확대 상한
 
 def encode_jpeg(img: Image.Image, quality: int = JPEG_QUALITY) -> bytes:
     buf = io.BytesIO()
@@ -61,16 +83,35 @@ def mask_nms(polys, confs, shape, iou_thr=0.5, ios_thr=0.8):
     - ios_thr: 작은 마스크가 큰 마스크에 이 비율 이상 포함되면 중복으로 간주
                (큰 책등 안에 작은 조각이 중복 검출된 경우 IoU는 낮아서 잡아내기 위함)
     반환: 살아남은 인덱스 리스트 (confidence 높은 순으로 우선 채택)
+    마스크는 각자의 bounding box 안에서만 래스터화하고 박스가 겹치는 쌍만 비교한다
+    (박스 NMS 를 느슨하게 두면 후보가 수백 개라 전체 화면 마스크끼리 비교하면 너무 느림).
     """
     h, w = shape
     order = np.argsort(-np.asarray(confs))
-    masks, areas = {}, {}
+    boxes, masks, areas = {}, {}, {}
 
     for i in order:
-        m = np.zeros((h, w), dtype=np.uint8)
-        cv2.fillPoly(m, [polys[i].astype(np.int32)], 1)
-        masks[i] = m.astype(bool)
-        areas[i] = masks[i].sum()
+        p = np.asarray(polys[i]).astype(np.int32)
+        areas[i] = 0
+        if len(p) < 3:
+            continue
+        x0, y0 = np.maximum(p.min(axis=0), 0)
+        x1, y1 = np.minimum(p.max(axis=0), [w - 1, h - 1])
+        if x1 < x0 or y1 < y0:
+            continue
+        m = np.zeros((y1 - y0 + 1, x1 - x0 + 1), dtype=np.uint8)
+        cv2.fillPoly(m, [p - np.array([x0, y0], dtype=np.int32)], 1)
+        boxes[i], masks[i], areas[i] = (x0, y0, x1, y1), m.astype(bool), int(m.sum())
+
+    def intersection(i, j):
+        ax0, ay0, ax1, ay1 = boxes[i]
+        bx0, by0, bx1, by1 = boxes[j]
+        x0, y0, x1, y1 = max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)
+        if x1 < x0 or y1 < y0:
+            return 0
+        mi = masks[i][y0 - ay0:y1 - ay0 + 1, x0 - ax0:x1 - ax0 + 1]
+        mj = masks[j][y0 - by0:y1 - by0 + 1, x0 - bx0:x1 - bx0 + 1]
+        return int(np.logical_and(mi, mj).sum())
 
     keep = []
     for i in order:
@@ -78,7 +119,7 @@ def mask_nms(polys, confs, shape, iou_thr=0.5, ios_thr=0.8):
             continue
         duplicate = False
         for j in keep:
-            inter = np.logical_and(masks[i], masks[j]).sum()
+            inter = intersection(i, j)
             if inter == 0:
                 continue
             union = areas[i] + areas[j] - inter
@@ -99,15 +140,18 @@ def get_unique_colors(n):
         colors.append(tuple(int(c * 255) for c in rgb))
     return colors
 
-def order_quad(pts):
+def order_quad(pts, lying=None):
     """4개 꼭짓점을 (좌상, 우상, 우하, 좌하) 순서로 정렬.
     - 세로로 선 책: 위/아래 두 점씩 나눈 뒤 x로 정렬
     - 눕힌 책(장축이 가로): 왼/오른쪽 두 점씩 나눈 뒤 y로 정렬
-      (눕힌 책이 몇 도만 기울어도 y 기준 분할은 모서리 순서가 꼬이기 때문)"""
+      (눕힌 책이 몇 도만 기울어도 y 기준 분할은 모서리 순서가 꼬이기 때문)
+    lying 을 주지 않으면 4점의 주축 방향으로 판정한다. 45도 부근에서는 이 판정이 뒤집힐 수 있으므로
+    마스크 주축을 이미 아는 호출자는 lying 을 명시해 is_lying()·정렬·투시변환 방향이 서로 어긋나지 않게 한다."""
     pts = np.asarray(pts, dtype=np.float32)
-    c = pts - pts.mean(axis=0)
-    _, _, vt = np.linalg.svd(c, full_matrices=False)
-    lying = abs(vt[0][0]) > abs(vt[0][1])      # 4점의 주축 방향
+    if lying is None:
+        c = pts - pts.mean(axis=0)
+        _, _, vt = np.linalg.svd(c, full_matrices=False)
+        lying = abs(vt[0][0]) > abs(vt[0][1])      # 4점의 주축 방향
 
     if lying:
         idx = np.argsort(pts[:, 0])
@@ -188,7 +232,7 @@ def robust_extract_spine_quad_via_pca(pts, mask_np):
     p4 = refined_center - axis1_final * half_h + axis2_final * half_w
     
     box_pts = np.array([p1, p2, p3, p4], dtype=np.float32)
-    return order_quad(box_pts)
+    return order_quad(box_pts, lying=abs(axis1_final[0]) > abs(axis1_final[1]))   # 마스크 주축 기준으로 눕힘 판정
 
 def spine_tilt_deg(quad):
     """장축 기준 기울기(도). 세로로 서 있으면 0, 눕힌 책은 ±90 부근. 범위 (-90, 90]"""
@@ -268,10 +312,16 @@ def _quad_from_vertical_mask(m):
     top = mid & (cy < yc)
     bot = mid & (cy >= yc)
 
-    # 책등 폭 W를 구해 얇을수록 기울기를 덜 믿는다
-    W = float(np.median(w[ok])) if ok.any() else 0.0
-    min_pts = max(8, int(0.5 * W))                      # 폭에 비해 점이 적으면 기울기 추정 안 함
-    slope_lim = float(np.clip(W / 100.0, 0.15, 0.8)) 
+    # 끝변(위/아래)의 기본 기울기는 좌우 변에 수직인 방향. 책이 θ만큼 기울면 끝변도 -tanθ 만큼 기울어야 하고
+    # 이 값은 책등 폭과 무관하다. (예전엔 0 을 기준으로 폭 비례 clip 을 걸어, 얇은 책은 끝변 기울기가 ±0.15~0.25 에서 잘리고
+    #  32도 이상에서는 끝변 윤곽점이 min_pts 에 못 미쳐 항상 수평(0)이 되었다 -> 꼭짓점이 책 밖으로 10~60px 튀어나감)
+    a_side = (al + ar) / 2.0
+    m_perp = -a_side
+    cos_t = 1.0 / np.sqrt(1.0 + a_side * a_side)                      # 기울기 θ 의 cos
+    W = float(np.median(w[ok])) * cos_t if ok.any() else 0.0           # 책등 실제 폭 (수평 폭 × cosθ)
+    min_pts = max(6, int(0.35 * W))                     # 끝변 길이에 비해 점이 적으면 기울기 추정 안 함
+                                                        # (끝변 윤곽점 수는 0.7W·max(cosθ,sinθ) ≥ 0.5W 까지 내려간다)
+    dev_lim = float(np.clip(W / 100.0, 0.15, 0.8))      # 수직 방향에서 허용하는 편차 (원근에 의한 사다리꼴), 얇을수록 덜 믿는다
 
     # 위/아래 변 기울기를 각각 따로 추정 -> 사다리꼴 허용 (4점 투시변환을 쓰므로 안전)
     m_top = m_bot = None
@@ -280,7 +330,7 @@ def _quad_from_vertical_mask(m):
     if bot.sum() >= min_pts:
         m_bot = _fit_slope_y_of_x(cx[bot], cy[bot])
     if m_top is None and m_bot is None:
-        m_top = m_bot = 0.0
+        m_top = m_bot = m_perp
     elif m_top is None:
         m_top = m_bot
     elif m_bot is None:
@@ -289,8 +339,8 @@ def _quad_from_vertical_mask(m):
     # 두 기울기가 지나치게 다르면 불안정한 피팅으로 보고 평균(평행) 사용
     if abs(m_top - m_bot) > 1.5:
         m_top = m_bot = (m_top + m_bot) / 2.0
-    m_top = float(np.clip(m_top, -slope_lim, slope_lim))   # 위쪽은 음수, 아래쪽은 양수 허용 (좌상→우하 기준)
-    m_bot = float(np.clip(m_bot, -slope_lim, slope_lim))   # 위쪽은 음수, 아래쪽은 양수 허용 (좌상→우하 기준)
+    m_top = float(np.clip(m_top, m_perp - dev_lim, m_perp + dev_lim))
+    m_bot = float(np.clip(m_bot, m_perp - dev_lim, m_perp + dev_lim))
 
     # 위치: 윤곽 median 대신 마스크 전체를 감싸는 극값 (잘림 방지)
     ct = float(np.min(ys - m_top * xs))
@@ -336,11 +386,13 @@ def extract_spine_quad_perspective(pts, mask_np, fallback_fn=None):
         return fallback()
     if transposed:
         quad = quad[:, ::-1]
-    quad = order_quad(quad)
+    quad = order_quad(quad, lying=transposed)   # 마스크 주축으로 판정한 방향을 그대로 사용 (45도 부근 뒤집힘 방지)
 
     # --- 안전 검사: 마스크와 면적/변 길이가 크게 어긋나면 기존 방식으로 대체 ----------
+    # 마스크가 여러 조각(목이 끊긴 책등, 따로 떨어진 라벨 조각)이면 픽셀 수가 빈틈만큼 줄어드니 볼록껍질 면적과도 비교
+    hull_area = max(area, cv2.contourArea(cv2.convexHull(data.astype(np.float32))))
     qarea = cv2.contourArea(quad)
-    if qarea <= 0 or not (0.8 <= qarea / area <= 1.25):
+    if qarea <= 0 or not (0.8 <= qarea / hull_area <= 1.25):
         return fallback()
 
     # 긴 축 방향으로 마스크를 충분히 덮는지 / 과하게 넘치지 않는지 확인
@@ -355,37 +407,101 @@ def extract_spine_quad_perspective(pts, mask_np, fallback_fn=None):
     return quad
 
 
-def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: float = 0.2):
-    reset_output_dir()
-    
-    # 🎯 0. 학습 해상도(1280)에 맞춰 입력 전처리
-    image, scale = resize_to_target(image)
+def _collinear_contours(main, others, band=0.75, max_gap=0.6, min_area=15):
+    """main 윤곽의 장축선상에 놓인 다른 윤곽들만 고른다.
+    조건: 점의 80% 이상이 main 중심선에서 ±band×폭 안에 있고, 축 방향 간격이 현재 길이의 max_gap 배 이하.
+    모델이 기울어진 책등을 위/아래 여러 조각으로 내는 일이 잦아(이 사진 15~35도 책의 23/38, 35도 이상 15/18)
+    이웃 책등에 붙은 옆 조각은 버리되 같은 책등의 윗/아랫조각(라벨 부분 등)은 살려 길이를 되찾기 위한 것."""
+    (cx, cy), (rw, rh), ang = cv2.minAreaRect(main)
+    L, Wd = max(rw, rh), max(min(rw, rh), 1.0)
+    t = np.radians(ang if rw >= rh else ang + 90)       # 장축 방향
+    u = np.array([np.cos(t), np.sin(t)]); v = np.array([-u[1], u[0]])
+    lo, hi = -L / 2, L / 2
+    cand = []
+    for c in others:
+        if cv2.contourArea(c) < min_area:
+            continue
+        p = c.reshape(-1, 2).astype(np.float64) - [cx, cy]
+        along, perp = p @ u, p @ v
+        if np.mean(np.abs(perp) <= band * Wd) >= 0.8:
+            cand.append((c, float(along.min()), float(along.max())))
+    out, changed = [], True
+    while cand and changed:                      # 가까운 조각부터 이어 붙이면 더 먼 조각도 닿을 수 있다
+        changed, rest = False, []
+        for c, a0, a1 in cand:
+            if max(a0 - hi, lo - a1, 0.0) <= max_gap * (hi - lo):
+                out.append(c); changed = True
+                lo, hi = min(lo, a0), max(hi, a1)
+            else:
+                rest.append((c, a0, a1))
+        cand = rest
+    return out
 
-    # 🎯 1. 모델 예측 및 예외 처리
-    results = yolo_model(
-        image, conf=conf_threshold, iou=0.7, agnostic_nms=True,
-        imgsz=TARGET_SIZE, verbose=False
+
+def extract_mask_polygons(results):
+    """검출별 마스크 비트맵에서 '가장 큰 연결성분' 윤곽(main)과, 같은 축선상에 놓인 나머지 조각 윤곽들(extra)을 돌려준다.
+    results.masks.xy 는 조각난 마스크의 모든 조각을 한 폴리곤으로 이어 붙이므로(ultralytics strategy="all"),
+    기울어진 책등에 이웃 책등 조각이 붙어 나오면 minAreaRect 폭이 조각까지 포함해 수십 배로 커지고
+    -> opening 커널이 커져 마스크가 통째로 지워지고 -> 정제 없이 raw 폴리곤이 쓰여 책 5~6권을 덮는 사각형이 나왔다.
+    main 만 쓰면 반대로 같은 책등의 윗/아랫조각(라벨 등)을 잃으므로 축선상 조각은 extra 로 따로 넘긴다.
+    retina_masks=True 이므로 비트맵은 입력 이미지와 같은 크기다."""
+    polys, extras = [], []
+    boxes = results.boxes.xyxy.cpu().numpy()
+    H, W = results.masks.data.shape[-2:]
+    for m, (bx0, by0, bx1, by1) in zip(results.masks.data, boxes):
+        # 마스크는 박스 밖이 0 이므로 박스 주변만 본다
+        x0, y0 = max(int(bx0) - 2, 0), max(int(by0) - 2, 0)
+        x1, y1 = min(int(bx1) + 3, W), min(int(by1) + 3, H)
+        sub = m[y0:y1, x0:x1].cpu().numpy().astype(np.uint8)
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(sub, connectivity=8)
+        if n <= 1:
+            polys.append(np.zeros((0, 2), dtype=np.float32)); extras.append([])
+            continue
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        largest = 1 + int(np.argmax(areas))
+        comps = {}
+        for lab in range(1, n):
+            if lab != largest and areas[lab - 1] < 15:
+                continue
+            contours, _ = cv2.findContours((labels == lab).astype(np.uint8),
+                                           cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if contours:
+                comps[lab] = max(contours, key=cv2.contourArea).reshape(-1, 2)
+        main = comps[largest]
+        extra = _collinear_contours(main, [c for lab, c in comps.items() if lab != largest])
+        polys.append((main + [x0, y0]).astype(np.float32))
+        extras.append([(c + [x0, y0]).astype(np.int32) for c in extra])
+    return polys, extras
+
+
+def _class_id(model, name, default=None):
+    """모델의 클래스 이름으로 class id 를 찾는다. 없으면 default."""
+    for k, v in getattr(model, "names", {}).items():
+        if v == name:
+            return int(k)
+    return default
+
+
+def _detect(model, image, conf):
+    """YOLO 실행 -> 마스크 폴리곤 추출 -> 마스크 기반 NMS. (polys, extras, confs, cls_ids) 를 돌려주고 검출이 없으면 None."""
+    results = model(
+        image, conf=conf, iou=BOX_NMS_IOU, agnostic_nms=True,
+        imgsz=TARGET_SIZE, retina_masks=True, max_det=MAX_DET, verbose=False
     )[0]
-    
     if results.masks is None or len(results.masks) == 0:
-        return [], encode_jpeg(image)
-
-    segments_poly = results.masks.xy
+        return None
+    segments_poly, segments_extra = extract_mask_polygons(results)
     confs = results.boxes.conf.cpu().numpy()
     cls_ids = results.boxes.cls.cpu().numpy()
+    keep = mask_nms(segments_poly, confs, (image.height, image.width))      # 마스크 기반 NMS (main 조각 기준)
+    return [segments_poly[i] for i in keep], [segments_extra[i] for i in keep], confs[keep], cls_ids[keep]
 
-    # 마스크 기반 NMS 적용
-    keep = mask_nms(segments_poly, confs, (image.height, image.width))
-    segments_poly = [segments_poly[i] for i in keep]
-    confs = confs[keep]
-    cls_ids = cls_ids[keep]
 
-    spine_class_id = 0
-    valid_spine_data = []
-
-    # 🎯 2. 데이터 필터링 및 마스크 정제
-    for poly, conf, cls_id in zip(segments_poly, confs, cls_ids):
-        if int(cls_id) != spine_class_id:
+def _refine_detections(image, segments_poly, segments_extra, confs, cls_ids, wanted_cls, label):
+    """wanted_cls 클래스의 검출만 골라 마스크 정제 -> 노란 사각형(refined_quadrilateral) 추정까지 한 목록을 돌려준다."""
+    out = []
+    for poly, extra, conf, cls_id in zip(segments_poly, segments_extra, confs, cls_ids):
+        if int(cls_id) != wanted_cls:
             continue
 
         pts = poly.astype(np.int32)
@@ -404,15 +520,21 @@ def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: f
             k_size += 1
 
         mask_np = np.zeros((image.height, image.width), dtype=np.uint8)
-        cv2.fillPoly(mask_np, [pts], 255)
+        cv2.fillPoly(mask_np, [pts] + extra, 255)       # 같은 축선상의 조각까지 합쳐서 정제 (커널 크기는 main 조각 폭 기준)
         
-        kernel = np.ones((k_size, k_size), np.uint8)
+        # 원형 커널: 정사각 커널은 띠가 θ만큼 기울면 유효 크기가 (cosθ+sinθ)배(45도에서 1.4배)라 기울어진 얇은 책등을 끊는다
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k_size, k_size))
         cleaned_mask = cv2.morphologyEx(mask_np, cv2.MORPH_OPEN, kernel)
 
         contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        parts = [pts]
         if contours:
             largest_contour = max(contours, key=cv2.contourArea)
             pts = largest_contour.reshape(-1, 2)
+            # opening 이 가는 목 부분을 끊어 책등이 여러 조각이 되어도 같은 축선상의 조각은 버리지 않는다
+            # (35도 이상 책등은 이것만으로 길이의 1/4 이상을 잃고 있었음). 폭·종횡비·커널은 계속 최대 조각 기준.
+            parts = [pts] + [c.reshape(-1, 2) for c in
+                             _collinear_contours(largest_contour, [c for c in contours if c is not largest_contour])]
             
         if len(pts) < 3:
             continue
@@ -424,7 +546,7 @@ def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: f
         short_side = min(rw, rh)
         aspect_ratio = long_side / max(short_side, 1)
         
-        if aspect_ratio < 1.5 or long_side < 25:
+        if aspect_ratio < SPINE_MIN_ASPECT or long_side < 25:
             continue
             
         rx, ry, rw_b, rh_b = cv2.boundingRect(pts)
@@ -433,19 +555,382 @@ def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: f
             
         # 정렬 및 변환에 활용할 PCA 기반 사각형 추출 선행
         mask_np_pca = np.zeros((image.height, image.width), dtype=np.uint8)
-        cv2.fillPoly(mask_np_pca, [pts], 255)
+        cv2.fillPoly(mask_np_pca, [np.asarray(p, dtype=np.int32) for p in parts], 255)
         refined_quad = extract_spine_quad_perspective(
             pts, mask_np_pca, fallback_fn=robust_extract_spine_quad_via_pca
         )
 
-        valid_spine_data.append({
+        out.append({
             "polygon": pts,
+            "parts": parts,                           # 정제된 마스크 조각들 (시각화용)
             "box": (x1, y1, x2, y2),
             "confidence": float(conf),
             "dimensions": {"height": float(long_side), "width": float(short_side), "angle": float(angle)},
             "refined_quadrilateral": refined_quad,
+            "label": label,                           # SPINE_LABEL / PAPER_LABEL
             "lying": is_lying(refined_quad),          # 노란 사각형 기준
         })
+    return out
+
+
+def _paper_detections(image, segments_poly, segments_extra, confs, cls_ids, wanted_cls):
+    """종이면(book-paper) 검출 목록. 책등과 달리 opening 정제·사각형 추정·투시변환을 하지 않고 모델이 예측한 마스크를 그대로 쓴다
+    (종이면은 식별 대상이 아니라 '비정상 배치' 표시용이라 반듯하게 펼 이유가 없다).
+    refined_quadrilateral 에는 마스크의 최소 외접 사각형만 넣는다 — 줄 선택·좌우 정렬·크롭·출력 형식(quad)용."""
+    out = []
+    for poly, extra, conf, cls_id in zip(segments_poly, segments_extra, confs, cls_ids):
+        if int(cls_id) != wanted_cls:
+            continue
+        pts = poly.astype(np.int32)
+        if len(pts) < 3:
+            continue
+        rect = cv2.minAreaRect(pts)
+        _, (rw, rh), angle = rect
+        long_side, short_side = max(rw, rh), min(rw, rh)
+        if long_side / max(short_side, 1) < 1.5 or long_side < 25:
+            continue
+        parts = [pts] + [np.asarray(e, dtype=np.int32).reshape(-1, 2) for e in extra]
+        rx, ry, rw_b, rh_b = cv2.boundingRect(np.vstack(parts))
+        x1, y1 = max(0, rx), max(0, ry)
+        x2, y2 = min(image.width, rx + rw_b), min(image.height, ry + rh_b)
+        quad = order_quad(cv2.boxPoints(rect))
+        out.append({
+            "polygon": pts,
+            "parts": parts,                           # 모델 마스크 그대로 (가장 큰 덩어리 + 같은 축선상의 조각)
+            "box": (x1, y1, x2, y2),
+            "confidence": float(conf),
+            "dimensions": {"height": float(long_side), "width": float(short_side), "angle": float(angle)},
+            "refined_quadrilateral": quad,
+            "label": PAPER_LABEL,
+            "lying": is_lying(quad),
+        })
+    return out
+
+
+def _quad_ios(a, b):
+    """두 사각형의 겹친 넓이 / 작은 쪽 넓이."""
+    ha = cv2.convexHull(np.asarray(a, dtype=np.float32))
+    hb = cv2.convexHull(np.asarray(b, dtype=np.float32))
+    inter, _ = cv2.intersectConvexConvex(ha, hb)
+    return inter / max(min(cv2.contourArea(ha), cv2.contourArea(hb)), 1e-6)
+
+
+def _mask_ios(quad, parts):
+    """사각형 quad 와 마스크(parts = 폴리곤 목록)의 겹친 넓이 / 작은 쪽 넓이."""
+    q = np.asarray(quad, dtype=np.float32)
+    pts = [np.asarray(p, dtype=np.int32).reshape(-1, 2) for p in parts]
+    allp = np.vstack([q] + pts)
+    x0, y0 = np.floor(allp.min(axis=0)).astype(int)
+    x1, y1 = np.ceil(allp.max(axis=0)).astype(int)
+    a = np.zeros((y1 - y0 + 1, x1 - x0 + 1), dtype=np.uint8)
+    b = np.zeros_like(a)
+    off = np.array([x0, y0])
+    cv2.fillPoly(a, [np.round(q - off).astype(np.int32)], 1)
+    cv2.fillPoly(b, [p - off for p in pts], 1)
+    return int((a & b).sum()) / max(min(int(a.sum()), int(b.sum())), 1)
+
+
+def _same_book_as_paper(spine, paper):
+    """책등 검출 spine 이 종이면 paper 와 같은 책을 책등으로 잘못 읽은 것인가.
+    겹침은 종이면의 외접 사각형이 아니라 모델이 낸 종이면 마스크로 잰다 — 기울거나 쐐기 모양인 종이면은 외접 사각형이 실제보다 커서
+    바로 옆의 멀쩡한 책등을 덮는다 (사각형으로 재던 때 이 규칙에 걸린 책등 9개 중 8개가 진짜 책이었다).
+    다만 외접 사각형 안에 든 아주 짧은 조각(종이면 긴 변의 PAPER_EDGE_FRAGMENT 미만)은 그 책 표지의 가장자리가 따로 잡힌 것이므로 뺀다."""
+    sq, pq = spine["refined_quadrilateral"], paper["refined_quadrilateral"]
+    if _mask_ios(sq, paper["parts"]) > 0.5:
+        return True
+    return _quad_ios(sq, pq) > 0.5 and max(quad_size(sq)) < PAPER_EDGE_FRAGMENT * max(quad_size(pq))
+
+
+def merge_paper_books(spines, papers):
+    """신뢰도 PAPER_CONF 이상인 종이면(book-paper)을 책 목록에 합친다.
+    서로 절반 넘게 겹치는 종이면은 신뢰도 높은 쪽만 남기고, 채택된 종이면과 같은 책을 책등으로 잘못 읽은 검출(_same_book_as_paper)은 뺀다.
+    (예전의 '책등 바로 옆에 있어야 한다'는 조건은 없앴다 — 종이면만 꽂힌 줄을 통째로 버렸다. 위치는 select_target_row 가 판단한다.)"""
+    accepted = []
+    for p in sorted(papers, key=lambda d: -d["confidence"]):
+        if p["confidence"] < PAPER_CONF:
+            continue
+        if any(_quad_ios(p["refined_quadrilateral"], a["refined_quadrilateral"]) > 0.5 for a in accepted):
+            continue
+        accepted.append(p)
+    kept = [s for s in spines if not any(_same_book_as_paper(s, a) for a in accepted)]
+    return kept + accepted
+
+
+def _row_info(spans, ids):
+    """ids 에 든 책들을 한 줄로 봤을 때의 세로 범위·권수·가로 범위. spans[i] = (위, 아래, 가로 중심)"""
+    return {"ids": list(ids), "t": min(spans[i][0] for i in ids), "b": max(spans[i][1] for i in ids), "n": len(ids),
+            "x0": min(spans[i][2] for i in ids), "x1": max(spans[i][2] for i in ids)}
+
+
+def _group_rows(spans, H):
+    """책들을 줄(선반 한 칸)로 묶는다. (큰 줄 목록, 어느 줄에도 못 든 작은 묶음 목록) 을 돌려준다.
+    높이 y 마다 그 높이를 덮는 책 수를 세어 책이 몰린 구간을 한 줄로 본다 — 세로 구간이 겹치는 것끼리 이어 붙이는 방식은
+    두 칸에 걸친 검출 한두 개 때문에 위아래 칸이 한 줄로 합쳐졌다."""
+    shrunk = [(t + ROW_SHRINK * (b - t), b - ROW_SHRINK * (b - t)) for t, b, _ in spans]
+    cover = np.zeros(int(H) + 2)
+    for a0, b0 in shrunk:
+        cover[max(0, int(a0)):max(0, int(b0)) + 1] += 1
+    on = cover > max(1.5, ROW_MIN_COVER * cover.max())
+    edges = np.flatnonzero(np.diff(np.concatenate(([0], on.astype(np.int8), [0]))))
+    runs = list(zip(edges[0::2], edges[1::2] - 1))                    # 책이 몰린 높이 구간들
+
+    rows, loose = [[] for _ in runs], []
+    for i, (t, b, _) in enumerate(spans):
+        overlap = [max(0, min(b, r1) - max(t, r0)) for r0, r1 in runs]
+        if runs and max(overlap) > 0.5 * (b - t):                     # 절반 넘게 들어간 줄에 넣는다
+            rows[int(np.argmax(overlap))].append(i)
+        else:
+            loose.append(i)
+    if any(len(r) >= 2 for r in rows):                                # 한 권뿐인 '줄'은 줄이 아니다 (줄 위에 눕혀 쌓은 책 한 권이
+        for r in rows:                                                # 따로 줄이 되면 아래의 대상 줄에 붙지 못하고 버려진다) -> 작은 묶음으로
+            if len(r) == 1:
+                loose.extend(r)
+                r.clear()
+    groups = []                                                       # 남은 것끼리는 세로 구간이 겹치면 한 묶음
+    for i in sorted(loose, key=lambda i: shrunk[i][0]):
+        if groups and shrunk[i][0] <= groups[-1][0]:
+            groups[-1][0] = max(groups[-1][0], shrunk[i][1]); groups[-1][1].append(i)
+        else:
+            groups.append([shrunk[i][1], [i]])
+    return [_row_info(spans, r) for r in rows if r], [_row_info(spans, g[1]) for g in groups]
+
+
+def _on_same_shelf(spans, xr, i, r, W):
+    """줄 r 의 아래 끝보다 아래로 내려간 책 i 가 그래도 r 과 같은 선반의 책이면, 가까운 줄 책들과 세로로 겹치는 비율(자기 높이 대비)을 돌려준다. 아니면 0.
+    아래 칸의 책은 선반 판 밑에 있으므로, 가로로 가장 가까운 줄 책들의 아래 끝보다 위로 올라올 수 없다.
+    그 책들과 세로로 ROW_SIDE_OVERLAP 이상 겹치고 줄에 가로로 붙어 있는 책은, 같은 선반에서 카메라 쪽으로 기울어 놓였거나
+    화면 가장자리에 걸친 책이다 (예: 줄 끝에 비스듬히 세워져 책등 아래쪽만 화면 구석에 찍힌 책).
+    줄보다 긴 것(두 칸에 걸친 옆판·기둥), 줄 위쪽으로 한참 벗어난 것, 줄에서 가로로 떨어진 것은 제외한다."""
+    t, b, cx = spans[i]
+    row_h = r["b"] - r["t"]
+    if b - t > row_h or t < r["t"] - 0.5 * row_h:
+        return 0.0
+    gap = min(max(0.0, xr[j][0] - xr[i][1], xr[i][0] - xr[j][1]) for j in r["ids"])     # 가장 가까운 줄 책과의 가로 틈
+    if gap > 0.05 * W:
+        return 0.0
+    near = sorted(r["ids"], key=lambda j: abs(spans[j][2] - cx))[:3]
+    local_t = float(np.median([spans[j][0] for j in near]))
+    local_b = float(np.median([spans[j][1] for j in near]))
+    ratio = (min(b, local_b) - max(t, local_t)) / max(b - t, 1e-6)
+    return ratio if ratio >= ROW_SIDE_OVERLAP else 0.0
+
+
+def _x_gap(xr, ids_a, ids_b):
+    """두 책 묶음의 가로 범위(책의 왼쪽·오른쪽 끝 기준) 사이의 틈. 겹치면 0."""
+    a0, a1 = min(xr[i][0] for i in ids_a), max(xr[i][1] for i in ids_a)
+    b0, b1 = min(xr[i][0] for i in ids_b), max(xr[i][1] for i in ids_b)
+    return max(0.0, a0 - b1, b0 - a1)
+
+
+def select_target_row(books, H, W):
+    """사진에 여러 칸이 함께 찍혔을 때 촬영 대상인 한 줄의 책(책등·종이면)만 남긴다.
+    1) 책을 줄로 묶는다 (_group_rows)
+    2) 줄 위에 얹힌 작은 묶음(눕혀 올려 둔 책 등)은 그 줄에 붙인다. 같은 줄의 책은 같은 선반에 놓이므로
+       줄의 아래 끝보다 아래로 내려간 묶음은 다른 칸의 책이다 -> 붙이지 않는다.
+       다만 그런 묶음의 책이라도 줄에 가로로 붙어 있고 가까운 줄 책들과 세로로 많이 겹치면 같은 선반의 책이므로 한 권씩 붙인다 (_on_same_shelf)
+    3) 세로 중심이 사진 가운데에 가장 가까운 줄을 고른다 (촬영 규칙: 대상 칸을 화면 가운데에 둔다).
+       어느 줄에도 못 붙은 한 권짜리 묶음은 다른 후보가 있으면 고르지 않는다 (잘못된 검출 하나가 줄 전체를 밀어내지 않게).
+       '위아래가 사진 끝에 잘린 줄 제외 + 책 넓이 합' 으로 고르던 이전 규칙과 148장 중 own_080(라벨이 두 칸) 한 장만 달랐다
+    4) 그 줄에서 길이가 유난한 종이면(같은 줄 책 길이 중앙값의 PAPER_LEN_RANGE 밖)을 뺀다
+    줄이 하나뿐인 사진(집 책장 등)은 그대로 통과한다."""
+    if len(books) < 2:
+        return books
+    spans, xr = [], []                # spans[i] = (위, 아래, 가로 중심), xr[i] = (왼쪽 끝, 오른쪽 끝)
+    for d in books:
+        q = np.asarray(d["refined_quadrilateral"], dtype=np.float32)
+        spans.append((float(q[:, 1].min()), float(q[:, 1].max()), float(q[:, 0].mean())))
+        xr.append((float(q[:, 0].min()), float(q[:, 0].max())))
+
+    rows, small = _group_rows(spans, H)
+    rest = []
+    for g in sorted(small, key=lambda r: -r["b"]):
+        cand = [r for r in rows
+                if g["b"] <= r["b"] + 0.02 * H and g["t"] >= r["t"] - 0.5 * (r["b"] - r["t"])
+                and g["n"] <= max(3, 0.3 * r["n"])
+                and (r["x0"] - 0.1 * W <= (g["x0"] + g["x1"]) / 2 <= r["x1"] + 0.1 * W
+                     or _x_gap(xr, g["ids"], r["ids"]) <= ROW_TOUCH_GAP * W)]
+        if cand:
+            r = min(cand, key=lambda r: max(0, r["t"] - g["b"]))       # 가장 가까운 줄
+            r.update(_row_info(spans, r["ids"] + g["ids"]))
+            continue
+        left = []                                                      # 묶음째로는 못 붙여도, 같은 선반의 책은 한 권씩 붙인다
+        for i in g["ids"]:
+            score = [_on_same_shelf(spans, xr, i, r, W) for r in rows]
+            if g["n"] <= 3 and score and max(score) > 0:
+                r = rows[int(np.argmax(score))]
+                r.update(_row_info(spans, r["ids"] + [i]))
+            else:
+                left.append(i)
+        if left:
+            rest.append(_row_info(spans, left))
+
+    # 줄에 못 붙은 한 권짜리 묶음은, 줄이나 여러 권 묶음이 따로 있으면 대상 줄 후보에서 뺀다.
+    # (서가 옆판을 종이면으로 잘못 검출한 것 하나가 세로 중심이 사진 가운데에 더 가깝다는 이유로 43권짜리 줄을 이긴 적이 있다)
+    pool = rows + [g for g in rest if g["n"] >= 2] or rows + rest
+    best = min(pool, key=lambda r: abs((r["t"] + r["b"]) / 2 - H / 2))
+
+    med_len = float(np.median([max(quad_size(books[i]["refined_quadrilateral"])) for i in best["ids"]]))
+    keep = [i for i in best["ids"]
+            if books[i]["label"] != PAPER_LABEL
+            or PAPER_LEN_RANGE[0] * med_len <= max(quad_size(books[i]["refined_quadrilateral"])) <= PAPER_LEN_RANGE[1] * med_len]
+    return [books[i] for i in sorted(keep)]
+
+
+def _raw_spine_candidates(segments_poly, segments_extra, confs, cls_ids, wanted_cls):
+    """줄 선택용 가벼운 책등 후보: 정제 전 마스크(같은 축선상 조각 포함)의 최소 외접 사각형만 구한다.
+    마스크 정제·사각형 추정(_refine_detections)은 검출 하나에 수십 ms 가 들어 여러 칸이 찍힌 사진에서는 버릴 책에 대부분의 시간을 썼다."""
+    out = []
+    for i, (poly, extra, conf, cls_id) in enumerate(zip(segments_poly, segments_extra, confs, cls_ids)):
+        if int(cls_id) != wanted_cls or len(poly) < 3:
+            continue
+        pts = np.vstack([poly] + [np.asarray(e, dtype=np.float32).reshape(-1, 2) for e in extra]).astype(np.float32)
+        out.append({"det_index": i, "confidence": float(conf), "label": SPINE_LABEL,
+                    "refined_quadrilateral": order_quad(cv2.boxPoints(cv2.minAreaRect(pts)))})
+    return out
+
+
+def books_in_target_row(image, det, spine_id, papers):
+    """검출 결과에서 촬영 대상 줄의 책 목록(책등 + 종이면)을 만든다.
+    1) 가벼운 후보(정제 전 마스크의 외접 사각형)로 대상 줄을 먼저 고르고
+    2) 그 줄의 책등에만 마스크 정제·사각형 추정을 한 뒤
+    3) 정제된 사각형으로 종이면 겹침 정리와 줄 선택을 한 번 더 한다 (정제로 모양이 달라진 것, 길이가 유난한 종이면 정리).
+    1) 에서는 '종이면과 겹치는 책등 빼기'를 하지 않는다 — 정제 전 외접 사각형은 실제보다 커서 멀쩡한 책등이 겹친 것으로 잘못 빠진다. 3) 에서만 한다."""
+    H, W = image.height, image.width
+    accepted = merge_paper_books([], papers)                     # 신뢰도·종이면끼리의 겹침만 정리
+    rough = select_target_row(_raw_spine_candidates(*det, spine_id) + accepted, H, W)
+    keep = sorted(d["det_index"] for d in rough if d["label"] == SPINE_LABEL)
+    spines = _refine_detections(image, *[[x[i] for i in keep] for x in det], spine_id, SPINE_LABEL)
+    return select_target_row(merge_paper_books(spines, [d for d in rough if d["label"] == PAPER_LABEL]), H, W)
+
+
+def _tilted_groups(image, det, spine_id, paper_id):
+    """대상 줄에서 같은 방향으로 기운 책등 묶음을 찾는다 -> [(중앙값 기울기, 묶음을 감싸는 영역 (x0, y0, x1, y1))].
+    왼쪽으로 기운 묶음과 오른쪽으로 기운 묶음을 따로 보고, REDETECT_MIN_BOOKS 권 미만이면 묶음으로 치지 않는다."""
+    H, W = image.height, image.width
+    papers = _paper_detections(image, *det, paper_id) if paper_id is not None else []
+    rough = select_target_row(_raw_spine_candidates(*det, spine_id) + merge_paper_books([], papers), H, W)
+    spines = [(spine_tilt_deg(d["refined_quadrilateral"]), np.asarray(d["refined_quadrilateral"]))
+              for d in rough if d["label"] == SPINE_LABEL]
+    groups = []
+    for sign in (1, -1):
+        g = [(t, q) for t, q in spines if REDETECT_TILT_RANGE[0] <= sign * t <= REDETECT_TILT_RANGE[1]]
+        if len(g) < REDETECT_MIN_BOOKS:
+            continue
+        pts = np.vstack([q for _, q in g])
+        x0, y0 = pts.min(axis=0)
+        x1, y1 = pts.max(axis=0)
+        m = REDETECT_MARGIN * max(x1 - x0, y1 - y0)
+        groups.append((float(np.median([t for t, _ in g])), (max(0, x0 - m), max(0, y0 - m), min(W, x1 + m), min(H, y1 + m))))
+    return groups
+
+
+def _redetect_rotated(model, image, conf, theta, region, spine_id):
+    """영역 region 을 책이 수직이 되게 theta 만큼 돌리고 긴 변이 TARGET_SIZE 가 되게 키워 다시 검출한다.
+    기울기가 theta 근처(±REDETECT_TILT_TOL)이고 중심이 영역 안인 책등만 원래 좌표로 되돌려 (polys, extras, confs) 로 돌려준다."""
+    x0, y0, x1, y1 = region
+    c = ((x0 + x1) / 2, (y0 + y1) / 2)
+    corners = np.array([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], dtype=np.float32)
+    axis = np.array([np.sin(np.radians(theta)), np.cos(np.radians(theta))])        # 책의 장축 방향
+    ang = min((theta, -theta), key=lambda a: abs((cv2.getRotationMatrix2D(c, a, 1.0)[:, :2] @ axis)[0]))   # 장축이 수직이 되는 쪽
+    M = cv2.getRotationMatrix2D(c, ang, 1.0)
+    rc = corners @ M[:, :2].T + M[:, 2]
+    w, h = rc.max(axis=0) - rc.min(axis=0)
+    M = cv2.getRotationMatrix2D(c, ang, min(REDETECT_MAX_ZOOM, TARGET_SIZE / max(w, h)))
+    rc = corners @ M[:, :2].T + M[:, 2]
+    M[:, 2] -= rc.min(axis=0)
+    rc = rc - rc.min(axis=0)
+    canvas = cv2.warpAffine(np.array(image), M, (int(np.ceil(rc[:, 0].max())), int(np.ceil(rc[:, 1].max()))),
+                            flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    det = _detect(model, Image.fromarray(canvas), conf)
+    polys, extras, confs = [], [], []
+    if det is None:
+        return polys, extras, confs
+    Mi = cv2.invertAffineTransform(M)
+    back = lambda p: (np.asarray(p, dtype=np.float32).reshape(-1, 2) @ Mi[:, :2].T + Mi[:, 2]).astype(np.float32)
+    for poly, extra, cf, cls_id in zip(*det):
+        if int(cls_id) != spine_id or len(poly) < 3:
+            continue
+        p, ex = back(poly), [back(e) for e in extra]
+        q = order_quad(cv2.boxPoints(cv2.minAreaRect(np.vstack([p] + ex))))
+        cx, cy = q.mean(axis=0)
+        if abs(spine_tilt_deg(q) - theta) > REDETECT_TILT_TOL or not (x0 <= cx <= x1 and y0 <= cy <= y1):
+            continue
+        polys.append(p)
+        extras.append([e.astype(np.int32) for e in ex])
+        confs.append(float(cf))
+    return polys, extras, confs
+
+
+def _merge_redetected(det, new, spine_id):
+    """다시 검출한 책등(new)을 검출 목록에 넣고, 그것과 마스크가 절반 넘게(작은 쪽 기준) 겹치는 1차 책등 검출은 뺀다."""
+    polys2, extras2, confs2 = new
+    if not polys2:
+        return det
+
+    def local(p):                                    # 폴리곤을 자기 박스 안에서만 래스터화
+        p = np.round(p).astype(np.int32)
+        bx0, by0 = p.min(axis=0)
+        bx1, by1 = p.max(axis=0)
+        m = np.zeros((by1 - by0 + 1, bx1 - bx0 + 1), dtype=np.uint8)
+        cv2.fillPoly(m, [p - [bx0, by0]], 1)
+        return (bx0, by0, bx1, by1), m, int(m.sum())
+
+    def inter(a, b):
+        (ax0, ay0, ax1, ay1), ma, _ = a
+        (bx0, by0, bx1, by1), mb, _ = b
+        ix0, iy0, ix1, iy1 = max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)
+        if ix1 < ix0 or iy1 < iy0:
+            return 0
+        return int((ma[iy0 - ay0:iy1 - ay0 + 1, ix0 - ax0:ix1 - ax0 + 1] & mb[iy0 - by0:iy1 - by0 + 1, ix0 - bx0:ix1 - bx0 + 1]).sum())
+
+    new_masks = [local(p) for p in polys2]
+    keep = []
+    for i, (poly, cls_id) in enumerate(zip(det[0], det[3])):
+        if int(cls_id) == spine_id and len(poly) >= 3:
+            a = local(poly)
+            if any(inter(a, b) / max(min(a[2], b[2]), 1) > 0.5 for b in new_masks):
+                continue
+        keep.append(i)
+    return (polys2 + [det[0][i] for i in keep], extras2 + [det[1][i] for i in keep],
+            np.concatenate([np.asarray(confs2, dtype=np.float32), det[2][keep]]),
+            np.concatenate([np.full(len(polys2), spine_id, dtype=np.float32), det[3][keep]]))
+
+
+def redetect_tilted_groups(model, image, det, conf, spine_id, paper_id):
+    """기운 책 묶음을 돌려 세워 다시 검출한다 (선택 기능, process_bookshelf_perspective_pipeline(rotate_redetect=True) 일 때만).
+    얇은 책이 촘촘하게 기울어 있으면 축에 나란한 박스가 서로 거의 같아져 모델이 두 권을 한 덩어리로 내거나 일부만 낸다.
+    회전 증강(±50도)·추론 해상도로는 풀리지 않았고, 사진을 돌려 책을 세우면 같은 모델이 책을 갈라 낸다.
+    대상 줄에 기운 묶음이 없으면 아무 일도 하지 않으므로(추가 검출 없음) 반듯한 서가 사진의 결과와 시간은 그대로다.
+    근거 수치는 docs/claude-memory/pipeline-tilted-fixes-2026-11.md 의 '회전 재검출' 절."""
+    for theta, region in _tilted_groups(image, det, spine_id, paper_id):
+        det = _merge_redetected(det, _redetect_rotated(model, image, conf, theta, region, spine_id), spine_id)
+    return det
+
+
+def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: float = 0.2, rotate_redetect: bool = False):
+    """rotate_redetect=True 면 대상 줄의 기운 책 묶음을 돌려 세워 한 번 더 검출한다 (redetect_tilted_groups). 기본은 끔."""
+    reset_output_dir()
+
+    # 🎯 0. 학습 해상도(1280)에 맞춰 입력 전처리
+    image, scale = resize_to_target(image)
+
+    # 🎯 1. 모델 예측 및 예외 처리
+    det = _detect(yolo_model, image, conf_threshold)
+    if det is None:
+        return [], encode_jpeg(image)
+    spine_id = _class_id(yolo_model, SPINE_LABEL, 0)
+    paper_id = _class_id(yolo_model, PAPER_LABEL)
+
+    # 🎯 1-1. (선택) 기운 책 묶음을 돌려 세워 다시 검출
+    if rotate_redetect:
+        det = redetect_tilted_groups(yolo_model, image, det, conf_threshold, spine_id, paper_id)
+
+    # 🎯 2. 종이면만 보이는 책(book-paper) 후보를 같은 검출에서 가져온다 (모델에 book-paper 클래스가 없으면 종이면 없이 진행).
+    #         책등이 하나도 없는 사진(종이면만 꽂힌 줄)도 처리한다.
+    papers = _paper_detections(image, *det, paper_id) if paper_id is not None else []
+
+    # 🎯 2-1. 촬영 대상 줄을 먼저 고르고(위·아래 칸의 책 제외), 그 줄의 책등에만 마스크 정제·사각형 추정을 한다
+    valid_spine_data = books_in_target_row(image, det, spine_id, papers)
 
     total_spines = len(valid_spine_data)
     visualized_image = image.copy()
@@ -456,6 +941,7 @@ def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: f
     except Exception: font = None
 
     cropped_book_tensors = []
+    tensor_owner = []        # cropped_book_tensors[k] 가 몇 번째 책의 것인지
     output_metadata = []
     image_np = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
@@ -474,9 +960,10 @@ def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: f
         x1, y1, x2, y2 = data["box"]
         current_conf = data["confidence"]
         refined_quad = data["refined_quadrilateral"]
-        print(f"[spine {idx}] confidence={current_conf:.3f}  lying={data['lying']}  tilt={spine_tilt_deg(refined_quad):.1f}deg")
+        is_paper = data["label"] == PAPER_LABEL
+        print(f"[{'paper' if is_paper else 'spine'} {idx}] confidence={current_conf:.3f}  lying={data['lying']}  tilt={spine_tilt_deg(refined_quad):.1f}deg")
         
-        # 투시변환 크기 및 매핑 계산
+        # 투시변환 크기 및 매핑 계산 (종이면은 사각형 추정 없이 마스크의 최소 외접 사각형을 그대로 편다)
         base_w, base_h = quad_size(refined_quad)
         longest = max(base_w, base_h)
         if longest > MAX_WARP_SIDE:                    # 비율을 유지한 채 함께 축소
@@ -510,45 +997,50 @@ def process_bookshelf_perspective_pipeline(image: Image.Image, conf_threshold: f
         #masked_image = Image.composite(image, black_bg, mask)
         
         cropped_book = Image.fromarray(cv2.cvtColor(warped_spine, cv2.COLOR_BGR2RGB)) #masked_image.crop((x1, y1, x2, y2))
-        tensor = resnet_preprocess(cropped_book)
-        cropped_book_tensors.append(tensor)
+        if not is_paper:                               # 종이면은 식별 대상이 아니므로 특징을 뽑지 않는다
+            cropped_book_tensors.append(resnet_preprocess(cropped_book))
+            tensor_owner.append(idx)
         
         # ----------------------------------------------------------------------
         # 완벽 원복된 오리지널 시각화 스크립트 (PIL Solid + 알파채널 투명도)
         # ----------------------------------------------------------------------
         color = unique_colors[idx]
         
-        # [시각화 A] 모델 검출 원본 다각형 마스크 반투명 채색 (원래 방식대로 원복)
-        draw.polygon(polygon_tuple, fill=color + (80,), outline=color, width=2)
-        
-        # [시각화 B] 투시변환의 기준 노란색 사각형
-        min_box_tuple = [(int(p[0]), int(p[1])) for p in refined_quad]
-        draw.polygon(min_box_tuple, outline=(255, 255, 0, 255), width=2)
-        
+        # [시각화 A] 정제된 마스크(같은 축선상 조각 포함) 반투명 채색. 종이면은 모델 마스크를 주황색으로 (사각형은 그리지 않음)
+        for part in data["parts"]:
+            draw.polygon([(int(p[0]), int(p[1])) for p in np.asarray(part).reshape(-1, 2)],
+                         fill=(255, 120, 0, 110) if is_paper else color + (80,),
+                         outline=(255, 120, 0, 255) if is_paper else color, width=3 if is_paper else 2)
+
+        # [시각화 B] 투시변환의 기준 노란색 사각형 (책등만)
+        if not is_paper:
+            min_box_tuple = [(int(p[0]), int(p[1])) for p in refined_quad]
+            draw.polygon(min_box_tuple, outline=(255, 255, 0, 255), width=2)
+
         # [시각화 C] 인덱스 및 Confidence 텍스트 마킹
-        text = f"[{idx}] {current_conf:.2f}" 
+        text = f"[{idx}] {current_conf:.2f}" + (" PAPER" if is_paper else "")
         draw.text((x1 + 2, y1 + 2), text, fill=(255, 255, 255, 255), font=font)
         # ----------------------------------------------------------------------
 
         output_metadata.append({
             "book_index": idx,
-            "quad": [[round(float(x), 1), round(float(y), 1)] for x, y in refined_quad],  # 좌상, 우상, 우하, 좌하
+            "label": data["label"],                      # "book-spine" 또는 "book-paper"(종이면만 보이는 책)
+            "quad": [[round(float(x), 1), round(float(y), 1)] for x, y in refined_quad],  # 좌상, 우상, 우하, 좌하 (종이면은 마스크의 최소 외접 사각형)
             "tilt_deg": round(spine_tilt_deg(refined_quad), 2),
+            "confidence": round(current_conf, 3),
+            "feature_vector": None,                      # 책등은 아래 4단계에서 채운다. 종이면은 null 로 남는다
         })
 
 
     # 바이너리 덤프
     visualized_image_bytes = encode_jpeg(visualized_image)   # 인코딩은 여기서 한 번만
 
-    if not cropped_book_tensors:
-        return [], visualized_image_bytes
+    # 🎯 4. 백본 특성 추출 (책등만)
+    if cropped_book_tensors:
+        batch_tensor = torch.stack(cropped_book_tensors).to(DEVICE)
+        with torch.no_grad():
+            features = resnet_model(batch_tensor)
+        for k, idx in enumerate(tensor_owner):
+            output_metadata[idx]["feature_vector"] = features[k].tolist()
 
-    # 🎯 4. 백본 특성 추출
-    batch_tensor = torch.stack(cropped_book_tensors).to(DEVICE)
-    with torch.no_grad():
-        features = resnet_model(batch_tensor)
-        
-    for idx in range(len(output_metadata)):
-        output_metadata[idx]["feature_vector"] = features[idx].tolist()
-        
     return output_metadata, visualized_image_bytes
