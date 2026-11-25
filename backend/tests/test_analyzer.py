@@ -142,11 +142,21 @@ class UnknownPaperBookTest(unittest.TestCase):
         self.assertEqual(classify_issues(UNKNOWN_CANDIDATE_STATUS, "normal"), [])
         self.assertEqual(classify_issues(UNKNOWN_PAPER_STATUS, "abnormal_paper"), [{"group": "physical", "label": "책등 안 보임"}])
 
-    def test_different_count_is_also_one_group(self):
+    def test_fewer_unknowns_than_unseen_books_alert(self):
+        """알 수 없는 책 1권, RFID에만 있는 책 2권 → 일부는 사진에 없으므로 묶지 않고 각각 인식 실패 알림"""
         rows = paper(seen("R1", "R2", "R3"), 2)[:2] + [seen("x", "y", "R4")[2]]
         result = status(judge_shelf(rows, {"R1", "R2", "R3", "R4"}, master(4)))
+        for reg_no in ("R2", "R3"):
+            self.assertEqual(result[reg_no], "인식 실패 (육안 확인 필요)")
+            self.assertEqual(classify_issues(result[reg_no], "normal"), [{"group": "check", "label": "인식 실패"}])
+
+    def test_more_unknowns_than_unseen_books_group(self):
+        """알 수 없는 책 3권(책등 안 보임 2 + 미확인 1), RFID에만 있는 책 2권 → 둘 다 후보"""
+        rows = paper(paper(seen("x", "R1", "R2", "R3", "R4", "R5"), 3), 5)
+        rows[0].update(reg_no="UNKNOWN", confidence_score=0.2)
+        result = status(judge_shelf(rows, {"R1", "R2", "R3", "R4", "R5"}, master(5)))
         self.assertEqual(result["R2"], UNKNOWN_CANDIDATE_STATUS)
-        self.assertEqual(result["R3"], UNKNOWN_CANDIDATE_STATUS)
+        self.assertEqual(result["R4"], UNKNOWN_CANDIDATE_STATUS)
 
     def test_without_unknown_book_stays_recognition_failure(self):
         result = status(judge_shelf(seen("R1"), {"R1", "R2"}, master(2)))

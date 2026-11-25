@@ -350,8 +350,9 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
     - rfid_received: False면 RFID 없이 영상으로만 판정합니다. (읽지 못한 것이 아니라 받지 못한 것이므로 누락으로 보지 않음)
     - 인식된 책(vision row)마다 결과 1건 + Vision에 없는 책마다 결과 1건을 반환합니다.
       Vision 결과는 current_order = sequence_order, Vision에 없는 책은 current_order = -1.
-    - 어떤 책인지 알 수 없는 인식(책등 안 보임, 미확인 도서)이 있으면 'RFID에만 있는 책'은 후보로 한 번에 안내하므로
-      인식 실패 대신 '위치 확인 필요'로 둡니다. (어떤 책인지 확정하지는 않음)
+    - 어떤 책인지 알 수 없는 인식(책등 안 보임, 미확인 도서) 수가 'RFID에만 있는 책' 수 이상일 때만 그 책들을 후보로
+      한 번에 안내하므로 '위치 확인 필요'로 둡니다. (어떤 책인지 확정하지는 않음)
+      알 수 없는 인식이 더 적으면 일부는 사진에 없는 책이므로 후보로 묶지 않고 각각 '인식 실패'로 둡니다.
     """
     results = []
 
@@ -406,6 +407,12 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
         orders_with_copies([reg_no for _, reg_no in placed], expected_order_map, master_data))
     misplaced = {reg_no for i, (_, reg_no) in enumerate(placed) if i not in in_place_idx}
 
+    # RFID에는 있지만 사진에서 확정하지 못한 이 층 비치중 도서 수. 어떤 책인지 알 수 없는 인식 수가 이보다 적으면
+    # 후보로 묶지 않고 각각 '인식 실패' 알림을 남깁니다. (적어도 일부는 사진에 없는 책이므로 알림이 빠지면 안 됨)
+    unseen_rfid = sum(1 for reg_no, info in master_data.items()
+                      if info['on_shelf'] and reg_no in rfid_reg_nos and reg_no not in identified)
+    group_as_candidates = 0 < unseen_rfid <= unknown_count
+
     # [4] 도서별 논리적 상태 판정
     for reg_no in set(identified) | rfid_reg_nos | set(master_data):
         in_master = reg_no in master_data
@@ -431,7 +438,7 @@ def judge_shelf(vision_rows: List[dict], rfid_reg_nos: Set[str], master_data: Di
                 logical_status = "RFID 미인식 (태그 점검 필요)"
         elif in_rfid:
             # RFID로는 서가에 있는 것이 확인되지만 영상에서 찾지 못한 경우 → 분실이 아니라 인식 실패
-            logical_status = UNKNOWN_CANDIDATE_STATUS if unknown_count > 0 else "인식 실패 (육안 확인 필요)"
+            logical_status = UNKNOWN_CANDIDATE_STATUS if group_as_candidates else "인식 실패 (육안 확인 필요)"
         elif not rfid_received:
             logical_status = "인식 실패 (RFID 미수신, 육안 확인 필요)"
         else:
