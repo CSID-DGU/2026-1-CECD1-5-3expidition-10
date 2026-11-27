@@ -12,7 +12,7 @@ from app.config import DEVICE, OUTPUT_DIR
 yolo_model = load_yolo_model()       # 책등(book-spine)과 종이면(book-paper)을 함께 검출하는 2클래스 모델
 resnet_model = load_resnet_model()
 
-TARGET_SIZE = 1280   # YOLO 학습 해상도 (1280x1280)
+TARGET_SIZE = 1440   # YOLO 학습 해상도 (1280x1280)
 JPEG_QUALITY = 85
 MAX_WARP_SIDE = 2048    # 투시변환 결과의 긴 변 상한
 BOX_NMS_IOU = 0.95      # YOLO 내부 축정렬 박스 NMS. 기울어진 책등은 길이 350·폭 18px 가 16도만 기울어도 박스 폭이 110px 를 넘어

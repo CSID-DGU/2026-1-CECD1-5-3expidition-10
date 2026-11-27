@@ -35,7 +35,7 @@
 ```
 CECD/
 ├── app/                      # Vision AI 파트: 탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
-├── model/                    #   YOLO 가중치 (현재 사용: yolo26l_1280_v9_last.pt, app/models.py 참고)
+├── model/                    #   YOLO 가중치 (현재 사용: yolo26l_1280_v14_last.pt, app/models.py 참고)
 ├── dataset/                  #   시나리오별 테스트 이미지 (normal/, abnormal_*/) — 서버는 DB에 저장된 층별 기준 이미지를 사용
 │   └── test/                 #   MakeResult.py를 직접 실행할 때의 입력 이미지 (git 제외, 서버는 건드리지 않음)
 ├── test/                     #   MakeResult.py 직접 실행용 테스트 사진 묶음 (dataset/의 사진과 동일)
@@ -77,7 +77,7 @@ pip install -r requirements.txt
 > ⚠️ **백엔드 서버와 AI 분석은 같은 Python 환경을 써야 합니다.** 서버는 자신을 실행한 Python으로 AI 작업 프로세스(`backend/ai_worker.py` → `MakeResult.py`)를 띄우기 때문에, AI 패키지(ultralytics, torch)가 없는 가상환경으로 서버를 띄우면 분석 단계에서 실패합니다.
 
 ### 2. AI 모델 파일
-`model/yolo26l_1280_v9_last.pt`가 있어야 합니다(`app/models.py`가 가리키는 파일). 책등(`book-spine`)과 종이면(`book-paper`)을 함께 검출하는 2클래스 모델입니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 코드를 새로 받은 뒤에는 `git lfs pull`로 모델 파일을 받아 주세요. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
+`model/yolo26l_1280_v14_last.pt`가 있어야 합니다(`app/models.py`가 가리키는 파일). 책등(`book-spine`)과 종이면(`book-paper`)을 함께 검출하는 2클래스 모델입니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 코드를 새로 받은 뒤에는 `git lfs pull`로 모델 파일을 받아 주세요. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
 
 ### 3. 데이터베이스 (MySQL 8.0, Docker)
 ```bash
@@ -167,7 +167,7 @@ cp -r LIB001 backend/patrol_inbox/            # Windows PowerShell: Copy-Item -R
 | A구역 3번 책꽂이 3층 | `LIB001/A/A-03/A-03-3.jpg` | 14권 | |
 | B구역 1번 책꽂이 2층 | `LIB001/B/B-01/B-01-2.jpg` | 21권 | 1번 「색과 빛, 꿈을 담다」는 왼쪽 끝에 비스듬히 놓여 책등 아래쪽만 화면 구석에 찍혀 있음 |
 
-> 현재 모델(`yolo26l_1280_v9_last`) 기준 검출 권수는 네 층 모두 도서 목록과 같습니다(13 · 31 · 14 · 21권).
+> 현재 모델(`yolo26l_1280_v14_last`) 기준 검출 권수는 네 층 모두 도서 목록과 같습니다(13 · 31 · 14 · 21권).
 
 > 이 사진들은 각 층의 정상 기준 사진과 같은 사진이라, "정리된 서가에서 알림이 나오지 않는지"를 확인하는 용도입니다. 오배열 · 누락 같은 이상 탐지는 기준과 다르게 찍은 사진으로 확인해야 합니다.
 
