@@ -6,7 +6,7 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 import numpy as np
 from ultralytics import YOLO
-from app.config import DEVICE
+from app.config import DEVICE, BASE_DIR
 from PIL import Image
 
 SPINE_H, SPINE_W = 512, 128   # 세로형 고정 캔버스 (필요하면 조정)
@@ -19,7 +19,10 @@ _to_tensor = transforms.Compose([
 
 # [1] 책 탐지용 YOLO 모델
 def load_yolo_model():
-    model = YOLO("model/yolo26l_1280_v3.pt")
+    # v14: v9 last 에서 다시 미세조정한 책등(book-spine)+종이면(book-paper) 2클래스 모델 (직접 촬영 120장 + CNU + P2,
+    # 회전 증강 60도·copy_paste 0.3, 2026-11-18 학습의 last.pt). v9 보다 얇은 책·종이면을 조금 더 찾고,
+    # 입력 1280·1440 모두에서 판정 점수가 유지됐다. 이전 모델은 model/yolo26l_1280_v9_last.pt.
+    model = YOLO(str(BASE_DIR / "model/yolo26l_1280_v14_last.pt"))
     return model
 
 # [2] 특징 추출용 ResNet18 모델

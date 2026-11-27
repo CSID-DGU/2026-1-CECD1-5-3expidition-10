@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리 · 서고 모니터링</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="/assets/common.js?v=20261116b"></script>
+    <script src="/assets/app.js?v=20261119c"></script>
+</head>
+<!-- 관리 화면: 층별 관리 칸(칸마다 기준 사진 상태), 선택한 층의 기준 사진 · 순찰 이력, 구조 편집(관리자),
+     도서관 전체(수신함 · 기준 사진 일괄 갱신 · 배가 위치 자동 배정 · 지도), 사서 계정 · 내 비밀번호.
+     알림 처리는 층 화면(/level)에서 합니다. -->
+<body class="bg-slate-50 text-slate-800 min-h-screen">
+    <div id="top-bar"></div>
+
+    <main class="max-w-6xl mx-auto px-4 md:px-8 py-6 md:py-8">
+        <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
+            <div>
+                <div id="subtitle" class="text-sm text-slate-500"></div>
+                <h1 class="text-2xl md:text-3xl font-bold text-slate-900 mt-1">관리</h1>
+            </div>
+            <div class="flex gap-2">
+                <button id="account-btn" onclick="openAccountModal()" class="hidden bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm px-3.5 py-2.5 rounded-xl items-center gap-1.5">
+                    <i class="fa-solid fa-users"></i> 사서 계정</button>
+                <button onclick="openMyPassword()" class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-sm px-3.5 py-2.5 rounded-xl flex items-center gap-1.5">
+                    <i class="fa-solid fa-key"></i> 내 비밀번호</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-start">
+            <!-- 층별 관리: 첫 화면과 같은 책꽂이 모양, 칸마다 기준 사진 상태 -->
+            <section class="lg:col-span-8 min-w-0 bg-white rounded-2xl border border-slate-200 p-4 md:p-5">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">
+                    <h2 class="text-lg md:text-xl font-extrabold mr-1">층별 관리</h2>
+                    <div id="zone-tabs" class="flex flex-wrap gap-1.5 text-sm font-bold"></div>
+                    <button id="edit-btn" onclick="toggleEditMode()" class="hidden ml-auto text-sm font-semibold px-3 py-1.5 rounded-lg border items-center gap-1.5">
+                        <i class="fa-solid fa-pen-ruler"></i> <span>구조 편집</span></button>
+                </div>
+                <div id="edit-banner" class="hidden mb-4 text-xs md:text-sm text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl px-3.5 py-2.5">
+                    <b>구조 편집 중</b> · + 버튼으로 구역 · 책꽂이 · 층을 추가하고, 연필을 눌러 이름을 고치거나 지웁니다. 순찰 기록 · 도서가 있는 층은 지울 수 없습니다.
+                    <span id="zone-edit"></span>
+                </div>
+                <div id="board" class="overflow-x-auto pb-1"></div>
+                <div class="flex flex-wrap justify-between gap-2 mt-4 text-xs md:text-sm text-slate-500">
+                    <span id="board-hint"></span>
+                    <span id="board-legend" class="flex flex-wrap gap-x-3 gap-y-1"></span>
+                </div>
+            </section>
+
+            <!-- 선택한 층 -->
+            <aside id="panel" class="lg:col-span-4 lg:sticky lg:top-20 bg-white rounded-2xl border-2 border-indigo-100 p-4 md:p-5"></aside>
+        </div>
+
+        <h2 class="text-lg font-extrabold mt-8 mb-3">도서관 전체</h2>
+        <div id="library-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col">
+                <div class="font-bold flex items-center gap-2"><i class="fa-solid fa-inbox text-indigo-500"></i> 순찰 사진 수신함</div>
+                <div id="inbox-text" class="text-sm text-slate-500 mt-2 leading-relaxed"></div>
+                <div id="inbox-progress" class="text-xs text-slate-500 mt-2"></div>
+                <button id="analyze-btn" onclick="startBatchAnalysis()" disabled
+                        class="mt-auto pt-2.5 pb-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl flex items-center justify-center gap-1.5 disabled:bg-slate-300 disabled:cursor-not-allowed">
+                    <i id="analyze-icon" class="fa-solid fa-play"></i> <span id="analyze-text">지금 분석</span></button>
+            </div>
+            <div data-admin class="hidden bg-white rounded-2xl border border-slate-200 p-4 flex-col">
+                <div class="font-bold flex items-center gap-2"><i class="fa-solid fa-images text-sky-500"></i> 기준 사진 일괄 갱신</div>
+                <div id="bulk-text" class="text-sm text-slate-500 mt-2 mb-3 leading-relaxed"></div>
+                <button id="bulk-btn" onclick="bulkUpdateReferences()" class="mt-auto py-2.5 rounded-xl border border-sky-200 text-sky-700 font-semibold hover:bg-sky-50 disabled:opacity-40 disabled:cursor-not-allowed"></button>
+            </div>
+            <div data-admin class="hidden bg-white rounded-2xl border border-slate-200 p-4 flex-col">
+                <div class="font-bold flex items-center gap-2"><i class="fa-solid fa-arrow-down-1-9 text-indigo-500"></i> 배가 위치 자동 배정</div>
+                <div class="text-sm text-slate-500 mt-2 mb-3 leading-relaxed">청구기호 순으로 책을 층에 나눠 배정합니다.</div>
+                <button onclick="openPlacementModal()" class="mt-auto py-2.5 rounded-xl border border-indigo-200 text-indigo-700 font-semibold hover:bg-indigo-50">배정 미리 보기</button>
+            </div>
+            <div class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col">
+                <div class="font-bold flex items-center gap-2"><i class="fa-solid fa-map text-emerald-500"></i> 도서관 지도</div>
+                <img id="map-img" alt="도서관 전체 지도" class="hidden mt-3 w-full max-h-40 object-contain rounded-lg border border-slate-100 cursor-zoom-in"
+                     onload="onMapLoaded(true)" onerror="onMapLoaded(false)">
+                <div id="map-empty" class="text-sm text-slate-400 text-center py-5"><i class="fa-regular fa-map text-2xl block mb-1"></i>등록된 지도가 없습니다.</div>
+                <div data-admin class="hidden mt-auto pt-3 gap-2">
+                    <button onclick="document.getElementById('map-file').click()" id="map-upload-btn" class="flex-1 py-2 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50">지도 올리기</button>
+                    <button onclick="deleteLibraryMap()" id="map-delete-btn" class="hidden flex-1 py-2 rounded-xl border border-rose-200 text-rose-600 text-sm font-semibold hover:bg-rose-50">지우기</button>
+                </div>
+                <input id="map-file" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" onchange="uploadLibraryMap(this)">
+            </div>
+        </div>
+    </main>
+
+    <input id="normal-file" type="file" accept="image/png,image/jpeg,image/webp" class="hidden" onchange="uploadNormalImage(this)">
+
+    <!-- 구조 편집 · 비밀번호 입력 창 (openFormModal) -->
+    <div id="form-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closeFormModal()">
+        <form id="form-modal-form" class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-5 flex flex-col gap-3" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between">
+                <h3 id="form-modal-title" class="font-bold text-slate-700"></h3>
+                <button type="button" onclick="closeFormModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="form-modal-info" class="text-xs text-slate-500 leading-relaxed"></div>
+            <div id="form-modal-fields" class="flex flex-col gap-3"></div>
+            <div id="form-modal-error" class="hidden text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2"></div>
+            <div class="flex items-center gap-2 pt-1">
+                <div id="form-modal-danger" class="mr-auto"></div>
+                <button type="button" onclick="closeFormModal()" class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">취소</button>
+                <button type="submit" id="form-modal-submit" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">저장</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 배가 위치 자동 배정 (관리자) -->
+    <div id="placement-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closePlacementModal()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-5 flex flex-col gap-3 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-arrow-down-1-9 text-indigo-500"></i> 배가 위치 자동 배정</h3>
+                <button type="button" onclick="closePlacementModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">청구기호순 도서 목록을 기준 사진의 권수만큼 잘라 층에 배정합니다. 층마다 <b>첫 책 · 마지막 책</b>이 기준 사진과 맞는지 보고, 틀리면 권수를 고친 뒤 다시 계산하세요. 한 층이 틀리면 뒤 층이 모두 밀립니다.</p>
+            <label class="text-xs font-semibold text-slate-600 flex items-center gap-2">책꽂이 안의 배가 순서
+                <select id="placement-order" onchange="refreshPlacement()" class="font-normal text-sm border border-slate-200 rounded-lg px-2 py-1">
+                    <option value="top">위층부터</option>
+                    <option value="bottom">아래층부터</option>
+                </select>
+            </label>
+            <div id="placement-summary" class="text-xs text-slate-600"></div>
+            <div id="placement-floors" class="flex flex-col gap-2"></div>
+            <div class="flex items-center justify-end gap-2 pt-1">
+                <button type="button" id="placement-undo" onclick="undoPlacement()" class="hidden mr-auto text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">이전 배정으로 되돌리기</button>
+                <button type="button" onclick="refreshPlacement()" class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">다시 계산</button>
+                <button type="button" id="placement-apply" onclick="applyPlacement()" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">이 배정으로 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 사서 계정 관리 (관리자) -->
+    <div id="account-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm px-4" onclick="closeAccountModal()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-5 flex flex-col gap-4 max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between">
+                <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="fa-solid fa-users text-indigo-500"></i> 사서 계정 <span id="account-library" class="text-sm font-normal text-slate-400"></span></h3>
+                <button type="button" onclick="closeAccountModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="border border-slate-200 rounded-xl overflow-x-auto">
+                <table class="w-full text-sm whitespace-nowrap">
+                    <thead class="bg-slate-50 text-xs text-slate-500">
+                        <tr><th class="text-left px-3 py-2">이름</th><th class="text-left px-3 py-2">아이디</th><th class="hidden sm:table-cell text-left px-3 py-2">권한</th>
+                            <th class="hidden sm:table-cell text-left px-3 py-2">마지막 로그인</th><th class="px-3 py-2"></th></tr>
+                    </thead>
+                    <tbody id="account-rows"></tbody>
+                </table>
+            </div>
+            <form id="account-form" class="border border-indigo-100 bg-indigo-50/40 rounded-xl p-4 flex flex-col gap-3">
+                <div class="text-sm font-bold text-slate-700"><i class="fa-solid fa-user-plus text-indigo-500"></i> 일반 사서 계정 추가</div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-semibold text-slate-600">
+                    <label class="flex flex-col gap-1">이름 <input name="display_name" required maxlength="50" placeholder="예: 홍길동"
+                        class="font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"></label>
+                    <label class="flex flex-col gap-1">아이디 <input name="username" required pattern="[A-Za-z0-9_.\-]{3,30}" placeholder="영문 · 숫자 3~30자" autocomplete="off"
+                        class="font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"></label>
+                    <label class="flex flex-col gap-1">비밀번호 <input name="password" type="password" required minlength="8" placeholder="8자 이상" autocomplete="new-password"
+                        class="font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"></label>
+                    <label class="flex flex-col gap-1">비밀번호 확인 <input name="password2" type="password" required minlength="8" autocomplete="new-password"
+                        class="font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300"></label>
+                </div>
+                <div id="account-message" class="hidden text-xs rounded-lg px-3 py-2"></div>
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-[11px] text-slate-400">추가한 아이디 · 비밀번호를 사서에게 전달하세요. 관리자 계정은 manage_users.py로 관리합니다.</span>
+                    <button type="submit" class="shrink-0 text-sm px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold disabled:opacity-50">추가</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const REFRESH_MS = 20000;
+        const POLL_MS = 3000;
+        let ME = { is_admin: false };
+        let tree = [];
+        let shelfIndex = {};          // shelf_id → 층 (zone · bookcase 포함)
+        let activeZoneId = null;
+        let selectedShelfId = null;
+        let panelTab = "normal";      // "normal" | "latest"
+        let editMode = false;
+        let normalBust = "";          // 기준 사진을 바꾼 직후 브라우저 캐시를 피하려고 붙이는 값
+        let patrolRunning = false;
+        let patrolProgress = -1;
+        let patrolTimer = null;
+        let batchFailureText = "";
+
+        // 칸 위쪽 줄: 순찰 상태 (판정은 서버 main.level_status). 기준 사진이 없는 층은 상태 없이 '기준 없음'만
+        const CELL = {
+            pending_action: { cls: "bg-rose-50 border-2 border-rose-400", tag: "text-rose-600", icon: "fa-circle-exclamation", text: "조치 필요" },
+            retake:         { cls: "bg-orange-50 border-2 border-orange-400", tag: "text-orange-600", icon: "fa-camera-rotate", text: "다시 찍기" },
+            pending_check:  { cls: "bg-yellow-50 border-[1.5px] border-yellow-300", tag: "text-yellow-700", icon: "fa-eye", text: "확인만" },
+            ok:             { cls: "bg-emerald-50", tag: "text-emerald-600", icon: "fa-check", text: "정상" },
+            unpatrolled:    { cls: "bg-[repeating-linear-gradient(135deg,#f1f5f9_0_8px,#e9eef4_8px_16px)]", tag: "text-slate-400 font-medium", text: "순찰 사진 없음" },
+            no_books:       { cls: "bg-slate-50 border border-slate-100", tag: "text-slate-400 font-medium", text: "도서 없음" },
+            no_reference:   { cls: "bg-violet-50 border-[1.5px] border-dashed border-violet-300", tag: "text-violet-700", icon: "fa-image", text: "기준 없음" },
+        };
+
+        function cellHtml(level) {
+            const base = "relative w-full h-20 md:h-[88px] rounded-xl p-2 flex flex-col justify-between text-left transition hover:ring-2";
+            const selected = !editMode && level.shelf_id === selectedShelfId ? " ring-[3px] ring-indigo-400 ring-offset-1" : "";
+            const hover = editMode ? " hover:ring-indigo-400" : " hover:ring-indigo-300";
+            if (!level.has_normal_image) {
+                const st = CELL.no_reference;
+                return `<button data-shelf="${escapeHtml(level.shelf_id)}" class="${base} ${st.cls}${hover}${selected}" title="${escapeHtml(level.location_label)} · 기준 사진 없음">
+                    <span class="text-xs font-extrabold ${st.tag} flex items-center gap-1 whitespace-nowrap"><i class="fa-solid ${st.icon}"></i> 기준 없음</span>
+                    ${ME.is_admin && !editMode ? `<span class="text-[11px] font-bold text-indigo-600">+ 등록하기</span>` : "<span></span>"}</button>`;
+            }
+            const st = CELL[level.status] || CELL.no_books;
+            const ref = level.reference_update.eligible
+                ? `<span class="text-[11px] font-semibold text-sky-600 flex items-center gap-1 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span>갱신 가능</span>`
+                : `<span class="text-[11px] text-slate-400 flex items-center gap-1 whitespace-nowrap"><i class="fa-regular fa-image"></i>기준 있음</span>`;
+            return `<button data-shelf="${escapeHtml(level.shelf_id)}" class="${base} ${st.cls}${hover}${selected}" title="${escapeHtml(level.location_label)} · ${st.text}">
+                <span class="text-xs font-extrabold leading-tight ${st.tag} flex items-center gap-1 ${st.icon ? "whitespace-nowrap" : "break-keep"}">${st.icon ? `<i class="fa-solid ${st.icon}"></i> ` : ""}${st.text}</span>${ref}</button>`;
+        }
+
+        function renderTabs() {
+            const tabs = document.getElementById("zone-tabs");
+            tabs.innerHTML = tree.map(zone => {
+                const active = zone.zone_id === activeZoneId;
+                return `<button data-zone="${escapeHtml(zone.zone_id)}" title="${escapeHtml([zone.zone_name, zone.location].filter(Boolean).join(" · "))}"
+                    class="px-3.5 py-1.5 rounded-lg ${active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}">${escapeHtml(zone.zone_code)}구역</button>`;
+            }).join("") + (editMode ? `<button onclick="openAddZone()" class="px-3 py-1.5 rounded-lg border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50">+ 구역</button>` : "");
+            tabs.querySelectorAll("[data-zone]").forEach(b => b.addEventListener("click", () => { activeZoneId = b.dataset.zone; renderBoard(); }));
+
+            const btn = document.getElementById("edit-btn");
+            btn.className = "ml-auto text-sm font-semibold px-3 py-1.5 rounded-lg border items-center gap-1.5 "
+                + (ME.is_admin ? "flex " : "hidden ")
+                + (editMode ? "bg-indigo-600 border-indigo-600 text-white hover:bg-indigo-700" : "border-slate-200 text-slate-600 hover:bg-slate-50");
+            btn.querySelector("span").textContent = editMode ? "편집 마치기" : "구조 편집";
+            document.getElementById("edit-banner").classList.toggle("hidden", !editMode);
+        }
+
+        function renderBoard() {
+            if (!tree.find(z => z.zone_id === activeZoneId)) activeZoneId = tree[0]?.zone_id ?? null;
+            renderTabs();
+            const board = document.getElementById("board");
+            const zone = tree.find(z => z.zone_id === activeZoneId);
+            document.getElementById("zone-edit").innerHTML = zone
+                ? ` <button onclick="openEditZone()" class="ml-1 font-semibold text-indigo-600 hover:underline"><i class="fa-solid fa-pen"></i> ${escapeHtml(zone.zone_code)}구역 이름 수정 · 삭제</button>` : "";
+            if (!zone) {
+                board.innerHTML = ME.is_admin
+                    ? `<div class="text-center py-10 text-sm text-slate-500 border-2 border-dashed border-slate-200 rounded-xl">
+                           <i class="fa-solid fa-building-columns text-2xl text-slate-300 mb-2 block"></i>아직 등록된 구역이 없습니다.<br>
+                           <span class="text-xs text-slate-400">구역 → 책꽂이 → 층 순서로 도서관 구조를 만들어 주세요.</span>
+                           <div class="mt-3"><button onclick="openAddZone()" class="text-sm bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-1.5 rounded-lg"><i class="fa-solid fa-plus"></i> 첫 구역 추가</button></div></div>`
+                    : `<div class="text-sm text-slate-400 text-center py-10">관리자가 아직 도서관 구조를 등록하지 않았습니다.</div>`;
+                document.getElementById("board-hint").textContent = "";
+                document.getElementById("board-legend").innerHTML = "";
+                return;
+            }
+            const top = Math.max(1, ...zone.bookcases.flatMap(b => b.levels.map(l => l.level)));
+            const rowH = "h-20 md:h-[88px]";
+            const addRow = editMode ? `<div class="h-8"></div>` : "";
+            const axis = Array.from({ length: top }, (_, i) =>
+                `<div class="${rowH} flex items-center text-xs md:text-sm font-bold text-slate-400">${top - i}층</div>`).join("");
+            const cases = zone.bookcases.map(b => {
+                const byLevel = Object.fromEntries(b.levels.map(l => [l.level, l]));
+                const cells = Array.from({ length: top }, (_, i) => {
+                    const level = byLevel[top - i];
+                    return level ? cellHtml(level) : `<div class="${rowH}"></div>`;
+                }).join("");
+                const edit = editMode ? `<button data-edit-bookcase="${escapeHtml(b.bookcase_code)}" title="책꽂이 이름 수정 · 삭제" class="ml-auto text-slate-400 hover:text-indigo-600"><i class="fa-solid fa-pen text-xs"></i></button>` : "";
+                const add = editMode ? `<button data-add-level="${escapeHtml(b.bookcase_code)}" title="${b.bookcase_no}번 책꽂이 맨 위에 ${b.levels.length + 1}층 추가"
+                    class="h-8 rounded-lg border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold">+ 층 추가</button>` : "";
+                return `<div class="bg-slate-50 border border-slate-200 rounded-2xl p-1.5 md:p-2 min-w-[104px] flex-1">
+                    <div class="h-7 flex items-center gap-1 px-1 mb-1.5 text-xs md:text-sm whitespace-nowrap" title="${escapeHtml(b.bookcase_name || "")}">
+                        <span class="text-slate-400 font-semibold">${escapeHtml(b.bookcase_code || "")}</span><b class="text-slate-700">${b.bookcase_no}번</b>${edit}</div>
+                    <div class="flex flex-col gap-1.5 md:gap-2">${add}${cells}</div></div>`;
+            }).join("");
+            const addCase = editMode ? `<button onclick="openAddBookcase(tree.find(z => z.zone_id === activeZoneId))"
+                class="min-w-[48px] rounded-2xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:bg-indigo-50 text-xs font-bold">+<br>책꽂이</button>` : "";
+            board.innerHTML = zone.bookcases.length || editMode
+                ? `<div class="flex gap-2 md:gap-2.5 min-w-max lg:min-w-0">
+                       <div class="flex flex-col gap-1.5 md:gap-2 pt-[38px] md:pt-[44px] w-8 md:w-9 shrink-0">${addRow}${axis}</div>
+                       <div class="flex gap-2 md:gap-2.5 flex-1 min-w-0">${cases}${addCase}</div></div>`
+                : `<div class="text-sm text-slate-400 text-center py-10">이 구역에는 아직 책꽂이가 없습니다.</div>`;
+
+            board.querySelectorAll("[data-shelf]").forEach(cell => cell.addEventListener("click", () => {
+                const level = shelfIndex[cell.dataset.shelf];
+                if (editMode) openEditLevel(level.bookcase, level);
+                else selectShelf(level.shelf_id);
+            }));
+            board.querySelectorAll("[data-edit-bookcase]").forEach(btn => btn.addEventListener("click", () =>
+                openEditBookcase(zone, zone.bookcases.find(b => b.bookcase_code === btn.dataset.editBookcase))));
+            board.querySelectorAll("[data-add-level]").forEach(btn => btn.addEventListener("click", () =>
+                addLevel(zone.bookcases.find(b => b.bookcase_code === btn.dataset.addLevel))));
+
+            document.getElementById("board-hint").textContent = editMode
+                ? "칸을 누르면 그 층의 이름을 고치거나 지울 수 있어요"
+                : `칸을 누르면 그 층의 기준 사진과 순찰 이력을 볼 수 있어요 · 맨 위가 ${top}층`;
+            document.getElementById("board-legend").innerHTML =
+                `<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span>최근 순찰 사진으로 기준 갱신 가능</span>`;
+        }
+
+        // ===================== 선택한 층 =====================
+        function selectShelf(shelfId) {
+            if (shelfId !== selectedShelfId) panelTab = "normal";
+            selectedShelfId = shelfId;
+            renderBoard();
+            renderPanel();
+        }
+
+        function panelButton(label, icon, onClick, kind = "") {
+            const cls = { danger: "border-rose-200 text-rose-600 hover:bg-rose-50", primary: "border-sky-200 text-sky-700 hover:bg-sky-50" }[kind]
+                || "border-slate-200 text-slate-700 hover:bg-slate-50";
+            const btn = document.createElement("button");
+            btn.className = `py-2 px-2 rounded-xl border text-[13px] font-semibold whitespace-nowrap flex items-center justify-center gap-1.5 ${cls}`;
+            btn.innerHTML = `<i class="fa-solid ${icon}"></i> ${label}`;
+            btn.addEventListener("click", onClick);
+            return btn;
+        }
+
+        function renderPanel() {
+            const panel = document.getElementById("panel");
+            const level = shelfIndex[selectedShelfId];
+            if (!level) {
+                panel.innerHTML = `<div class="text-center text-sm text-slate-400 py-12"><i class="fa-solid fa-hand-pointer text-3xl block mb-2"></i>
+                    왼쪽에서 층을 누르면<br>그 층의 기준 사진과 순찰 이력이 나와요.</div>`;
+                return;
+            }
+            const latest = level.latest_session;
+            const desc = [level.zone.zone_name, level.shelf_name || level.bookcase.bookcase_name, `도서 ${level.book_count}권`].filter(Boolean).map(escapeHtml).join(" · ");
+            const tab = (key, label) => `<button data-tab="${key}" class="px-3 py-1.5 rounded-lg ${panelTab === key ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-700"}">${label}</button>`;
+            panel.innerHTML = `
+                <div class="text-xs text-slate-400">선택한 층</div>
+                <div class="flex items-start justify-between gap-2 mt-0.5">
+                    <h3 class="text-lg md:text-xl font-extrabold text-slate-900">${escapeHtml(level.zone.zone_code)}구역 ${level.bookcase.bookcase_no}번 책꽂이 ${level.level}층</h3>
+                    <a href="${levelUrl(level)}" class="shrink-0 mt-1 text-sm font-bold text-indigo-600 hover:underline whitespace-nowrap">층 화면 <i class="fa-solid fa-arrow-right"></i></a>
+                </div>
+                <div class="text-xs text-slate-500 mt-0.5">${desc}</div>
+                <div class="inline-flex bg-slate-100 rounded-xl p-1 mt-3 text-sm font-semibold">${tab("normal", "정상 기준 사진")}${tab("latest", "최근 순찰")}</div>
+                <div id="panel-photo" class="mt-3"></div>
+                <div id="panel-actions" class="grid grid-cols-2 gap-2 mt-3"></div>
+                <div id="panel-notes" class="flex flex-col gap-2 mt-2"></div>
+                <h4 class="font-bold mt-5 mb-1">순찰 이력</h4>
+                <div id="panel-history" class="text-sm"><div class="text-slate-400 py-3">불러오는 중...</div></div>`;
+            panel.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { panelTab = b.dataset.tab; renderPanel(); }));
+
+            const photo = panel.querySelector("#panel-photo");
+            const empty = (icon, html) => `<div class="aspect-[4/3] rounded-xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-center text-sm text-slate-400 px-4">
+                <i class="fa-solid ${icon} text-3xl mb-2"></i>${html}</div>`;
+            if (panelTab === "normal") {
+                if (level.has_normal_image) {
+                    const url = `${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image${normalBust}`;
+                    photo.innerHTML = `<img src="${url}" alt="" class="w-full max-h-72 object-contain bg-slate-100 rounded-xl cursor-zoom-in">
+                        <div class="text-xs text-slate-400 mt-1.5">정상 상태 기준 사진${level.normal_history_count ? ` · 이전 사진 ${level.normal_history_count}장 보관` : ""}</div>`;
+                    photo.querySelector("img").onclick = () => openLightbox(url, level.location_label, "정상 상태 기준 사진");
+                } else {
+                    photo.innerHTML = empty("fa-image", `<b class="text-violet-700">기준 사진이 없습니다</b>
+                        <span class="text-xs mt-1">${ME.is_admin ? "아래 새 사진 올리기로 등록하면 분석에 사용됩니다." : "관리자에게 기준 사진 등록을 요청하세요."}</span>`);
+                }
+            } else if (latest && latest.image_path) {
+                const url = spineUrl(latest.image_path);
+                photo.innerHTML = `<img src="${url}" alt="" class="w-full max-h-72 object-contain bg-slate-100 rounded-xl cursor-zoom-in">
+                    <div class="text-xs text-slate-400 mt-1.5">${formatTime(latest.scan_time)} 순찰 사진</div>`;
+                photo.querySelector("img").onclick = () => openLightbox(url, level.location_label, `${formatTime(latest.scan_time)} 순찰 사진`);
+            } else {
+                photo.innerHTML = empty("fa-route", latest ? "이 순찰에는 원본 사진이 없습니다." : "아직 순찰 기록이 없습니다.");
+            }
+
+            const actions = panel.querySelector("#panel-actions");
+            const notes = panel.querySelector("#panel-notes");
+            if (ME.is_admin) {
+                actions.appendChild(panelButton(level.has_normal_image ? "새 사진 올리기" : "기준 사진 올리기", "fa-upload", () => document.getElementById("normal-file").click()));
+                if (latest && latest.image_path) actions.appendChild(panelButton("최근 순찰로 바꾸기", "fa-camera", setNormalFromLatest, "primary"));
+                if (level.normal_history_count > 0) actions.appendChild(panelButton("이전 사진으로", "fa-rotate-left", restoreNormalImage));
+                if (level.has_normal_image) actions.appendChild(panelButton("지우기", "fa-trash", deleteNormalImage, "danger"));
+                const ref = level.reference_update;
+                if (level.has_normal_image || ref.eligible) {
+                    notes.innerHTML = `<div class="text-[11px] ${ref.eligible ? "text-sky-700" : "text-slate-400"}">${ref.eligible
+                        ? `<i class="fa-solid fa-circle-check"></i> 최근 순찰이 정상이고 미비치 도서가 없어, 최근 순찰 사진을 기준 사진으로 쓰기 좋습니다.`
+                        : `<i class="fa-solid fa-circle-info"></i> 일괄 갱신 대상 아님: ${ref.reasons.map(escapeHtml).join(" · ")}`}</div>`;
+                }
+            } else {
+                actions.classList.add("hidden");
+            }
+            if (level.reference_mismatch) {
+                const m = level.reference_mismatch;
+                notes.insertAdjacentHTML("beforeend", `<div class="p-3 rounded-xl border-l-4 border-amber-500 bg-amber-50 text-amber-800 text-xs leading-relaxed">
+                    <i class="fa-solid fa-triangle-exclamation"></i> 기준 사진의 책 ${m.detected}권과 이 층에 연결된 책 ${m.expected}권의 수가 달라, 책이 다른 도서로 판정될 수 있습니다.
+                    ${ME.is_admin ? "기준 사진을 확인하고 <b>배가 위치 자동 배정</b>을 다시 실행해 주세요." : "관리자에게 알려 주세요."}</div>`);
+            }
+            refreshHistory(level);
+        }
+
+        // 순찰 이력: 그 층의 지난 순찰. '보기'를 누르면 층 화면에서 그때 결과를 엶
+        function historyDot(s) {
+            if (!s.quality.is_reliable) return ["bg-orange-400", "다시 찍기"];
+            if (s.summary.pending_count > 0) return [s.summary.pending_action_count > 0 ? "bg-rose-500" : "bg-yellow-400", `미처리 ${s.summary.pending_count}건`];
+            if (s.summary.issue_count > 0) return ["bg-emerald-500", "모두 처리"];
+            return ["bg-emerald-500", "문제 없음"];
+        }
+
+        async function refreshHistory(level) {
+            const box = document.getElementById("panel-history");
+            let sessions;
+            try {
+                sessions = await fetchJson(`${API_BASE}/dashboard/sessions?limit=10&shelf_id=${encodeURIComponent(level.shelf_id)}`);
+            } catch (e) {
+                box.innerHTML = `<div class="text-rose-500 py-3">이력을 불러오지 못했습니다: ${escapeHtml(e.message)}</div>`;
+                return;
+            }
+            if (level.shelf_id !== selectedShelfId) return;
+            box.innerHTML = sessions.length === 0
+                ? `<div class="text-slate-400 py-3">아직 순찰 기록이 없습니다.</div>`
+                : sessions.map(s => {
+                    const [dot, text] = historyDot(s);
+                    return `<a href="${levelUrl(level)}&session_id=${encodeURIComponent(s.session_id)}" class="flex items-center gap-2.5 py-2.5 border-t border-slate-100 hover:bg-slate-50 -mx-2 px-2 rounded-lg">
+                        <span class="w-2 h-2 rounded-full ${dot}"></span><b class="text-slate-700">${formatTime(s.scan_time)}</b>
+                        <span class="text-xs text-slate-400 flex-1">${text}</span><span class="text-xs font-bold text-indigo-600">보기</span></a>`;
+                }).join("");
+        }
+
+        // ===================== 기준 사진 (관리자) =====================
+        async function sendForm(url, method, file) {
+            const form = new FormData();
+            form.append("file", file);
+            return fetchJson(url, { method, body: form });
+        }
+
+        async function afterNormalChanged() {
+            normalBust = `?v=${Date.now()}`;
+            panelTab = "normal";
+            await refreshLocations();
+        }
+
+        async function uploadNormalImage(input) {
+            const file = input.files[0];
+            input.value = "";
+            const level = shelfIndex[selectedShelfId];
+            if (!file || !level) return;
+            if (level.has_normal_image && !confirm(`${level.location_label}의 기준 사진을 새 사진으로 교체할까요?`)) return;
+            try {
+                await sendForm(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image`, "PUT", file);
+                await afterNormalChanged();
+            } catch (e) {
+                alert(`기준 사진 등록 실패: ${e.message}`);
+            }
+        }
+
+        async function setNormalFromLatest() {
+            const level = shelfIndex[selectedShelfId];
+            const latest = level && level.latest_session;
+            if (!latest) return;
+            const ref = level.reference_update;
+            const warning = ref.eligible ? "" : `\n\n주의: ${ref.reasons.join(" / ")}`;
+            if (!confirm(`${formatTime(latest.scan_time)} 순찰 사진을 ${level.location_label}의 정상 상태 기준 사진으로 지정할까요?\n서가를 정리한 직후의 사진이어야 합니다. 이전 기준 사진은 되돌릴 수 있습니다.${warning}`)) return;
+            try {
+                await sendJson(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image/from-session`, "POST", { session_id: latest.session_id });
+                await afterNormalChanged();
+            } catch (e) {
+                alert(`기준 사진 지정 실패: ${e.message}`);
+            }
+        }
+
+        async function restoreNormalImage() {
+            const level = shelfIndex[selectedShelfId];
+            if (!level || !confirm(`${level.location_label}의 기준 사진을 바로 이전 기준 사진으로 되돌릴까요?`)) return;
+            try {
+                await fetchJson(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image/restore`, { method: "POST" });
+                await afterNormalChanged();
+            } catch (e) {
+                alert(`되돌리기 실패: ${e.message}`);
+            }
+        }
+
+        async function deleteNormalImage() {
+            const level = shelfIndex[selectedShelfId];
+            if (!level || !confirm(`${level.location_label}의 기준 사진을 지울까요?\n기준 사진이 없으면 이 층은 분석할 수 없습니다. 지운 사진은 되돌릴 수 있습니다.`)) return;
+            try {
+                await fetchJson(`${API_BASE}/shelves/${encodeURIComponent(level.shelf_id)}/normal-image`, { method: "DELETE" });
+                await afterNormalChanged();
+            } catch (e) {
+                alert(`기준 사진 삭제 실패: ${e.message}`);
+            }
+        }
+
+        // 일괄 갱신: 먼저 대상 · 제외 목록을 받아 확인한 뒤 실행
+        async function bulkUpdateReferences() {
+            const url = `${API_BASE}/normal-images/update-from-latest`;
+            try {
+                const preview = await sendJson(url, "POST", { dry_run: true });
+                if (preview.targets.length === 0) {
+                    alert("기준 사진을 갱신할 수 있는 층이 없습니다.");
+                    return;
+                }
+                const targetList = preview.targets.map(t => `  · ${t.location_label}`).join("\n");
+                const skippedNote = preview.skipped.length ? `\n\n제외 ${preview.skipped.length}곳: 미비치 도서 있음 · 문제 발견 · 순찰 기록 없음 등` : "";
+                if (!confirm(`다음 ${preview.targets.length}곳의 기준 사진을 최근 순찰 사진으로 바꿀까요?\n${targetList}${skippedNote}\n\n이전 기준 사진은 층마다 되돌릴 수 있습니다.`)) return;
+                const result = await sendJson(url, "POST", { dry_run: false });
+                await afterNormalChanged();
+                alert(`${result.updated.length}곳의 기준 사진을 갱신했습니다.`);
+            } catch (e) {
+                alert(`기준 사진 일괄 갱신 실패: ${e.message}`);
+            }
+        }
+
+        function renderBulkCard() {
+            const count = Object.values(shelfIndex).filter(l => l.reference_update.eligible).length;
+            document.getElementById("bulk-text").innerHTML = count
+                ? `최근 순찰이 정상인 <b class="text-sky-700">${count}층</b>을 최근 순찰 사진으로 바꿉니다`
+                : "지금은 최근 순찰 사진으로 바꿀 수 있는 층이 없습니다";
+            const btn = document.getElementById("bulk-btn");
+            btn.disabled = count === 0;
+            btn.textContent = count ? `${count}층 갱신` : "갱신할 층 없음";
+        }
+
+        // ===================== 서가 현황 =====================
+        async function refreshLocations() {
+            try {
+                tree = await fetchJson(`${API_BASE}/locations`);
+            } catch (e) {
+                document.getElementById("board").innerHTML = `<div class="text-sm text-rose-500 py-6">서가 정보를 불러오지 못했습니다: ${escapeHtml(e.message)}</div>`;
+                return;
+            }
+            shelfIndex = Object.fromEntries(flattenLevels(tree).map(l => [l.shelf_id, l]));
+            if (selectedShelfId && !shelfIndex[selectedShelfId]) selectedShelfId = null;
+            if (!selectedShelfId) {
+                // 처음에는 지금 보는 구역의 맨 위 층을 골라 둠 (빈 패널 대신)
+                const zone = tree.find(z => z.zone_id === activeZoneId) || tree[0];
+                selectedShelfId = zone ? flattenLevels([zone])[0]?.shelf_id ?? null : null;
+            }
+            if (selectedShelfId) activeZoneId = activeZoneId || shelfIndex[selectedShelfId].zone.zone_id;
+            renderBoard();
+            renderPanel();
+            renderBulkCard();
+        }
+
+        // ===================== 지도 =====================
+        function onMapLoaded(ok) {
+            const img = document.getElementById("map-img");
+            img.classList.toggle("hidden", !ok);
+            document.getElementById("map-empty").classList.toggle("hidden", ok);
+            document.getElementById("map-upload-btn").textContent = ok ? "지도 바꾸기" : "지도 올리기";
+            document.getElementById("map-delete-btn").classList.toggle("hidden", !ok);
+            img.onclick = ok ? () => openLightbox(img.src, "도서관 전체 지도") : null;
+        }
+
+        async function uploadLibraryMap(input) {
+            const file = input.files[0];
+            input.value = "";
+            if (!file) return;
+            try {
+                await sendForm(`${API_BASE}/library-map`, "PUT", file);
+                document.getElementById("map-img").src = libraryMapUrl();
+            } catch (e) {
+                alert(`지도 등록 실패: ${e.message}`);
+            }
+        }
+
+        async function deleteLibraryMap() {
+            if (!confirm("도서관 지도 이미지를 지울까요?")) return;
+            try {
+                await fetchJson(`${API_BASE}/library-map`, { method: "DELETE" });
+                onMapLoaded(false);
+            } catch (e) {
+                alert(`지도 삭제 실패: ${e.message}`);
+            }
+        }
+
+        // ===================== 순찰 사진 수신함 =====================
+        function setAnalyzeButton(running, enabled) {
+            document.getElementById("analyze-btn").disabled = running || !enabled;
+            document.getElementById("analyze-icon").className = running ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-play";
+            document.getElementById("analyze-text").textContent = running ? "분석 중..." : "지금 분석";
+        }
+
+        function renderPatrolStatus(st) {
+            const last = st.last_received_at ? `<span class="block text-xs text-slate-400">마지막 수신 ${formatTime(st.last_received_at)}</span>` : "";
+            const byZone = Object.entries(st.analyzable_by_zone || {}).map(([z, n]) => `${escapeHtml(z)}구역 ${n}`).join(" · ");
+            document.getElementById("inbox-text").innerHTML = st.analyzable_count > 0
+                ? `분석 대기 <b class="text-slate-800">${st.analyzable_count}장</b>${byZone ? `<span class="block text-xs text-slate-400">${byZone}</span>` : ""}${last}`
+                : `새 순찰 사진 없음${last}`;
+            const b = st.latest_batch;
+            const box = document.getElementById("inbox-progress");
+            if (b && b.running) {
+                const finished = b.done + b.failed;
+                const pct = Math.round(finished / b.total * 100);
+                box.innerHTML = `<div class="flex justify-between mb-1"><span>분석 중 ${finished} / ${b.total}${b.current_location ? " · " + escapeHtml(b.current_location) : ""}</span><span>${pct}%</span></div>
+                    <div class="h-1.5 bg-slate-200 rounded-full overflow-hidden"><div class="h-full bg-indigo-500 transition-all" style="width:${pct}%"></div></div>`;
+            } else if (b && b.failed) {
+                batchFailureText = b.failures.map(f => `${f.location_label}: ${f.error}`).join("\n");
+                box.innerHTML = `마지막 분석 ${b.total}장 중 <button type="button" onclick="alert(batchFailureText)" class="text-rose-600 font-bold underline">${b.failed}장 실패</button>, 다음 분석 때 다시 시도`;
+            } else {
+                box.innerHTML = "";
+            }
+            setAnalyzeButton(!!(b && b.running), st.analyzable_count > 0);
+        }
+
+        async function refreshPatrolStatus() {
+            clearTimeout(patrolTimer);
+            let st = null;
+            try {
+                st = await fetchJson(`${API_BASE}/patrol/status`);
+                renderPatrolStatus(st);
+            } catch (e) {
+                document.getElementById("inbox-text").textContent = `수신함 상태를 불러오지 못했습니다: ${e.message}`;
+            }
+            const b = st && st.latest_batch;
+            const running = !!(b && b.running);
+            const progress = b ? b.done + b.failed : -1;
+            if ((running && progress !== patrolProgress) || (patrolRunning && !running)) refreshLocations();
+            patrolRunning = running;
+            patrolProgress = progress;
+            patrolTimer = setTimeout(refreshPatrolStatus, running ? POLL_MS : REFRESH_MS);
+        }
+
+        async function startBatchAnalysis() {
+            setAnalyzeButton(true, true);
+            try {
+                await fetchJson(`${API_BASE}/patrol/analyze`, { method: "POST" });
+                patrolProgress = -1;
+            } catch (e) {
+                alert(`일괄 분석을 시작하지 못했습니다: ${e.message}`);
+            }
+            refreshPatrolStatus();
+        }
+
+        // ===================== 배가 위치 자동 배정 (관리자) =====================
+        function placementRequest() {
+            const counts = {};
+            document.querySelectorAll("#placement-floors input[data-shelf]").forEach(input => {
+                if (input.value !== "") counts[input.dataset.shelf] = Number(input.value);
+            });
+            return { top_down: document.getElementById("placement-order").value === "top", counts };
+        }
+
+        function placementBook(label, shelfId, book) {
+            if (!book) return `<div class="text-xs text-slate-400">${label}: 없음</div>`;
+            const url = `${API_BASE}/book-placement/spine/${encodeURIComponent(shelfId)}/${book.slot}`;
+            return `
+                <div class="flex items-center gap-2 min-w-0">
+                    <img src="${url}" alt="" onerror="this.classList.add('invisible')" class="h-20 w-10 object-contain bg-slate-100 rounded shrink-0">
+                    <div class="min-w-0 text-xs">
+                        <div class="text-slate-400">${label} · 기준 사진 ${book.slot}번째</div>
+                        <div class="font-semibold text-slate-700 break-words">${escapeHtml(book.title)}</div>
+                        <div class="text-slate-400">${escapeHtml(book.call_no)} · ${escapeHtml(book.reg_no)}</div>
+                    </div>
+                </div>`;
+        }
+
+        function placementFloor(floor) {
+            const count = floor.source === "RFID"
+                ? `<span class="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">RFID ${floor.book_count}권</span>`
+                : `<label class="text-xs text-slate-500 flex items-center gap-1">권수
+                       <input type="number" min="0" value="${floor.count}" data-shelf="${escapeHtml(floor.shelf_id)}" class="w-16 border border-slate-200 rounded px-1.5 py-0.5 text-sm">
+                   </label>
+                   ${floor.count === floor.detected ? "" : `<span class="text-[11px] text-amber-700">사진 인식 ${floor.detected ?? "-"}권</span>`}`;
+            const away = floor.away_count ? `<span class="text-[11px] text-slate-500">미비치 ${floor.away_count}권 포함</span>` : "";
+            const warnings = floor.warnings.map(w => `<div class="text-[11px] text-rose-700"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(w)}</div>`).join("");
+            return `
+                <div class="border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <b class="text-sm text-slate-700">${escapeHtml(floor.location_label)}</b>
+                        ${count}${away}
+                        <span class="ml-auto text-[11px] text-slate-400">지금과 다른 책 ${floor.changed_count}권</span>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        ${placementBook("첫 책", floor.shelf_id, floor.first)}
+                        ${placementBook("마지막 책", floor.shelf_id, floor.last)}
+                    </div>
+                    ${warnings}
+                </div>`;
+        }
+
+        function placementSummary(plan) {
+            const total = plan.floors.reduce((sum, f) => sum + f.book_count + f.away_count, 0);
+            const notes = [`${plan.floors.length}개 층에 ${total}권 배정`];
+            if (plan.unassigned.length) notes.push(`<span class="text-rose-700">배정되지 못한 책 ${plan.unassigned.length}권</span>`);
+            if (plan.no_call_number.length) notes.push(`<span class="text-rose-700">청구기호가 없어 뺀 책 ${plan.no_call_number.length}권</span>`);
+            if (plan.skipped_floors) notes.push(`기준 사진이 없어 건너뛴 층 ${plan.skipped_floors}곳`);
+            return notes.join(" · ");
+        }
+
+        async function refreshPlacement() {
+            const floors = document.getElementById("placement-floors");
+            const summary = document.getElementById("placement-summary");
+            const apply = document.getElementById("placement-apply");
+            apply.disabled = true;
+            summary.textContent = "계산 중...";
+            try {
+                const plan = await sendJson(`${API_BASE}/book-placement/preview`, "POST", placementRequest());
+                summary.innerHTML = placementSummary(plan);
+                floors.innerHTML = plan.floors.map(placementFloor).join("");
+                apply.disabled = plan.floors.length === 0;
+                const undo = document.getElementById("placement-undo");
+                undo.classList.toggle("hidden", !plan.previous);
+                undo.title = plan.previous ? `${formatTime(plan.previous.saved_at)}에 보관한 배정, ${plan.previous.book_count}권` : "";
+            } catch (e) {
+                summary.innerHTML = `<span class="text-rose-700">${escapeHtml(e.message)}</span>`;
+            }
+        }
+
+        async function applyPlacement() {
+            if (!confirm("이 배정으로 배가 위치를 다시 만듭니다. 다음 분석부터 적용되고, 지난 순찰 결과는 바뀌지 않습니다.")) return;
+            try {
+                const result = await sendJson(`${API_BASE}/book-placement/apply`, "POST", placementRequest());
+                alert(`${result.saved_count}권의 배가 위치를 저장했습니다.`);
+                closePlacementModal();
+                refreshLocations();
+            } catch (e) {
+                alert(`저장 실패: ${e.message}`);
+            }
+        }
+
+        async function undoPlacement() {
+            if (!confirm("지금 배정을 이전 배정으로 바꿉니다. 다시 누르면 지금 배정으로 돌아옵니다.")) return;
+            try {
+                const result = await fetchJson(`${API_BASE}/book-placement/undo`, { method: "POST" });
+                alert(`${result.restored_count}권의 배가 위치를 되돌렸습니다.`);
+                document.getElementById("placement-floors").innerHTML = "";
+                refreshPlacement();
+                refreshLocations();
+            } catch (e) {
+                alert(`되돌리기 실패: ${e.message}`);
+            }
+        }
+
+        function showModal(id, show) {
+            const modal = document.getElementById(id);
+            modal.classList.toggle("hidden", !show);
+            modal.classList.toggle("flex", show);
+        }
+
+        function openPlacementModal() {
+            document.getElementById("placement-floors").innerHTML = "";
+            showModal("placement-modal", true);
+            refreshPlacement();
+        }
+
+        function closePlacementModal() { showModal("placement-modal", false); }
+
+        // ===================== 사서 계정 · 비밀번호 =====================
+        function accountMessage(text, ok) {
+            const box = document.getElementById("account-message");
+            box.className = "text-xs rounded-lg px-3 py-2 " + (ok ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200");
+            box.innerText = text;
+            box.classList.toggle("hidden", !text);
+        }
+
+        async function refreshAccounts() {
+            const rows = document.getElementById("account-rows");
+            try {
+                const users = await fetchJson(`${API_BASE}/users`);
+                rows.innerHTML = "";
+                users.forEach(u => {
+                    const tr = document.createElement("tr");
+                    tr.className = "border-t border-slate-100";
+                    const role = u.role === "ADMIN"
+                        ? `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">관리자</span>`
+                        : `<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">사서</span>`;
+                    tr.innerHTML = `
+                        <td class="px-3 py-2 font-semibold text-slate-700">${escapeHtml(u.display_name)}${u.is_me ? ' <span class="text-[10px] text-slate-400">나</span>' : ""}
+                            ${u.is_active ? "" : ' <span class="text-[10px] text-rose-500">로그인 중지</span>'}</td>
+                        <td class="px-3 py-2 text-slate-600">${escapeHtml(u.username)}</td>
+                        <td class="hidden sm:table-cell px-3 py-2">${role}</td>
+                        <td class="hidden sm:table-cell px-3 py-2 text-xs text-slate-500">${u.last_login_at ? formatTime(u.last_login_at) : "-"}</td>
+                        <td class="px-3 py-2"><div class="flex flex-col sm:flex-row items-end sm:items-center justify-end gap-1.5"></div></td>`;
+                    if (u.role === "LIBRARIAN") {
+                        const actions = tr.querySelector("td:last-child div");
+                        const pw = document.createElement("button");
+                        pw.className = "text-xs px-2 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50";
+                        pw.innerHTML = `<i class="fa-solid fa-key"></i> 비밀번호`;
+                        pw.addEventListener("click", () => openPasswordChange(u));
+                        const del = document.createElement("button");
+                        del.className = "text-xs px-2 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50";
+                        del.innerHTML = `<i class="fa-solid fa-trash"></i> 삭제`;
+                        del.addEventListener("click", () => deleteAccount(u));
+                        actions.append(pw, del);
+                    }
+                    rows.appendChild(tr);
+                });
+            } catch (e) {
+                rows.innerHTML = `<tr><td colspan="5" class="px-3 py-4 text-sm text-rose-600">계정 목록을 불러오지 못했습니다: ${escapeHtml(e.message)}</td></tr>`;
+            }
+        }
+
+        function openAccountModal() {
+            document.getElementById("account-library").innerText = `${ME.library_name} · ${ME.library_id}`;
+            document.getElementById("account-form").reset();
+            accountMessage("");
+            showModal("account-modal", true);
+            refreshAccounts();
+        }
+
+        function closeAccountModal() { showModal("account-modal", false); }
+
+        function openMyPassword() {
+            openFormModal({
+                title: "내 비밀번호 변경",
+                info: "바꾸면 다른 기기의 로그인은 끊어지고, 이 기기는 로그인이 유지됩니다.",
+                fields: [
+                    { name: "current", label: "현재 비밀번호", type: "password", autocomplete: "current-password", required: true },
+                    { name: "password", label: "새 비밀번호", type: "password", placeholder: "8자 이상", required: true },
+                    { name: "password2", label: "새 비밀번호 확인", type: "password", required: true },
+                ],
+                submitLabel: "변경",
+                onSubmit: async v => {
+                    if (v.password !== v.password2) throw new Error("두 새 비밀번호가 다릅니다.");
+                    await sendJson(`${API_BASE}/auth/password`, "POST", { current_password: v.current, new_password: v.password });
+                    alert("비밀번호를 바꿨습니다.");
+                },
+            });
+        }
+
+        function openPasswordChange(u) {
+            openFormModal({
+                title: `${u.display_name} 비밀번호 변경`,
+                info: `아이디 ${escapeHtml(u.username)} · 바꾸면 이 사서의 기존 로그인이 끊어집니다. 새 비밀번호를 사서에게 전달해 주세요.`,
+                fields: [
+                    { name: "password", label: "새 비밀번호", type: "password", placeholder: "8자 이상", required: true },
+                    { name: "password2", label: "새 비밀번호 확인", type: "password", required: true },
+                ],
+                submitLabel: "변경",
+                onSubmit: async v => {
+                    if (v.password !== v.password2) throw new Error("두 비밀번호가 다릅니다.");
+                    await sendJson(`${API_BASE}/users/${u.user_id}/password`, "POST", { password: v.password });
+                    accountMessage(`${u.display_name}의 비밀번호를 바꿨습니다.`, true);
+                },
+            });
+        }
+
+        async function deleteAccount(u) {
+            if (!confirm(`${u.display_name} 계정(${u.username})을 삭제할까요?\n이 계정으로는 더 이상 로그인할 수 없습니다. 이 사서가 처리한 알림 기록은 그대로 남습니다.`)) return;
+            try {
+                await fetchJson(`${API_BASE}/users/${u.user_id}`, { method: "DELETE" });
+                accountMessage(`${u.display_name} 계정을 삭제했습니다.`, true);
+                refreshAccounts();
+            } catch (e) {
+                accountMessage(`삭제 실패: ${e.message}`, false);
+            }
+        }
+
+        document.getElementById("account-form").addEventListener("submit", async e => {
+            e.preventDefault();
+            const form = e.target;
+            const v = Object.fromEntries(new FormData(form).entries());
+            if (v.password !== v.password2) { accountMessage("두 비밀번호가 다릅니다.", false); return; }
+            const btn = form.querySelector("button[type=submit]");
+            btn.disabled = true;
+            try {
+                const res = await sendJson(`${API_BASE}/users`, "POST", { username: v.username, display_name: v.display_name, password: v.password });
+                accountMessage(`${res.display_name} 계정을 추가했습니다. 로그인 정보: 도서관 ID ${ME.library_id} / 아이디 ${res.username}`, true);
+                form.reset();
+                refreshAccounts();
+            } catch (err) {
+                accountMessage(`추가 실패: ${err.message}`, false);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // ===================== 도서관 구조 편집 (관리자) =====================
+        function toggleEditMode() {
+            editMode = !editMode;
+            renderBoard();
+        }
+
+        let formModalSubmit = null;
+        // fields: [{ name, label, value, type, placeholder, help, min, max, required }]
+        // danger: { label, onClick, disabledReason } — 삭제 버튼 (disabledReason이 있으면 비활성 + 이유 표시)
+        function openFormModal({ title, info = "", fields = [], submitLabel = "저장", onSubmit, danger = null }) {
+            document.getElementById("form-modal-title").innerText = title;
+            document.getElementById("form-modal-info").innerHTML = info;
+            const box = document.getElementById("form-modal-fields");
+            box.innerHTML = "";
+            fields.forEach(f => {
+                const wrap = document.createElement("label");
+                wrap.className = "flex flex-col gap-1 text-xs font-semibold text-slate-600";
+                wrap.innerHTML = `<span>${f.label}${f.required ? ' <span class="text-rose-500">*</span>' : ""}</span>`;
+                const input = document.createElement("input");
+                input.name = f.name;
+                input.type = f.type || "text";
+                input.value = f.value ?? "";
+                if (f.placeholder) input.placeholder = f.placeholder;
+                if (f.min !== undefined) input.min = f.min;
+                if (f.max !== undefined) input.max = f.max;
+                if (f.required) input.required = true;
+                if (input.type === "password") input.autocomplete = f.autocomplete || "new-password";
+                input.className = "font-normal text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-300";
+                wrap.appendChild(input);
+                if (f.help) wrap.insertAdjacentHTML("beforeend", `<span class="font-normal text-[11px] text-slate-400">${f.help}</span>`);
+                box.appendChild(wrap);
+            });
+            const dangerBox = document.getElementById("form-modal-danger");
+            dangerBox.innerHTML = "";
+            if (danger) {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "text-sm px-3 py-1.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5";
+                btn.innerHTML = `<i class="fa-solid fa-trash"></i> ${danger.label}`;
+                btn.disabled = !!danger.disabledReason;
+                if (danger.disabledReason) btn.title = danger.disabledReason;
+                btn.addEventListener("click", () => runModalAction(danger.onClick));
+                dangerBox.appendChild(btn);
+            }
+            document.getElementById("form-modal-submit").innerText = submitLabel;
+            document.getElementById("form-modal-submit").classList.toggle("hidden", !onSubmit);
+            document.getElementById("form-modal-error").classList.add("hidden");
+            formModalSubmit = onSubmit;
+            showModal("form-modal", true);
+            const first = box.querySelector("input");
+            if (first) first.focus();
+        }
+
+        function closeFormModal() {
+            showModal("form-modal", false);
+            formModalSubmit = null;
+        }
+
+        // 모달 안의 동작 실행: 성공하면 닫고 서가 현황 갱신, 실패하면 이유를 모달에 표시
+        async function runModalAction(action, values = {}) {
+            const err = document.getElementById("form-modal-error");
+            const submit = document.getElementById("form-modal-submit");
+            err.classList.add("hidden");
+            submit.disabled = true;
+            try {
+                if ((await action(values)) === false) return;
+                closeFormModal();
+                await refreshLocations();
+                refreshPatrolStatus();
+            } catch (e) {
+                err.innerText = e.message;
+                err.classList.remove("hidden");
+            } finally {
+                submit.disabled = false;
+            }
+        }
+
+        document.getElementById("form-modal-form").addEventListener("submit", e => {
+            e.preventDefault();
+            if (!formModalSubmit) return;
+            runModalAction(formModalSubmit, Object.fromEntries(new FormData(e.target).entries()));
+        });
+
+        function sendJson(url, method, body) {
+            return fetchJson(url, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+        }
+
+        // 다음 구역 코드 추천: 쓰지 않은 가장 앞의 알파벳
+        function nextZoneCode() {
+            const used = new Set(tree.map(z => z.zone_code));
+            for (let i = 0; i < 26; i++) {
+                const c = String.fromCharCode(65 + i);
+                if (!used.has(c)) return c;
+            }
+            return "";
+        }
+
+        function typicalLevelCount(zone) {
+            const counts = (zone ? zone.bookcases : []).map(b => b.levels.length).filter(n => n > 0);
+            return counts.length ? counts[counts.length - 1] : 5;
+        }
+
+        function openAddZone() {
+            if (!editMode) { editMode = true; renderBoard(); }
+            openFormModal({
+                title: "구역 추가",
+                info: "구역 코드는 위치 표시(예: <b>A</b>구역 1번 책꽂이 3층)와 순찰 사진 이름에 쓰이므로 만든 뒤에는 바꿀 수 없습니다.",
+                fields: [
+                    { name: "zone_code", label: "구역 코드", value: nextZoneCode(), placeholder: "A", required: true, help: "영문 대문자 · 숫자 1~5자" },
+                    { name: "zone_name", label: "구역 이름 · 주제", placeholder: "예: 공학·컴퓨터", required: true },
+                    { name: "location", label: "위치 설명", placeholder: "예: 2층 제1자료실" },
+                    { name: "bookcase_count", label: "책꽂이 함께 만들기, 개수", type: "number", value: 0, min: 0, max: 30, help: "0이면 구역만 만들고 책꽂이는 하나씩 추가합니다" },
+                    { name: "level_count", label: "책꽂이마다 층 수", type: "number", value: 5, min: 1, max: 20 },
+                ],
+                submitLabel: "추가",
+                onSubmit: async v => {
+                    const res = await sendJson(`${API_BASE}/structure/zones`, "POST", {
+                        zone_code: v.zone_code, zone_name: v.zone_name, location: v.location,
+                        bookcase_count: Number(v.bookcase_count || 0), level_count: Number(v.level_count || 5),
+                    });
+                    activeZoneId = `${ME.library_id}-${res.zone_code}`;
+                },
+            });
+        }
+
+        function openEditZone() {
+            const zone = tree.find(z => z.zone_id === activeZoneId);
+            if (!zone) return;
+            const levels = zone.bookcases.reduce((n, b) => n + b.levels.length, 0);
+            const blocked = zone.bookcases.flatMap(b => b.levels).filter(l => l.book_count > 0 || l.session_count > 0);
+            openFormModal({
+                title: `${zone.zone_code}구역 수정`,
+                info: `책꽂이 ${zone.bookcases.length}개 · 층 ${levels}개`
+                    + (blocked.length ? `<div class="mt-1 text-amber-700"><i class="fa-solid fa-lock"></i> 도서 · 순찰 기록이 있는 층이 있어 구역을 지울 수 없습니다. 이름은 고칠 수 있습니다.</div>` : ""),
+                fields: [
+                    { name: "zone_name", label: "구역 이름 · 주제", value: zone.zone_name, required: true },
+                    { name: "location", label: "위치 설명", value: zone.location || "" },
+                ],
+                onSubmit: v => sendJson(`${API_BASE}/structure/zones/${encodeURIComponent(zone.zone_code)}`, "PATCH", v),
+                danger: {
+                    label: "구역 삭제",
+                    disabledReason: blocked.length ? `도서 · 순찰 기록이 있는 층 ${blocked.length}개가 있어 지울 수 없습니다` : "",
+                    onClick: async () => {
+                        if (!confirm(`${zone.zone_code}구역과 안의 책꽂이 ${zone.bookcases.length}개 · 층 ${levels}개를 모두 지울까요?\n층의 기준 사진도 함께 지워집니다.`)) return false;
+                        await fetchJson(`${API_BASE}/structure/zones/${encodeURIComponent(zone.zone_code)}`, { method: "DELETE" });
+                    },
+                },
+            });
+        }
+
+        function openAddBookcase(zone) {
+            const nextNo = zone.bookcases.reduce((m, b) => Math.max(m, b.bookcase_no), 0) + 1;
+            openFormModal({
+                title: `${zone.zone_code}구역에 책꽂이 추가`,
+                fields: [
+                    { name: "bookcase_no", label: "책꽂이 번호", type: "number", value: nextNo, min: 1, max: 99, required: true, help: "만든 뒤에는 바꿀 수 없습니다" },
+                    { name: "bookcase_name", label: "설명", placeholder: "예: 컴퓨터·게임 개발" },
+                    { name: "level_count", label: "층 수", type: "number", value: typicalLevelCount(zone), min: 0, max: 20, help: "층은 나중에 하나씩 더 추가할 수 있습니다" },
+                ],
+                submitLabel: "추가",
+                onSubmit: v => sendJson(`${API_BASE}/structure/zones/${encodeURIComponent(zone.zone_code)}/bookcases`, "POST", {
+                    bookcase_no: Number(v.bookcase_no), bookcase_name: v.bookcase_name, level_count: Number(v.level_count || 0),
+                }),
+            });
+        }
+
+        function openEditBookcase(zone, bookcase) {
+            const blocked = bookcase.levels.filter(l => l.book_count > 0 || l.session_count > 0);
+            openFormModal({
+                title: `${zone.zone_code}구역 ${bookcase.bookcase_no}번 책꽂이`,
+                info: `코드 ${escapeHtml(bookcase.bookcase_code)} · 층 ${bookcase.levels.length}개`,
+                fields: [{ name: "name", label: "설명", value: bookcase.bookcase_name || "", placeholder: "예: 공학 일반" }],
+                onSubmit: v => sendJson(`${API_BASE}/structure/bookcases/${encodeURIComponent(bookcase.bookcase_code)}`, "PATCH", v),
+                danger: {
+                    label: "책꽂이 삭제",
+                    disabledReason: blocked.length ? `도서 · 순찰 기록이 있는 층 ${blocked.map(l => l.level + "층").join(", ")}이 있어 지울 수 없습니다` : "",
+                    onClick: async () => {
+                        if (!confirm(`${bookcase.bookcase_no}번 책꽂이와 층 ${bookcase.levels.length}개를 지울까요?`)) return false;
+                        await fetchJson(`${API_BASE}/structure/bookcases/${encodeURIComponent(bookcase.bookcase_code)}`, { method: "DELETE" });
+                    },
+                },
+            });
+        }
+
+        async function addLevel(bookcase) {
+            try {
+                await sendJson(`${API_BASE}/structure/bookcases/${encodeURIComponent(bookcase.bookcase_code)}/levels`, "POST", {});
+                await refreshLocations();
+            } catch (e) {
+                alert(`층 추가 실패: ${e.message}`);
+            }
+        }
+
+        function openEditLevel(bookcase, level) {
+            const topLevel = Math.max(...bookcase.levels.map(l => l.level));
+            const reasons = [];
+            if (level.level !== topLevel) reasons.push(`맨 위 층인 ${topLevel}층부터 지울 수 있습니다`);
+            if (level.book_count) reasons.push(`등록된 도서 ${level.book_count}권`);
+            if (level.session_count) reasons.push(`순찰 기록 ${level.session_count}건`);
+            openFormModal({
+                title: level.location_label,
+                info: `코드 ${escapeHtml(level.shelf_code)} · 도서 ${level.book_count}권 · 순찰 기록 ${level.session_count}건 · 기준 사진 ${level.has_normal_image ? "있음" : "없음"}`
+                    + (level.book_count ? "" : `<div class="mt-1 text-slate-400">도서 목록은 도서관 정보 시스템에서 받아옵니다. 도서가 등록되기 전에는 이 층을 분석할 수 없습니다.</div>`)
+                    + (reasons.length ? `<div class="mt-1 text-amber-700"><i class="fa-solid fa-lock"></i> 삭제 불가: ${reasons.map(escapeHtml).join(" · ")}</div>` : ""),
+                fields: [{ name: "name", label: "층 설명", value: level.shelf_name || "", placeholder: "예: 신착 도서" }],
+                onSubmit: v => sendJson(`${API_BASE}/structure/levels/${encodeURIComponent(level.shelf_code)}`, "PATCH", v),
+                danger: {
+                    label: "층 삭제",
+                    disabledReason: reasons.join(" · "),
+                    onClick: async () => {
+                        if (!confirm(`${level.location_label}을(를) 지울까요?` + (level.has_normal_image ? "\n이 층의 기준 사진도 함께 지워집니다." : ""))) return false;
+                        await fetchJson(`${API_BASE}/structure/levels/${encodeURIComponent(level.shelf_code)}`, { method: "DELETE" });
+                    },
+                },
+            });
+        }
+
+        // ===================== 초기화 =====================
+        (async () => {
+            ME = await loadMe();
+            renderTopBar(ME, "classic");
+            document.title = `관리 · ${ME.library_name}`;
+            document.getElementById("subtitle").textContent = `${ME.library_name} · ${ME.is_admin ? "관리자" : "사서"}`;
+            document.getElementById("account-btn").classList.toggle("hidden", !ME.is_admin);
+            document.getElementById("account-btn").classList.toggle("flex", ME.is_admin);
+            if (!ME.is_admin) document.getElementById("library-cards").classList.replace("lg:grid-cols-4", "lg:grid-cols-2");
+            if (ME.is_admin) document.querySelectorAll("[data-admin]").forEach(el => { el.classList.remove("hidden"); el.classList.add("flex"); });
+            document.getElementById("map-img").src = libraryMapUrl();
+            await refreshLocations();
+            refreshPatrolStatus();
+        })();
+        setInterval(() => { if (!editMode) refreshLocations(); }, REFRESH_MS);
+    </script>
+</body>
+</html>
