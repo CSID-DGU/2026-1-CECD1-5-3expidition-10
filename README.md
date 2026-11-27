@@ -44,7 +44,7 @@
 ```
 CECD/
 ├── app/                      # Vision AI: 탐지·특징 추출 파이프라인 (pipeline.py, models.py ...)
-├── model/                    # YOLO 가중치 (현재 사용: yolo26l_1280_v9_last.pt, app/models.py 참고)
+├── model/                    # YOLO 가중치 (현재 사용: yolo26l_1280_v14_last.pt, app/models.py 참고)
 ├── MakeResult.py             # 정상 이미지와 비교해 도서별 상태를 판별 (서버가 사용하는 분석 코드)
 ├── dataset/                  # 정상 · 이상 시나리오별 테스트 사진
 ├── pipeline_outputs/         # 책등 크롭 작업 폴더 (분석마다 덮어씀, git 제외)
@@ -84,7 +84,7 @@ pip install -r requirements.txt
 > ⚠️ **백엔드 서버와 AI 분석은 같은 Python 환경을 써야 합니다.** 서버는 자신을 실행한 Python으로 AI 작업 프로세스(`MakeResult.py`)를 띄우기 때문에, AI 패키지(ultralytics, torch, pandas, scipy 등)가 없는 가상환경으로 서버를 띄우면 분석 단계에서 실패합니다.
 
 ### 2. AI 모델 파일
-`model/yolo26l_1280_v9_last.pt`가 있어야 합니다(`app/models.py`가 가리키는 파일). 책등(`book-spine`)과 종이면(`book-paper`)을 함께 검출하는 2클래스 모델입니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 코드를 새로 받은 뒤에는 `git lfs pull`로 모델 파일을 받아 주세요. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
+`model/yolo26l_1280_v14_last.pt`가 있어야 합니다(`app/models.py`가 가리키는 파일). 책등(`book-spine`)과 종이면(`book-paper`)을 함께 검출하는 2클래스 모델입니다. `.pt` 파일은 Git LFS로 관리하므로, Git LFS 없이 클론하면 1KB짜리 텍스트 파일만 받아집니다. 코드를 새로 받은 뒤에는 `git lfs pull`로 모델 파일을 받아 주세요. 실행 중 `_pickle.UnpicklingError`가 나면 모델 파일을 직접 받아 덮어써 주세요.
 
 ### 3. 데이터베이스 (MySQL 8.0, Docker)
 ```bash

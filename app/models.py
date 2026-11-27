@@ -19,9 +19,10 @@ _to_tensor = transforms.Compose([
 
 # [1] 책 탐지용 YOLO 모델
 def load_yolo_model():
-    # v9: v3 에서 책등(book-spine)+종이면(book-paper) 2클래스로 미세조정 (직접 촬영 98장 + CNU + P2, 2026-11-12 학습의 last.pt).
-    # 책등은 v3 와 같은 수준, 종이면은 이 모델 하나로 함께 검출한다.
-    model = YOLO(str(BASE_DIR / "model/yolo26l_1280_v9_last.pt"))
+    # v14: v9 last 에서 다시 미세조정한 책등(book-spine)+종이면(book-paper) 2클래스 모델 (직접 촬영 120장 + CNU + P2,
+    # 회전 증강 60도·copy_paste 0.3, 2026-11-18 학습의 last.pt). v9 보다 얇은 책·종이면을 조금 더 찾고,
+    # 입력 1280·1440 모두에서 판정 점수가 유지됐다. 이전 모델은 model/yolo26l_1280_v9_last.pt.
+    model = YOLO(str(BASE_DIR / "model/yolo26l_1280_v14_last.pt"))
     return model
 
 # [2] 특징 추출용 ResNet18 모델
